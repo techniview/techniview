@@ -1,0 +1,111 @@
+#!/bin/bash
+# TechniView pre-commit wrapper - runs backend + frontend checks.
+# If pre-commit is missing, try to run via pipx/pip.
+# On failure, prints fix commands only for the hooks that failed.
+
+if ! command -v pre-commit >/dev/null 2>&1; then
+  if command -v pipx >/dev/null 2>&1; then
+    echo "pre-commit not found, installing via pipx..."
+    pipx install pre-commit
+  else
+    echo "pre-commit not found, installing via pip..."
+    pip install --break-system-packages -q pre-commit 2>&1 | tail -5
+  fi
+fi
+
+# Run the hooks with output streaming live, while also capturing it
+# so the failure box below can name only the hooks that failed.
+set +e
+output_file=$(mktemp)
+pre-commit run --hook-stage commit "$@" 2>&1 | tee "$output_file"
+status=${PIPESTATUS[0]}
+set -e
+output=$(cat "$output_file")
+rm -f "$output_file"
+
+if [ "$status" -ne 0 ]; then
+  failed_check=0
+  failed_format=0
+  failed_pytest=0
+  failed_typecheck=0
+  failed_eslint=0
+  failed_prettier=0
+  failed_vitest=0
+  if echo "$output" | grep -qiE "hook id: ruff-check|ruff check[. ]*fail"; then
+    failed_check=1
+  fi
+  if echo "$output" | grep -qiE "hook id: ruff-format|ruff format[. ]*fail"; then
+    failed_format=1
+  fi
+  if echo "$output" | grep -qiE "hook id: pytest|^pytest[. ]*fail"; then
+    failed_pytest=1
+  fi
+  if echo "$output" | grep -qiE "hook id: frontend-typecheck|frontend typecheck[. ]*fail"; then
+    failed_typecheck=1
+  fi
+  if echo "$output" | grep -qiE "hook id: frontend-eslint|frontend eslint[. ]*fail"; then
+    failed_eslint=1
+  fi
+  if echo "$output" | grep -qiE "hook id: frontend-prettier|frontend prettier[. ]*fail"; then
+    failed_prettier=1
+  fi
+  if echo "$output" | grep -qiE "hook id: frontend-vitest|frontend vitest[. ]*fail"; then
+    failed_vitest=1
+  fi
+  # If nothing matched, show everything rather than nothing.
+  if [ "$failed_check" -eq 0 ] && [ "$failed_format" -eq 0 ] && [ "$failed_pytest" -eq 0 ] && [ "$failed_typecheck" -eq 0 ] && [ "$failed_eslint" -eq 0 ] && [ "$failed_prettier" -eq 0 ] && [ "$failed_vitest" -eq 0 ]; then
+    failed_check=1
+    failed_format=1
+    failed_pytest=1
+    failed_typecheck=1
+    failed_eslint=1
+    failed_prettier=1
+    failed_vitest=1
+  fi
+
+  echo ""
+  echo "--------------------------------------"
+  echo "  Pre-commit failed - how to fix:"
+  echo "--------------------------------------"
+  if [ "$failed_check" -eq 1 ]; then
+    echo "  ruff check failed, run:"
+    echo "     ruff check backend --fix"
+    echo "     ruff format backend"
+    echo ""
+  fi
+  if [ "$failed_format" -eq 1 ]; then
+    echo "  ruff format failed, run:"
+    echo "     ruff format backend"
+    echo ""
+  fi
+  if [ "$failed_pytest" -eq 1 ]; then
+    echo "  pytest failed, run:"
+    echo "     cd backend && python -m pytest -v"
+    echo ""
+  fi
+  if [ "$failed_typecheck" -eq 1 ]; then
+    echo "  frontend typecheck failed, run:"
+    echo "     cd frontend && npx tsc --noEmit"
+    echo ""
+  fi
+  if [ "$failed_eslint" -eq 1 ]; then
+    echo "  frontend eslint failed, run:"
+    echo "     cd frontend && npx eslint ."
+    echo ""
+  fi
+  if [ "$failed_prettier" -eq 1 ]; then
+    echo "  frontend prettier failed, run:"
+    echo "     cd frontend && npx prettier --write ."
+    echo ""
+  fi
+  if [ "$failed_vitest" -eq 1 ]; then
+    echo "  frontend vitest failed, run:"
+    echo "     cd frontend && npm test"
+    echo ""
+  fi
+  echo "  Bypass (not recommended): git commit --no-verify"
+  echo "--------------------------------------"
+  exit 1
+fi
+
+echo "All pre-commit hooks passed."

@@ -1,0 +1,163 @@
+name: techniview
+
+services:
+  server:
+    container_name: techniview-judge0-server
+    image: mrkushalsm/judge0:latest
+    ports:
+      - "${JUDGE0_PORT:-2358}:2358"
+    command: /api/scripts/server
+    cgroup: host
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
+      - JUDGE0_POSTGRES_HOST=db
+      - JUDGE0_POSTGRES_PORT=5432
+      - JUDGE0_POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - JUDGE0_POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - JUDGE0_POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - JUDGE0_REDIS_HOST=redis
+      - JUDGE0_REDIS_PORT=6379
+      - JUDGE0_REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  workers:
+    container_name: techniview-judge0-workers
+    image: mrkushalsm/judge0:latest
+    command: /api/scripts/workers
+    cgroup: host
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
+      - JUDGE0_POSTGRES_HOST=db
+      - JUDGE0_POSTGRES_PORT=5432
+      - JUDGE0_POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - JUDGE0_POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - JUDGE0_POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - JUDGE0_REDIS_HOST=redis
+      - JUDGE0_REDIS_PORT=6379
+      - JUDGE0_REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+    depends_on:
+      - db
+      - redis
+      - server
+    restart: unless-stopped
+
+  db:
+    container_name: techniview-postgres
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    container_name: techniview-redis
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-test_password}
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  mysql:
+    container_name: techniview-mysql
+    image: mysql:8.0
+    ports:
+      - "${MYSQL_HOST_PORT:-3306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_password}
+      - MYSQL_DATABASE=${MYSQL_DB:-app_db}
+      - MYSQL_USER=${MYSQL_USER:-app_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u $$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    container_name: techniview-backend
+    build: ./backend
+    image: techniview-backend:local
+    working_dir: /app
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./:/workspace
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-app_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
+      - MYSQL_DB=${MYSQL_DB:-app_db}
+      - DATABASE_URL=mysql://${MYSQL_USER:-app_user}:${MYSQL_PASSWORD:-app_password}@mysql:3306/${MYSQL_DB:-app_db}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
+      - JUDGE0_URL=http://server:2358
+    depends_on:
+      mysql:
+        condition: service_healthy
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    command: bash -c "git -C /workspace config core.hooksPath .githooks 2>/dev/null || true; uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
+
+  frontend:
+    container_name: techniview-frontend
+    build: ./frontend
+    image: techniview-frontend:local
+    working_dir: /app
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install --silent && npm run dev"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  mysql_data:
