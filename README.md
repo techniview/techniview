@@ -1,4 +1,6 @@
-# TechniView
+# TechniView 
+
+<img src="https://github.com/techniview/.github/blob/main/TechniView%20Logo.png" width="150" height="150" style="border-radius: 50%;" alt="TechniView Logo">
 
 LeetCode-style practice problems with class tracking attached. Built so interview prep connects back to coursework instead of living in a separate tab.
 
