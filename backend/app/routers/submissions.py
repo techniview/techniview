@@ -1,7 +1,9 @@
 from enum import Enum
+from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..core.judge0 import judge0_get, judge0_submit
 
@@ -12,13 +14,13 @@ router = APIRouter(prefix="/submissions", tags=["submissions"])
 
 
 class SubmissionCreate(BaseModel):
-    source_code: str
-    language_id: int = 71  # TODO: validate against Judge0 /languages
-    stdin: str | None = None
-    expected_output: str | None = None
+    source_code: str = Field(min_length=1, max_length=65536)
+    language_id: int = Field(default=71, gt=0)  # default to python
+    stdin: str | None = Field(default=None, max_length=65536)
+    expected_output: str | None = Field(default=None, max_length=65536)
     problem_id: int | None = None
-    cpu_time_limit: float | None = None
-    memory_limit: int | None = None
+    cpu_time_limit: float | None = Field(default=None, gt=0, le=15)
+    memory_limit: int | None = Field(default=None, gt=0, le=262144)
 
 
 # weirdly, judge0 has an endpoint to return these. idk why. docs:
@@ -41,6 +43,7 @@ class SubmissionStatus(int, Enum):
 
 
 def get_status_message(status_code: int) -> str:
+    status_code = int(status_code)
     match status_code:
         case 1:
             return "In queue. Waiting for a worker."
@@ -77,9 +80,44 @@ def get_status_message(status_code: int) -> str:
             return f"Unknown status code: {status_code}"
 
 
+def _enrich_result(data: dict) -> dict:
+    # copy so cached objects are never mutated, add done and friendly text
+    # so the UI has one stable shape to render
+    enriched = dict(data)
+    status = enriched.get("status") or {}
+    status_id = status.get("id")
+    if status_id is None:
+        enriched["done"] = False
+        enriched["friendly_message"] = get_status_message(SubmissionStatus.IN_QUEUE)
+        return enriched
+    enriched["done"] = int(status_id) >= SubmissionStatus.ACCEPTED
+    enriched["friendly_message"] = get_status_message(status_id)
+    token = enriched.get("token")
+    if token and "poll_url" not in enriched:
+        enriched["poll_url"] = f"/api/submissions/{token}"
+    return enriched
+
+
+def _validate_token(token: str) -> str:
+    # judge0 tokens are UUIDs. Reject junk before it reaches the runner URL
+    try:
+        return str(UUID(token))
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail="invalid submission token"
+        ) from None
+
+
 def _judge0_error(e: Exception) -> HTTPException:
-    # TODO: strip internals from detail before any prod use
-    return HTTPException(status_code=502, detail=f"judge0 error: {e}")
+    # map transport failures to status codes without leaking internals
+    if isinstance(e, httpx.TimeoutException):
+        return HTTPException(status_code=504, detail="runner timed out")
+    if isinstance(e, httpx.HTTPStatusError):
+        status = e.response.status_code if e.response is not None else None
+        if status == 429:
+            return HTTPException(status_code=429, detail="runner busy, try again")
+        return HTTPException(status_code=502, detail="runner unavailable")
+    return HTTPException(status_code=502, detail="runner unavailable")
 
 
 @router.post("")
@@ -94,23 +132,31 @@ def create_submission(body: SubmissionCreate, wait: bool = False):
     if body.memory_limit is not None:
         extra["memory_limit"] = body.memory_limit
     try:
-        return judge0_submit(
+        data = judge0_submit(
             body.source_code,
             body.language_id,
             body.stdin,
             body.expected_output,
             wait=wait,
+            timeout=20.0 if wait else 5.0,
             **extra,
         )
     except Exception as e:
         raise _judge0_error(e) from e
 
+    # when wait=true, it will not return these two fields,
+    # so add them just in case
+    if "status" not in data and "token" in data:
+        data["status"] = {"id": 1, "description": "In Queue"}
+        data["poll_url"] = f"/api/submissions/{data['token']}"
+    return _enrich_result(data)
+
 
 @router.get("/{token}")
 def get_submission(token: str):
-    # TODO: also fetch cached result from MySQL if available
+    token = _validate_token(token)
     try:
-        return judge0_get(token)
+        return _enrich_result(judge0_get(token))
     except Exception as e:
         raise _judge0_error(e) from e
 
