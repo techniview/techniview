@@ -89,9 +89,9 @@ def _enrich_result(data: dict) -> dict:
     if status_id is None:
         enriched["done"] = False
         enriched["friendly_message"] = get_status_message(SubmissionStatus.IN_QUEUE)
-        return enriched
-    enriched["done"] = int(status_id) >= SubmissionStatus.ACCEPTED
-    enriched["friendly_message"] = get_status_message(status_id)
+    else:
+        enriched["done"] = int(status_id) >= SubmissionStatus.ACCEPTED
+        enriched["friendly_message"] = get_status_message(status_id)
     token = enriched.get("token")
     if token and "poll_url" not in enriched:
         enriched["poll_url"] = f"/api/submissions/{token}"
