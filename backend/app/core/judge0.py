@@ -2,6 +2,18 @@ import httpx
 
 from .config import settings
 
+ALLOWED_LIMITS = frozenset(
+    {
+        "cpu_time_limit",
+        "cpu_extra_time",
+        "wall_time_limit",
+        "memory_limit",
+        "stack_limit",
+        "max_processes_and_or_threads",
+        "max_file_size",
+    }
+)
+
 
 def judge0_about(timeout: float = 3.0):
     with httpx.Client(timeout=timeout) as c:
@@ -12,7 +24,7 @@ def judge0_about(timeout: float = 3.0):
 
 def judge0_submit(
     source_code: str,
-    language_id: int = 71,
+    language_id: int = 71,  # this shouldnt be changed for now, we are python only
     stdin: str | None = None,
     expected_output: str | None = None,
     wait: bool = True,
@@ -29,7 +41,11 @@ def judge0_submit(
         payload["stdin"] = stdin
     if expected_output is not None:
         payload["expected_output"] = expected_output
-    payload.update(kwargs)
+
+    # drop unknown keys so callers cannot set arbitrary Judge0 fields.
+    for key, value in kwargs.items():
+        if key in ALLOWED_LIMITS and value is not None:
+            payload[key] = value
     with httpx.Client(timeout=timeout) as c:
         resp = c.post(url, json=payload)
         resp.raise_for_status()
