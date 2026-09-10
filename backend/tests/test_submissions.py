@@ -41,6 +41,16 @@ def test_create_validates_limits():
     assert r.status_code == 422
 
 
+def test_create_rejects_non_python_language():
+    with patch("app.routers.submissions.judge0_submit") as mock_submit:
+        r = client.post(
+            "/api/submissions",
+            json={"source_code": "print(1)", "language_id": 54},
+        )
+        assert r.status_code == 422
+        mock_submit.assert_not_called()
+
+
 def test_get_rejects_bad_token_without_calling_judge0():
     with patch("app.routers.submissions.judge0_get") as mock_get:
         r = client.get("/api/submissions/not-a-uuid")
