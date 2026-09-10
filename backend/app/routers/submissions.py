@@ -3,7 +3,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..core.judge0 import judge0_get, judge0_submit
 
@@ -21,6 +21,14 @@ class SubmissionCreate(BaseModel):
     problem_id: int | None = None
     cpu_time_limit: float | None = Field(default=None, gt=0, le=15)
     memory_limit: int | None = Field(default=None, gt=0, le=262144)
+
+    @field_validator("language_id")
+    @classmethod
+    def _python_only(cls, value: int) -> int:
+        # Python only for now. Reject other ids instead of passing them through.
+        if value != 71:
+            raise ValueError("only Python (language_id=71) is supported")
+        return value
 
 
 # weirdly, judge0 has an endpoint to return these. idk why. docs:
@@ -123,8 +131,7 @@ def _judge0_error(e: Exception) -> HTTPException:
 @router.post("")
 @router.post("/")
 def create_submission(body: SubmissionCreate, wait: bool = False):
-    # TODO: if wait=false, return token and let frontend poll GET /{token}
-    # TODO: if wait=true, proxy sync and also log result to MySQL
+    # TODO: log result to MySQL
     # TODO: enforce per-problem cpu_time_limit/memory_limit from problem config
     extra: dict = {}
     if body.cpu_time_limit is not None:
@@ -144,8 +151,7 @@ def create_submission(body: SubmissionCreate, wait: bool = False):
     except Exception as e:
         raise _judge0_error(e) from e
 
-    # when wait=true, it will not return these two fields,
-    # so add them just in case
+    # wait=false returns token only, so synthesize queued status for one shape.
     if "status" not in data and "token" in data:
         data["status"] = {"id": 1, "description": "In Queue"}
         data["poll_url"] = f"/api/submissions/{data['token']}"
