@@ -25,10 +25,11 @@ curl http://localhost:8000/api/health | jq
 - backend - FastAPI on Python 3.14
   - main.py
   - requirements.txt
-  - app/core - config, db, redis, judge0 helpers
-  - app/routers - health, problems, submissions, stats
-  - app/services - for the recommender, still TODO
-  - app/models - for database models, still TODO
+  - app/core - configuration, database, sessions, permissions, and API errors
+  - app/routers - auth, courses, problems, assignments, analytics, and submissions
+  - app/services - response shaping and shared analytics formulas
+  - app/models - SQLAlchemy application schema
+  - migrations - Alembic schema revisions
 - frontend - Vite + React + strict TypeScript, currently just shows "techniview"
 - docs - for the research writeup
 - .githooks - versioned pre-commit hook
@@ -71,6 +72,23 @@ make down  # docker compose down
 When a hook fails, the commit is blocked and the hook prints only the fix commands for the checks that failed.
 
 ## Backend notes
+
+Docker Compose applies the database migration and loads idempotent demo data before
+starting the API. The local demo accounts are:
+
+- `teacher@techniview.local` / `teacher-demo`
+- `student@techniview.local` / `student-demo`
+
+For a backend started outside Compose, run these commands from `backend/` first:
+
+```
+alembic upgrade head
+python -m app.seed
+```
+
+The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
+`/api/docs`. Analytics use `difficulty`, `tag`, and, for course views,
+`assignment_id` query filters.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 

@@ -1,5 +1,24 @@
 import os
 
+from sqlalchemy import URL
+
+
+def build_database_url(
+    username: str,
+    password: str,
+    host: str,
+    port: int,
+    database: str,
+) -> str:
+    return URL.create(
+        drivername="mysql+pymysql",
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+    ).render_as_string(hide_password=False)
+
 
 class Settings:
     # MySQL (platform DB)
@@ -8,9 +27,25 @@ class Settings:
     MYSQL_USER = os.getenv("MYSQL_USER", "app_user")
     MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "app_password")
     MYSQL_DB = os.getenv("MYSQL_DB", "app_db")
+    DEFAULT_DATABASE_URL = build_database_url(
+        MYSQL_USER,
+        MYSQL_PASSWORD,
+        MYSQL_HOST,
+        MYSQL_PORT,
+        MYSQL_DB,
+    )
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}",
+        DEFAULT_DATABASE_URL,
+    )
+
+    SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "techniview_session")
+    SESSION_DAYS = int(os.getenv("SESSION_DAYS", "7"))
+    COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    CORS_ORIGINS = tuple(
+        origin.strip()
+        for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+        if origin.strip()
     )
 
     # Judge0 Postgres/Redis

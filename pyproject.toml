@@ -12,7 +12,7 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 pythonpath = ["backend"]
-addopts = ["-q", "--strict-markers", "--strict-config"]
+addopts = ["-q", "--strict-markers", "--strict-config", "-p", "no:asyncio"]
 
 [tool.pycodestyle]
 max-line-length = 88
