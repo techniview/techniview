@@ -1,4 +1,15 @@
-from app.routers import health, problems, stats, submissions
+from app.core.config import settings
+from app.core.errors import install_error_handlers
+from app.routers import (
+    analytics,
+    assignments,
+    auth,
+    courses,
+    curriculum,
+    health,
+    problems,
+    submissions,
+)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,16 +24,22 @@ app = FastAPI(
 # CORS open for local dev, lock down for prod
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # All API routes under /api
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(courses.router, prefix="/api")
 app.include_router(problems.router, prefix="/api")
+app.include_router(curriculum.router, prefix="/api")
+app.include_router(assignments.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
-app.include_router(stats.router, prefix="/api")
+install_error_handlers(app)
 
 
 @app.get("/api")

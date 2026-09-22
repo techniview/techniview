@@ -1,14 +1,24 @@
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import psycopg2
 import pymysql
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
+
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def get_db() -> Generator[Session]:
+    with SessionLocal() as session:
+        yield session
 
 
 @contextmanager
 def mysql_conn():
-    # TODO: replace with SQLAlchemy session when models land
     conn = pymysql.connect(
         host=settings.MYSQL_HOST,
         port=settings.MYSQL_PORT,

@@ -1,5 +1,6 @@
--- techniview application schema for mysql 8.0.17 or newer
--- apply to an empty application database
+-- Legacy design reference. Do not apply this file.
+-- Alembic migrations are the executable application schema.
+-- techniview application schema draft for mysql 8.0.17 or newer
 -- configure every application connection to utc
 -- the backend enforces permissions and prevents edits to published content
 -- it also checks total test weight and concurrent submission limits

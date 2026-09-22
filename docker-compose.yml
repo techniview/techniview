@@ -33,7 +33,6 @@ services:
     depends_on:
       - db
       - redis
-    restart: unless-stopped
 
   workers:
     container_name: techniview-judge0-workers
@@ -66,7 +65,6 @@ services:
       - db
       - redis
       - server
-    restart: unless-stopped
 
   db:
     container_name: techniview-postgres
@@ -77,7 +75,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
 
   redis:
     container_name: techniview-redis
@@ -85,7 +82,6 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:-test_password}
     volumes:
       - redis_data:/data
-    restart: unless-stopped
 
   mysql:
     container_name: techniview-mysql
@@ -104,7 +100,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    restart: unless-stopped
 
   backend:
     container_name: techniview-backend
@@ -122,7 +117,6 @@ services:
       - MYSQL_USER=${MYSQL_USER:-app_user}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
       - MYSQL_DB=${MYSQL_DB:-app_db}
-      - DATABASE_URL=mysql://${MYSQL_USER:-app_user}:${MYSQL_PASSWORD:-app_password}@mysql:3306/${MYSQL_DB:-app_db}
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -139,8 +133,7 @@ services:
         condition: service_started
       redis:
         condition: service_started
-    command: bash -c "git -C /workspace config core.hooksPath .githooks 2>/dev/null || true; uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-    restart: unless-stopped
+    command: bash -c "git -C /workspace config core.hooksPath .githooks 2>/dev/null || true; alembic upgrade head && python -m app.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     container_name: techniview-frontend
@@ -155,7 +148,6 @@ services:
     command: sh -c "npm install --silent && npm run dev"
     depends_on:
       - backend
-    restart: unless-stopped
 
 volumes:
   postgres_data:

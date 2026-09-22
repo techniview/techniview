@@ -1,28 +1,26 @@
-from fastapi.testclient import TestClient
-from main import app
+import pytest
 
-client = TestClient(app)
+pytestmark = pytest.mark.anyio
 
 
-def test_root():
-    r = client.get("/")
+async def test_root(client):
+    r = await client.get("/")
     assert r.status_code == 200
     assert r.json()["api"] == "/api"
 
 
-def test_api_root():
-    r = client.get("/api")
+async def test_api_root(client):
+    r = await client.get("/api")
     assert r.status_code == 200
     assert "health" in r.json()
 
 
-def test_ping():
-    r = client.get("/api/ping")
+async def test_ping(client):
+    r = await client.get("/api/ping")
     assert r.status_code == 200
     assert r.json() == {"pong": True}
 
 
-def test_stub_routes():
-    # TODO: replace with DB-backed tests when models land
-    assert client.get("/api/problems").status_code == 200
-    assert client.get("/api/stats/me").status_code == 200
+async def test_protected_routes_require_authentication(client):
+    assert (await client.get("/api/problems")).status_code == 401
+    assert (await client.get("/api/me/analytics")).status_code == 401
