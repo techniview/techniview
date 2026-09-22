@@ -1,7 +1,8 @@
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 import pytest
-from app.models import AssignmentItem, StudentPracticeProgress
+from app.models import AssignmentItem, StudentPracticeProgress, SubmissionCaseResult
 from sqlalchemy import select
 
 pytestmark = pytest.mark.anyio
@@ -105,6 +106,89 @@ async def test_submission_runs_every_server_owned_test_without_exposing_hidden_c
     assert [call.args[3] for call in mock_submit.call_args_list] == ["6", "0"]
     for call in mock_submit.call_args_list:
         assert "__techniview_target" in call.args[0]
+
+
+async def test_wait_result_persists_judge0_report_fields(student_client, db_session):
+    problem_id = await _problem_id(student_client, "Count Evens")
+    response_data = {
+        "token": "report-token",
+        "status": {"id": 3},
+        "time": "0.125",
+        "memory": 42.2,
+        "stdout": "2\n",
+        "stderr": "",
+        "compile_output": None,
+    }
+    with patch("app.routers.submissions.judge0_submit", return_value=response_data):
+        response = await student_client.post(
+            "/api/submissions?wait=true",
+            json={"source_code": "print(2)", "problem_id": problem_id},
+        )
+
+    assert response.status_code == 200
+    result = db_session.scalar(
+        select(SubmissionCaseResult).where(
+            SubmissionCaseResult.judge0_token == "report-token"
+        )
+    )
+    assert result is not None
+    assert result.execution_time_ms == 125
+    assert result.memory_kb == 43
+    assert result.stdout == "2\n"
+    assert result.stderr == ""
+    assert result.compile_output is None
+
+
+async def test_callback_completes_submission_without_polling(
+    student_client, db_session
+):
+    problem_id = await _problem_id(student_client, "Sum a List")
+    responses = [
+        {"token": "callback-token-1"},
+        {"token": "callback-token-2"},
+    ]
+    with patch(
+        "app.routers.submissions.judge0_submit", side_effect=responses
+    ) as mock_submit:
+        response = await student_client.post(
+            "/api/submissions",
+            json={"source_code": "print(2)", "problem_id": problem_id},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["done"] is False
+    callback_paths = [
+        urlsplit(call.kwargs["callback_url"]).path
+        for call in mock_submit.call_args_list
+    ]
+    for path, token in zip(
+        callback_paths, ("callback-token-1", "callback-token-2"), strict=True
+    ):
+        callback = await student_client.put(
+            path,
+            json={
+                "token": token,
+                "status": {"id": 3},
+                "time": 0.01,
+                "memory": 12,
+                "stdout": "Mgo=",
+            },
+        )
+        assert callback.status_code == 200
+
+    final = await student_client.get(f"/api/submissions/{response.json()['id']}")
+    assert final.status_code == 200
+    assert final.json()["status"] == "passed"
+    assert final.json()["done"] is True
+    rows = db_session.scalars(
+        select(SubmissionCaseResult).where(
+            SubmissionCaseResult.judge0_token.in_(
+                ("callback-token-1", "callback-token-2")
+            )
+        )
+    ).all()
+    assert len(rows) == 2
+    assert all(row.execution_time_ms == 10 for row in rows)
 
 
 async def test_poll_flow_updates_progress_once_per_submission(

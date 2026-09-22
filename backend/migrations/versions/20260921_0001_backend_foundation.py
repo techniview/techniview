@@ -151,7 +151,7 @@ def upgrade() -> None:
     op.create_table(
         "user_sessions",
         _id(primary_key=True, autoincrement=True),
-        sa.Column("token_hash", sa.LargeBinary(32), nullable=False, unique=True),
+        sa.Column("token_hash", sa.BINARY(32), nullable=False, unique=True),
         _id("user_id", nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("last_used_at", sa.DateTime(), nullable=False),

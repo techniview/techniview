@@ -45,6 +45,10 @@ cp .env.example .env
 
 Compose works without `.env` too, it falls back to dev defaults.
 
+Judge0 sends completed execution reports to the backend callback URL. Compose
+uses `http://backend:8000/api/internal/judge0/callbacks` by default. Set
+`JUDGE0_CALLBACK_BASE_URL` when Judge0 needs a different route to reach the API.
+
 ## Dev setup
 
 You need hooks for formatting and tests. They live in .githooks and are shared through git config. After you clone, hooks turn on the first time you run make or docker compose up. No extra install step if you follow quick start.
@@ -65,6 +69,7 @@ Run `make` to set up pre-commit hooks. Here's what each hook does:
 make fmt   # ruff fix + format, prettier --write
 make lint  # ruff, tsc, eslint, prettier --check
 make test  # pytest + vitest
+make integration # disposable MySQL + Judge0 integration stack (requires Docker)
 make up    # docker compose up -d --build
 make down  # docker compose down
 ```
@@ -89,6 +94,13 @@ python -m app.seed
 The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
 `/api/docs`. Analytics use `difficulty`, `tag`, and, for course views,
 `assignment_id` query filters.
+
+`make integration` runs migrations against a fresh MySQL database, forces overlapping
+callbacks under REPEATABLE READ, and runs Python submissions through Judge0. It
+checks completion by reading MySQL without polling the submission API. The stack
+uses separate containers, no host ports, and temporary database storage; it does
+not read your `.env`. Judge0 uses the same privileged cgroup access as the dev
+stack. Containers are removed when the command exits.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 

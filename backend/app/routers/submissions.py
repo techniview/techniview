@@ -1,16 +1,21 @@
+import base64
+import secrets
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from enum import IntEnum
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload, selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
+from ..core.config import settings
 from ..core.dependencies import CurrentUser, DbSession
 from ..core.errors import ApiError
 from ..core.judge0 import judge0_get, judge0_submit
+from ..core.security import hash_token
 from ..models import (
     ErrorCategory,
     Submission,
@@ -27,15 +32,23 @@ from ..services.progress import (
 from .problems import _visible_problem
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
+internal_router = APIRouter(prefix="/internal/judge0", tags=["internal"])
 
 
 class SubmissionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source_code: str = Field(min_length=1, max_length=65536)
+    source_code: str = Field(min_length=1, max_length=65535)
     language_id: int = Field(default=71, gt=0)
     problem_id: int = Field(gt=0)
     assignment_item_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("source_code")
+    @classmethod
+    def _source_byte_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 65535:
+            raise ValueError("source code must not exceed 65535 UTF-8 bytes")
+        return value
 
     @field_validator("language_id")
     @classmethod
@@ -142,14 +155,48 @@ TERMINAL_SUBMISSION_STATUSES = frozenset(
         SubmissionStatus.INFRASTRUCTURE_ERROR,
     }
 )
+MAX_REPORT_TEXT_BYTES = 65_535
+
+
+def _report_text(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError("Judge0 returned a non-text report field")
+    return value.encode("utf-8")[:MAX_REPORT_TEXT_BYTES].decode(
+        "utf-8", errors="ignore"
+    )
 
 
 def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
+    if not isinstance(data, dict):
+        raise ValueError("Judge0 returned a non-object submission report")
     status = data.get("status") or {}
+    if not isinstance(status, dict):
+        raise TypeError("Judge0 returned an invalid status")
     status_id = status.get("id")
     if status_id is not None:
-        case_result.judge0_status_id = int(status_id)
-        case_result.infrastructure_error = int(status_id) == Judge0Status.INTERNAL_ERROR
+        status_id = int(status_id)
+        if (
+            status_id < Judge0Status.IN_QUEUE
+            or status_id > Judge0Status.EXEC_FORMAT_ERROR
+        ):
+            raise ValueError(f"Judge0 returned an unknown status: {status_id}")
+        case_result.judge0_status_id = status_id
+        case_result.infrastructure_error = status_id == Judge0Status.INTERNAL_ERROR
+    if data.get("time") is not None:
+        execution_time_ms = Decimal(str(data["time"])) * Decimal("1000")
+        if not execution_time_ms.is_finite() or execution_time_ms < 0:
+            raise ValueError("Judge0 returned an invalid execution time")
+        case_result.execution_time_ms = execution_time_ms.quantize(Decimal("0.001"))
+    if data.get("memory") is not None:
+        memory_kb = Decimal(str(data["memory"]))
+        if not memory_kb.is_finite() or memory_kb < 0:
+            raise ValueError("Judge0 returned invalid memory usage")
+        case_result.memory_kb = int(memory_kb.to_integral_value(rounding=ROUND_CEILING))
+    for field in ("stdout", "stderr", "compile_output"):
+        if field in data:
+            setattr(case_result, field, _report_text(data[field]))
 
 
 def _finalize_submission(db: Session, submission: Submission) -> None:
@@ -273,13 +320,44 @@ def _reserve_submission(
     return submission
 
 
-def _mark_infrastructure_error(db: Session, submission_id: int) -> None:
-    db.rollback()
-    submission = db.get(Submission, submission_id)
-    if submission is None:
+def _load_submission(db: Session, submission_id: int) -> Submission | None:
+    submission = db.scalar(
+        select(Submission)
+        .options(lazyload(Submission.case_results))
+        .where(Submission.id == submission_id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if submission is not None:
+        # Locking reads see committed results even with a REPEATABLE READ snapshot.
+        results = db.scalars(
+            select(SubmissionCaseResult)
+            .options(selectinload(SubmissionCaseResult.test_case))
+            .where(SubmissionCaseResult.submission_id == submission_id)
+            .order_by(SubmissionCaseResult.test_case_id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        ).all()
+        set_committed_value(submission, "case_results", results)
+    return submission
+
+
+def _mark_case_infrastructure_error(
+    db: Session,
+    submission_id: int,
+    test_case_id: int,
+) -> None:
+    result = db.get(
+        SubmissionCaseResult,
+        {"submission_id": submission_id, "test_case_id": test_case_id},
+    )
+    if result is None:
         return
-    submission.status = SubmissionStatus.INFRASTRUCTURE_ERROR
-    submission.completed_at = datetime.now(UTC).replace(tzinfo=None)
+    result.judge0_status_id = Judge0Status.INTERNAL_ERROR
+    result.infrastructure_error = True
+    submission = _load_submission(db, submission_id)
+    if submission is not None:
+        _finalize_submission(db, submission)
     db.commit()
 
 
@@ -295,8 +373,24 @@ def create_submission(
     if not problem.test_cases:
         raise ApiError(409, "problem_has_no_tests", "The problem has no test cases.")
     submission = _reserve_submission(db, body, user.id)
+    callback_tokens: dict[int, str] = {}
+    results: dict[int, SubmissionCaseResult] = {}
+    for test_case in problem.test_cases:
+        callback_token = secrets.token_urlsafe(32)
+        result = SubmissionCaseResult(
+            submission_id=submission.id,
+            test_case_id=test_case.id,
+            callback_token_hash=hash_token(callback_token),
+            judge0_status_id=Judge0Status.IN_QUEUE,
+            test_case=test_case,
+        )
+        callback_tokens[test_case.id] = callback_token
+        results[test_case.id] = result
+        db.add(result)
+    db.commit()
     for test_case in problem.test_cases:
         execution = build_case_execution(problem, test_case, body.source_code)
+        result = results[test_case.id]
         try:
             data = judge0_submit(
                 execution.source_code,
@@ -305,47 +399,39 @@ def create_submission(
                 execution.expected_output,
                 wait=wait,
                 timeout=20.0 if wait else 5.0,
+                callback_url=(
+                    f"{settings.JUDGE0_CALLBACK_BASE_URL}/"
+                    f"{callback_tokens[test_case.id]}"
+                ),
                 cpu_time_limit=float(problem.cpu_time_limit_seconds),
                 memory_limit=problem.memory_limit_kb,
             )
             token = data["token"]
+            db.refresh(result)
+            if result.judge0_token is None:
+                result.judge0_token = token
+            if wait:
+                _update_case_result(result, data)
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
-            _mark_infrastructure_error(db, submission.id)
+            _mark_case_infrastructure_error(db, submission.id, test_case.id)
             raise _judge0_error(error) from error
-        result = SubmissionCaseResult(
-            submission_id=submission.id,
-            test_case_id=test_case.id,
-            judge0_token=token,
-            test_case=test_case,
-        )
-        if wait:
-            _update_case_result(result, data)
-        else:
-            result.judge0_status_id = Judge0Status.IN_QUEUE
-        submission.case_results.append(result)
-    db.flush()
-    db.refresh(submission)
+        db.commit()
+    submission = _load_submission(db, submission.id)
+    if submission is None:
+        raise RuntimeError("submission disappeared while it was being graded")
     _finalize_submission(db, submission)
     db.commit()
-    db.refresh(submission)
+    submission = _load_submission(db, submission.id)
+    if submission is None:
+        raise RuntimeError("submission disappeared after grading")
     return _submission_response(submission)
 
 
 @router.get("/{submission_id}")
 def get_submission(submission_id: int, db: DbSession, user: CurrentUser):
-    submission = db.scalar(
-        select(Submission)
-        .options(
-            selectinload(Submission.case_results).selectinload(
-                SubmissionCaseResult.test_case
-            )
-        )
-        .where(
-            Submission.id == submission_id,
-            Submission.student_id == user.id,
-        )
-        .with_for_update()
-    )
+    submission = _load_submission(db, submission_id)
+    if submission is not None and submission.student_id != user.id:
+        submission = None
     if submission is None:
         raise ApiError(404, "submission_not_found", "Submission not found.")
     if submission.status not in TERMINAL_SUBMISSION_STATUSES:
@@ -364,3 +450,60 @@ def get_submission(submission_id: int, db: DbSession, user: CurrentUser):
         db.commit()
         db.refresh(submission)
     return _submission_response(submission)
+
+
+@internal_router.put("/callbacks/{callback_token}", include_in_schema=False)
+def receive_judge0_callback(
+    callback_token: str,
+    data: dict,
+    db: DbSession,
+):
+    result = db.scalar(
+        select(SubmissionCaseResult).where(
+            SubmissionCaseResult.callback_token_hash == hash_token(callback_token)
+        )
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="callback not found")
+    submission = _load_submission(db, result.submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="submission not found")
+    result = db.scalar(
+        select(SubmissionCaseResult)
+        .where(
+            SubmissionCaseResult.submission_id == result.submission_id,
+            SubmissionCaseResult.test_case_id == result.test_case_id,
+        )
+        .with_for_update()
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="callback not found")
+    reported_token = data.get("token")
+    if reported_token is not None and (
+        not isinstance(reported_token, str) or len(reported_token) > 36
+    ):
+        raise HTTPException(status_code=400, detail="invalid Judge0 token")
+    if (
+        reported_token is not None
+        and result.judge0_token is not None
+        and reported_token != result.judge0_token
+    ):
+        raise HTTPException(status_code=409, detail="callback token mismatch")
+    if reported_token is not None:
+        result.judge0_token = reported_token
+    try:
+        report = dict(data)
+        for field in ("stdout", "stderr", "compile_output"):
+            if report.get(field) is not None:
+                if not isinstance(report[field], str):
+                    raise TypeError("Judge0 callback text must be a Base64 string")
+                report[field] = base64.b64decode(
+                    "".join(report[field].split()), validate=True
+                ).decode("utf-8", errors="replace")
+        _update_case_result(result, report)
+    except (TypeError, ValueError, ArithmeticError) as error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="invalid Judge0 report") from error
+    _finalize_submission(db, submission)
+    db.commit()
+    return {"ok": True}

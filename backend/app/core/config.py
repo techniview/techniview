@@ -60,6 +60,10 @@ class Settings:
     REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "test_password")
 
     JUDGE0_URL = os.getenv("JUDGE0_URL", "http://server:2358")
+    JUDGE0_CALLBACK_BASE_URL = os.getenv(
+        "JUDGE0_CALLBACK_BASE_URL",
+        "http://backend:8000/api/internal/judge0/callbacks",
+    ).rstrip("/")
 
 
 settings = Settings()

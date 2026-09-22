@@ -5,6 +5,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    BINARY,
     BigInteger,
     CheckConstraint,
     Column,
@@ -14,7 +15,6 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
-    LargeBinary,
     Numeric,
     String,
     Table,
@@ -118,7 +118,7 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
-    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True)
+    token_hash: Mapped[bytes] = mapped_column(BINARY(32), unique=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
     last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
@@ -384,8 +384,16 @@ class SubmissionCaseResult(Base):
     judge0_token: Mapped[str | None] = mapped_column(
         String(36), unique=True, index=True
     )
+    callback_token_hash: Mapped[bytes | None] = mapped_column(
+        BINARY(32), unique=True, index=True
+    )
     judge0_status_id: Mapped[int | None] = mapped_column(Integer)
     infrastructure_error: Mapped[bool] = mapped_column(default=False)
+    execution_time_ms: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    memory_kb: Mapped[int | None] = mapped_column(Integer)
+    stdout: Mapped[str | None] = mapped_column(Text)
+    stderr: Mapped[str | None] = mapped_column(Text)
+    compile_output: Mapped[str | None] = mapped_column(Text)
 
     submission: Mapped[Submission] = relationship(back_populates="case_results")
     test_case: Mapped[ProblemTestCase] = relationship(lazy="joined")

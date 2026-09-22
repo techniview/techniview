@@ -240,6 +240,7 @@ CREATE TABLE submission_case_results (
     test_case_id BIGINT UNSIGNED NOT NULL,
     problem_id BIGINT UNSIGNED NOT NULL,
     judge0_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin,
+    callback_token_hash BINARY(32),
     judge0_status_id SMALLINT UNSIGNED,
     infrastructure_error BOOLEAN NOT NULL DEFAULT FALSE,
     execution_time_ms DECIMAL(12,3),
@@ -249,6 +250,7 @@ CREATE TABLE submission_case_results (
     compile_output TEXT,
     PRIMARY KEY (submission_id, test_case_id),
     UNIQUE KEY uq_case_results_token (judge0_token),
+    UNIQUE KEY uq_case_results_callback_token (callback_token_hash),
     KEY idx_case_results_pending (infrastructure_error, judge0_status_id),
     FOREIGN KEY (submission_id, problem_id) REFERENCES submissions(id, problem_id)
         ON DELETE RESTRICT,

@@ -39,6 +39,7 @@ app.include_router(curriculum.router, prefix="/api")
 app.include_router(assignments.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
+app.include_router(submissions.internal_router, prefix="/api")
 install_error_handlers(app)
 
 
