@@ -1,10 +1,9 @@
-.PHONY: install hooks fmt lint test integration up down clean
+.PHONY: install hooks fmt lint test check verify integration build up down clean
 
 install: hooks
-	@pip install -q pre-commit ruff 2>&1 | tail -3 || pip install --break-system-packages -q pre-commit ruff 2>&1 | tail -3
-	@pip install -q -r backend/requirements.txt pytest 2>&1 | tail -3 || pip install --break-system-packages -q -r backend/requirements.txt pytest 2>&1 | tail -3
-	@cd frontend && npm install --silent 2>&1 | tail -3
-	@echo "installed pre-commit + ruff + backend deps + frontend deps"
+	@uv sync --locked
+	@cd frontend && npm ci --silent
+	@echo "installed the locked uv environment + frontend dependencies"
 
 hooks:
 	git config core.hooksPath .githooks
@@ -12,20 +11,27 @@ hooks:
 	@echo "No pre-commit install needed, .githooks/pre-commit is versioned"
 
 fmt:
-	ruff check backend --fix
-	ruff format backend
+	uv run ruff check backend --fix
+	uv run ruff format backend
 	cd frontend && npx prettier --write .
 
 lint:
-	ruff check backend
-	ruff format --check backend
+	uv run ruff check backend
+	uv run ruff format --check backend
 	cd frontend && npx tsc --noEmit
 	cd frontend && npx eslint .
 	cd frontend && npx prettier --check .
 
 test:
-	cd backend && python -m pytest -q
+	uv run python -m pytest -q
 	cd frontend && npm test
+
+check: lint test
+
+build:
+	cd frontend && npm run build
+
+verify: check build integration
 
 integration:
 	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \

@@ -1,3 +1,31 @@
+[project]
+name = "techniview-backend"
+version = "0.1.0"
+description = "TechniView backend API"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "alembic==1.16.5",
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "psycopg2-binary==2.9.12",
+    "pymysql==1.2.0",
+    "redis==8.1.0",
+    "sqlalchemy==2.0.52",
+    "uvicorn[standard]==0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "pip-audit>=2.9,<3",
+    "pre-commit>=4.3,<5",
+    "pytest>=9,<10",
+    "pytest-cov>=7,<8",
+    "ruff>=0.13,<0.14",
+]
+
+[tool.uv]
+package = false
+
 [tool.ruff]
 line-length = 88
 target-version = "py314"
