@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 echo "Setting up TechniView pre-commit hooks..."
 
 # Use tracked .githooks so hooks are versioned and shared
@@ -9,7 +9,7 @@ echo "  ok: core.hooksPath = .githooks (tracked, no install needed)"
 # Keep setup deterministic: dependencies are installed by `make install`, not by
 # a git hook or helper script running implicitly during a commit.
 if ! command -v uv >/dev/null 2>&1; then
-  echo "  uv is missing; install uv and run 'make install'."
+  echo "  uv is missing; install uv from https://docs.astral.sh/uv/ and re-run 'make install'."
   exit 1
 fi
 

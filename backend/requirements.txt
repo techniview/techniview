@@ -8,5 +8,6 @@ redis==8.1.0
 httpx==0.28.1
 sqlalchemy==2.0.52
 alembic==1.16.5
-# dev / test only, installed via Makefile
-# pytest, ruff, pre-commit are host tools, not container deps
+# dev / test tools (pytest, ruff, pre-commit, pip-audit) are not container
+# deps; they come from the `dev` dependency-group in the root pyproject.toml
+# via `uv sync --locked`.
