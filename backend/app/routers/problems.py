@@ -15,6 +15,7 @@ from ..models import (
     CurriculumEdge,
     CurriculumNode,
     Difficulty,
+    MembershipRole,
     Problem,
     ProblemState,
     ProblemTag,
@@ -53,6 +54,29 @@ def _assigned_problem_ids(db: Session, user_id: int) -> set[int]:
     )
 
 
+def _staffed_problem_ids(db: Session, user_id: int) -> set[int]:
+    # Staff see problems from non-draft assignments (published + archived),
+    # unlike students who only see published ones.
+    return set(
+        db.scalars(
+            select(AssignmentItem.problem_id)
+            .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
+            .join(
+                CourseMembership,
+                CourseMembership.course_id == Assignment.course_id,
+            )
+            .where(
+                CourseMembership.user_id == user_id,
+                CourseMembership.withdrawn_at.is_(None),
+                CourseMembership.role.in_(
+                    [MembershipRole.INSTRUCTOR, MembershipRole.TA]
+                ),
+                Assignment.state != AssignmentState.DRAFT,
+            )
+        ).all()
+    )
+
+
 def _visible_problem(db: Session, problem_id: int, user: User) -> Problem:
     problem = db.scalar(
         select(Problem)
@@ -68,6 +92,7 @@ def _visible_problem(db: Session, problem_id: int, user: User) -> Problem:
         globally_visible
         or problem.owner_id == user.id
         or problem.id in _assigned_problem_ids(db, user.id)
+        or problem.id in _staffed_problem_ids(db, user.id)
     ):
         raise ApiError(404, "problem_not_found", "Problem not found.")
     return problem
@@ -83,12 +108,15 @@ def list_problems(
     offset: int = Query(0, ge=0),
 ):
     assigned_ids = _assigned_problem_ids(db, user.id)
+    staffed_ids = _staffed_problem_ids(db, user.id)
     visibility = [
         Problem.owner_id.is_(None) & (Problem.state == ProblemState.PUBLISHED),
         Problem.owner_id == user.id,
     ]
     if assigned_ids:
         visibility.append(Problem.id.in_(assigned_ids))
+    if staffed_ids:
+        visibility.append(Problem.id.in_(staffed_ids))
     query = (
         select(Problem)
         .options(selectinload(Problem.tags))

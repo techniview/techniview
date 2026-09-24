@@ -39,7 +39,7 @@ def _can_view_assignment(
     membership: CourseMembership,
     db: Session,
 ) -> bool:
-    if membership.role == MembershipRole.INSTRUCTOR:
+    if membership.role in (MembershipRole.INSTRUCTOR, MembershipRole.TA):
         return True
     now = datetime.now(UTC).replace(tzinfo=None)
     if assignment.available_at is not None and assignment.available_at > now:

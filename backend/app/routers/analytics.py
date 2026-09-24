@@ -3,7 +3,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..core.authorization import get_membership
-from ..core.dependencies import CurrentUser, DbSession, InstructorMembership
+from ..core.dependencies import CurrentUser, DbSession, StaffMembership
 from ..core.errors import ApiError
 from ..models import (
     Assignment,
@@ -147,7 +147,7 @@ def my_analytics(
 def course_overview(
     course_id: int,
     db: DbSession,
-    _membership: InstructorMembership,
+    _membership: StaffMembership,
     assignment_id: int | None = None,
     difficulty: Difficulty | None = None,
     tag: str | None = None,
@@ -184,7 +184,7 @@ def course_problem_analytics(
     course_id: int,
     problem_id: int,
     db: DbSession,
-    _membership: InstructorMembership,
+    _membership: StaffMembership,
     assignment_id: int | None = None,
 ):
     rows = [
@@ -215,7 +215,7 @@ def student_problem_analytics(
     student_id: int,
     problem_id: int,
     db: DbSession,
-    _membership: InstructorMembership,
+    _membership: StaffMembership,
     assignment_id: int | None = None,
 ):
     student_membership = get_membership(db, course_id, student_id)

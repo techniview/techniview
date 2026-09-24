@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .core.db import SessionLocal
-from .core.security import hash_password
+from .core.security import hash_password, hash_token
 from .models import (
     Assignment,
     AssignmentItem,
@@ -32,10 +32,26 @@ from .models import (
 
 DEMO_TEACHER_EMAIL = "teacher@techniview.local"
 DEMO_STUDENT_EMAIL = "student@techniview.local"
+DEMO_COURSE_JOIN_TOKEN = "demo-cs101-join-link-token"
 
 
 def seed_demo(db: Session) -> None:
     if db.scalar(select(User).where(User.email == DEMO_TEACHER_EMAIL)) is not None:
+        taken = db.scalar(
+            select(Course).where(
+                Course.join_code_hash == hash_token(DEMO_COURSE_JOIN_TOKEN)
+            )
+        )
+        if taken is None:
+            course = db.scalar(
+                select(Course).where(
+                    Course.name == "CS 101 Demo",
+                    Course.join_code_hash.is_(None),
+                )
+            )
+            if course is not None:
+                course.join_code_hash = hash_token(DEMO_COURSE_JOIN_TOKEN)
+                db.commit()
         return
 
     teacher = User(
@@ -126,7 +142,11 @@ def seed_demo(db: Session) -> None:
         )
     )
 
-    course = Course(name="CS 101 Demo", description="Seeded development course")
+    course = Course(
+        name="CS 101 Demo",
+        description="Seeded development course",
+        join_code_hash=hash_token(DEMO_COURSE_JOIN_TOKEN),
+    )
     db.add(course)
     db.flush()
     instructor = CourseMembership(
