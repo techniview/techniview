@@ -142,12 +142,16 @@ ERROR_COUNTER_FIELDS = {
 def finalize_progress(db: Session, submission: Submission) -> None:
     if submission.status == SubmissionStatus.INFRASTRUCTURE_ERROR:
         return
-    progress = get_or_create_progress(
-        db,
-        submission.student_id,
-        submission.problem_id,
-        submission.assignment_item_id,
-    )
+    if submission.assignment_item_id is not None:
+        progress = _locked_assignment_progress(
+            db, submission.student_id, submission.assignment_item_id
+        )
+    else:
+        progress = _locked_practice_progress(
+            db, submission.student_id, submission.problem_id
+        )
+    if progress is None:
+        raise RuntimeError("accepted submission has no reserved progress")
     now = submission.completed_at or utc_now()
     progress.valid_attempt_count += 1
     progress.retry_count = max(0, progress.valid_attempt_count - 1)

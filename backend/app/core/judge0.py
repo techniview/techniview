@@ -29,6 +29,7 @@ def judge0_submit(
     expected_output: str | None = None,
     wait: bool = True,
     timeout: float = 5.0,
+    callback_url: str | None = None,
     **kwargs,
 ):
     # **kwargs passes per-problem limits through, e.g. cpu_time_limit,
@@ -41,6 +42,8 @@ def judge0_submit(
         payload["stdin"] = stdin
     if expected_output is not None:
         payload["expected_output"] = expected_output
+    if callback_url is not None:
+        payload["callback_url"] = callback_url
 
     # drop unknown keys so callers cannot set arbitrary Judge0 fields.
     for key, value in kwargs.items():

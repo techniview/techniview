@@ -126,6 +126,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
       - JUDGE0_URL=http://server:2358
+      - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
     depends_on:
       mysql:
         condition: service_healthy

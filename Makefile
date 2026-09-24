@@ -1,4 +1,4 @@
-.PHONY: install hooks fmt lint test up down clean
+.PHONY: install hooks fmt lint test integration up down clean
 
 install: hooks
 	@pip install -q pre-commit ruff 2>&1 | tail -3 || pip install --break-system-packages -q pre-commit ruff 2>&1 | tail -3
@@ -26,6 +26,10 @@ lint:
 test:
 	cd backend && python -m pytest -q
 	cd frontend && npm test
+
+integration:
+	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \
+	docker compose --env-file /dev/null -f compose.integration.yml up --build --attach tests --abort-on-container-exit --exit-code-from tests
 
 up:
 	docker compose up -d --build

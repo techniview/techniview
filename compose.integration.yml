@@ -1,0 +1,91 @@
+name: techniview-integration
+
+x-judge: &judge
+  image: mrkushalsm/judge0:latest
+  privileged: true
+  cgroup: host
+  security_opt: [seccomp=unconfined]
+  volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup:rw
+  environment:
+    POSTGRES_HOST: postgres
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: integration-only
+    POSTGRES_DB: postgres
+    REDIS_HOST: redis
+    REDIS_PASSWORD: integration-only
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+x-app: &app
+  build:
+    context: ./backend
+    dockerfile: integration/Dockerfile
+  environment:
+    DATABASE_URL: mysql+pymysql://integration:p%40ss%25word@mysql/integration
+    JUDGE0_URL: http://judge:2358
+    JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
+    INTEGRATION_TESTS: "1"
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: integration-root-only
+      MYSQL_DATABASE: integration
+      MYSQL_USER: integration
+      MYSQL_PASSWORD: p@ss%word
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, localhost]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: integration-only
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass integration-only
+    healthcheck:
+      test: [CMD, redis-cli, -a, integration-only, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  judge:
+    <<: *judge
+    command: /api/scripts/server
+  workers:
+    <<: *judge
+    command: /api/scripts/workers
+  backend:
+    <<: *app
+    command: sh -c 'alembic upgrade head && python -m app.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --no-access-log'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/ping")']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+  tests:
+    <<: *app
+    command: python -m pytest -v integration --override-ini=pythonpath=.
+    depends_on:
+      backend:
+        condition: service_healthy
+      judge:
+        condition: service_started
+      workers:
+        condition: service_started
