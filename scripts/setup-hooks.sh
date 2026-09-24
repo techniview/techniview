@@ -6,14 +6,11 @@ echo "Setting up TechniView pre-commit hooks..."
 git config core.hooksPath .githooks
 echo "  ok: core.hooksPath = .githooks (tracked, no install needed)"
 
-# Ensure pre-commit is available for the wrapper to call
+# Keep setup deterministic: dependencies are installed by `make install`, not by
+# a git hook or helper script running implicitly during a commit.
 if ! command -v pre-commit >/dev/null 2>&1; then
-  echo "  Installing pre-commit..."
-  if command -v pipx >/dev/null 2>&1; then
-    pipx install pre-commit
-  else
-    pip install --break-system-packages -q pre-commit
-  fi
+  echo "  pre-commit is missing; run 'make install' to install it."
+  exit 1
 fi
 
 echo "Done. Hooks run on every git commit via .githooks/pre-commit."

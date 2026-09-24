@@ -1,10 +1,10 @@
-.PHONY: install hooks fmt lint test integration up down clean
+.PHONY: install hooks fmt lint test check verify integration build up down clean
 
 install: hooks
-	@pip install -q pre-commit ruff 2>&1 | tail -3 || pip install --break-system-packages -q pre-commit ruff 2>&1 | tail -3
-	@pip install -q -r backend/requirements.txt pytest 2>&1 | tail -3 || pip install --break-system-packages -q -r backend/requirements.txt pytest 2>&1 | tail -3
-	@cd frontend && npm install --silent 2>&1 | tail -3
-	@echo "installed pre-commit + ruff + backend deps + frontend deps"
+	@python -m pip install -q pre-commit ruff pip-audit pytest pytest-cov || python -m pip install --break-system-packages -q pre-commit ruff pip-audit pytest pytest-cov
+	@python -m pip install -q -r backend/requirements.txt || python -m pip install --break-system-packages -q -r backend/requirements.txt
+	@cd frontend && npm ci --silent
+	@echo "installed pre-commit + Python tools + backend deps + frontend deps"
 
 hooks:
 	git config core.hooksPath .githooks
@@ -26,6 +26,13 @@ lint:
 test:
 	cd backend && python -m pytest -q
 	cd frontend && npm test
+
+check: lint test
+
+build:
+	cd frontend && npm run build
+
+verify: check build integration
 
 integration:
 	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \

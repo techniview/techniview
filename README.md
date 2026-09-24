@@ -51,12 +51,16 @@ uses `http://backend:8000/api/internal/judge0/callbacks` by default. Set
 
 ## Dev setup
 
-You need hooks for formatting and tests. They live in .githooks and are shared through git config. After you clone, hooks turn on the first time you run make or docker compose up. No extra install step if you follow quick start.
+You need hooks for formatting and tests. They live in `.githooks` and are shared
+through Git config. Run `make install` after cloning. It installs dependencies and
+turns the hooks on. Hooks run checks only. They do not install tools or rewrite
+files.
 
-Run `make` to set up pre-commit hooks. Here's what each hook does:
+`make check` runs the fast local checks. `make verify` also builds the frontend and
+runs the disposable MySQL/Judge0 integration suite. Here's what the checks cover:
 
-- ruff check backend --fix - lint and fix imports and style
-- ruff format backend - format to 88 columns, double quotes, Python 3.14
+- ruff check backend - lint imports and style
+- ruff format --check backend - verify 88-column, double-quote formatting
 - pytest - runs cd backend && python -m pytest -q, must pass
 - tsc --noEmit - strict typecheck for the frontend, no `any`, no unused vars
 - eslint - strict TypeScript plus react-hooks rules for the frontend
@@ -67,14 +71,19 @@ Run `make` to set up pre-commit hooks. Here's what each hook does:
 
 ```
 make fmt   # ruff fix + format, prettier --write
-make lint  # ruff, tsc, eslint, prettier --check
-make test  # pytest + vitest
+make check # lint and fast tests
+make build # frontend production build
+make verify # check + build + integration tests
 make integration # disposable MySQL + Judge0 integration stack (requires Docker)
 make up    # docker compose up -d --build
 make down  # docker compose down
 ```
 
-When a hook fails, the commit is blocked and the hook prints only the fix commands for the checks that failed.
+Read [docs/testing.md](docs/testing.md) for the full contributor workflow, test
+boundaries, CI jobs, and failure reproduction commands.
+
+When a hook fails, the commit is blocked and the failing command's output is shown;
+run the matching `make` command above to fix or reproduce it.
 
 ## Backend notes
 
