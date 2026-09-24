@@ -5,15 +5,24 @@ the third before opening a backend or infrastructure PR.
 
 ## First-time setup
 
-Install Python 3.14, Node.js 20, Docker, and Git. Then run:
+Install uv, Node.js 20, Docker, and Git. uv manages Python 3.14 and the backend
+virtual environment for you. Then run:
 
 ```sh
 make install
 ```
 
-This installs the backend and frontend dependencies and configures the tracked
-pre-commit hook. Copy `.env.example` to `.env` only when you need to change local
-Compose settings. The integration tests do not read `.env`.
+This installs the locked backend environment in `.venv`, the frontend dependencies,
+and configures the tracked pre-commit hook. Copy `.env.example` to `.env` only when
+you need to change local Compose settings. The integration tests do not read `.env`.
+
+Run backend commands through uv so every developer uses the lockfile:
+
+```sh
+uv run python -m pytest -q
+uv run ruff check backend
+uv run ruff format --check backend
+```
 
 ## Local checks
 
@@ -42,7 +51,7 @@ make fmt
 ```
 
 The commit hook only checks files. It never installs tools or rewrites the
-working tree. If it says a tool is missing, run `make install`.
+working tree. If it says uv or a Python tool is missing, run `make install`.
 
 ## Integration tests
 

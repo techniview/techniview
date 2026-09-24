@@ -1,3 +1,5 @@
+# Runtime mirror of the dependencies in the root pyproject.toml. The backend
+# image uses this file; local development and CI use uv.lock.
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 pymysql==1.2.0

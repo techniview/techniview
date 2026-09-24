@@ -33,7 +33,8 @@ curl http://localhost:8000/api/health | jq
 - frontend - Vite + React + strict TypeScript, currently just shows "techniview"
 - docs - for the research writeup
 - .githooks - versioned pre-commit hook
-- pyproject.toml - ruff and pytest settings
+- pyproject.toml - backend dependencies and Ruff/pytest settings
+- uv.lock - reproducible Python dependency lockfile
 
 ## Config
 
@@ -52,9 +53,10 @@ uses `http://backend:8000/api/internal/judge0/callbacks` by default. Set
 ## Dev setup
 
 You need hooks for formatting and tests. They live in `.githooks` and are shared
-through Git config. Run `make install` after cloning. It installs dependencies and
-turns the hooks on. Hooks run checks only. They do not install tools or rewrite
-files.
+through Git config. Install [uv](https://docs.astral.sh/uv/), then run `make install`
+after cloning. It creates the locked Python environment, installs frontend
+dependencies, and turns the hooks on. Hooks run checks only. They do not install
+tools or rewrite files.
 
 `make check` runs the fast local checks. `make verify` also builds the frontend and
 runs the disposable MySQL/Judge0 integration suite. Here's what the checks cover:

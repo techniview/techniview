@@ -8,8 +8,8 @@ echo "  ok: core.hooksPath = .githooks (tracked, no install needed)"
 
 # Keep setup deterministic: dependencies are installed by `make install`, not by
 # a git hook or helper script running implicitly during a commit.
-if ! command -v pre-commit >/dev/null 2>&1; then
-  echo "  pre-commit is missing; run 'make install' to install it."
+if ! command -v uv >/dev/null 2>&1; then
+  echo "  uv is missing; install uv and run 'make install'."
   exit 1
 fi
 

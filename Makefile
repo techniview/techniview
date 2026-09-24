@@ -1,10 +1,9 @@
 .PHONY: install hooks fmt lint test check verify integration build up down clean
 
 install: hooks
-	@python -m pip install -q pre-commit ruff pip-audit pytest pytest-cov || python -m pip install --break-system-packages -q pre-commit ruff pip-audit pytest pytest-cov
-	@python -m pip install -q -r backend/requirements.txt || python -m pip install --break-system-packages -q -r backend/requirements.txt
+	@uv sync --locked
 	@cd frontend && npm ci --silent
-	@echo "installed pre-commit + Python tools + backend deps + frontend deps"
+	@echo "installed the locked uv environment + frontend dependencies"
 
 hooks:
 	git config core.hooksPath .githooks
@@ -12,19 +11,19 @@ hooks:
 	@echo "No pre-commit install needed, .githooks/pre-commit is versioned"
 
 fmt:
-	ruff check backend --fix
-	ruff format backend
+	uv run ruff check backend --fix
+	uv run ruff format backend
 	cd frontend && npx prettier --write .
 
 lint:
-	ruff check backend
-	ruff format --check backend
+	uv run ruff check backend
+	uv run ruff format --check backend
 	cd frontend && npx tsc --noEmit
 	cd frontend && npx eslint .
 	cd frontend && npx prettier --check .
 
 test:
-	cd backend && python -m pytest -q
+	uv run python -m pytest -q
 	cd frontend && npm test
 
 check: lint test

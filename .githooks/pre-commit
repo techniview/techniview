@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-if ! command -v pre-commit >/dev/null 2>&1; then
-  echo "pre-commit is not installed. Run 'make install' first." >&2
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is not installed. Install uv, then run 'make install'." >&2
   exit 1
 fi
 
-exec pre-commit run --hook-stage commit "$@"
+exec uv run --locked pre-commit run --hook-stage commit "$@"
