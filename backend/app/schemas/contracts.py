@@ -63,6 +63,29 @@ class MemberListResponse(BaseModel):
     offset: int
 
 
+class JoinPreviewResponse(BaseModel):
+    course_id: int
+    name: str
+    description: str | None
+    joinable: bool
+
+
+class JoinSignupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=1024)
+    password_confirm: str = Field(min_length=8, max_length=1024)
+
+
+class JoinLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class MemberRoleUpdateRequest(BaseModel):
+    role: MembershipRole
+
+
 class PublicTestCaseResponse(BaseModel):
     id: int
     case_order: int

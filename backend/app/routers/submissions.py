@@ -5,18 +5,26 @@ from decimal import ROUND_CEILING, Decimal
 from enum import IntEnum
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
+from ..core.authorization import get_membership
 from ..core.config import settings
-from ..core.dependencies import CurrentUser, DbSession
+from ..core.dependencies import (
+    CurrentUser,
+    DbSession,
+    InstructorMembership,
+    StaffMembership,
+)
 from ..core.errors import ApiError
 from ..core.judge0 import judge0_get, judge0_submit
 from ..core.security import hash_token
 from ..models import (
+    Assignment,
+    AssignmentItem,
     ErrorCategory,
     Submission,
     SubmissionCaseResult,
@@ -27,12 +35,16 @@ from ..services.execution import build_case_execution
 from ..services.progress import (
     finalize_progress,
     get_or_create_progress,
+    recompute_assignment_grade,
     require_assigned_item,
 )
 from .problems import _visible_problem
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 internal_router = APIRouter(prefix="/internal/judge0", tags=["internal"])
+course_router = APIRouter(
+    prefix="/courses/{course_id}/submissions", tags=["staff-submissions"]
+)
 
 
 class SubmissionCreate(BaseModel):
@@ -265,6 +277,8 @@ def _submission_response(submission: Submission) -> dict:
         "status": submission.status,
         "done": submission.status in TERMINAL_SUBMISSION_STATUSES,
         "score": submission.score,
+        "is_late": submission.is_late,
+        "late_approved": submission.late_approved_at is not None,
         "passed_count": passed_count,
         "test_count": len(submission.case_results),
         "public_results": public_results,
@@ -313,11 +327,21 @@ def _reserve_submission(
         assignment_item_id=body.assignment_item_id,
         source_code=body.source_code,
         status=SubmissionStatus.QUEUED,
+        is_late=_is_late_submission(db, item),
     )
     db.add(submission)
     db.commit()
     db.refresh(submission)
     return submission
+
+
+def _is_late_submission(db: Session, item: AssignmentItem | None) -> bool:
+    if item is None:
+        return False
+    due_at = db.scalar(
+        select(Assignment.due_at).where(Assignment.id == item.assignment_id)
+    )
+    return due_at is not None and datetime.now(UTC).replace(tzinfo=None) > due_at
 
 
 def _load_submission(db: Session, submission_id: int) -> Submission | None:
@@ -507,3 +531,172 @@ def receive_judge0_callback(
     _finalize_submission(db, submission)
     db.commit()
     return {"ok": True}
+
+
+def _course_item_ids(db: Session, course_id: int) -> list[int]:
+    return list(
+        db.scalars(
+            select(AssignmentItem.id)
+            .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
+            .where(Assignment.course_id == course_id)
+        ).all()
+    )
+
+
+def _staff_submission_response(submission: Submission) -> dict:
+    response = _submission_response(submission)
+    cases = []
+    for result in submission.case_results:
+        case = {
+            "test_case_id": result.test_case_id,
+            "case_order": result.test_case.case_order,
+            "visibility": result.test_case.visibility,
+            "status_id": result.judge0_status_id,
+            "friendly_message": (
+                get_status_message(result.judge0_status_id)
+                if result.judge0_status_id is not None
+                else get_status_message(Judge0Status.IN_QUEUE)
+            ),
+            "execution_time_ms": result.execution_time_ms,
+            "memory_kb": result.memory_kb,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "compile_output": result.compile_output,
+        }
+        if result.test_case.visibility == TestVisibility.PUBLIC:
+            case["input"] = result.test_case.input
+            case["expected_output"] = result.test_case.expected_output
+        cases.append(case)
+    response.update(
+        {
+            "student_id": submission.student_id,
+            "problem_id": submission.problem_id,
+            "assignment_item_id": submission.assignment_item_id,
+            "source_code": submission.source_code,
+            "primary_error": submission.primary_error,
+            "python_exception_type": submission.python_exception_type,
+            "submitted_at": submission.submitted_at,
+            "completed_at": submission.completed_at,
+            "cases": cases,
+        }
+    )
+    return response
+
+
+def _staff_submission_query(db: Session, course_id: int):
+    item_ids = _course_item_ids(db, course_id)
+    return (
+        select(Submission)
+        .options(
+            selectinload(Submission.case_results).selectinload(
+                SubmissionCaseResult.test_case
+            )
+        )
+        .where(Submission.assignment_item_id.in_(item_ids) if item_ids else False)
+        .order_by(Submission.id.desc())
+    )
+
+
+@course_router.get("")
+def list_course_submissions(
+    course_id: int,
+    db: DbSession,
+    _staff: StaffMembership,
+    student_id: int | None = None,
+    problem_id: int | None = None,
+    assignment_id: int | None = None,
+    status: SubmissionStatus | None = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    if student_id is not None:
+        get_membership(db, course_id, student_id)
+    query = _staff_submission_query(db, course_id)
+    if student_id is not None:
+        query = query.where(Submission.student_id == student_id)
+    if problem_id is not None:
+        query = query.where(Submission.problem_id == problem_id)
+    if assignment_id is not None:
+        query = query.where(
+            Submission.assignment_item_id.in_(
+                select(AssignmentItem.id).where(
+                    AssignmentItem.assignment_id == assignment_id
+                )
+            )
+        )
+    if status is not None:
+        query = query.where(Submission.status == status)
+    submissions = list(db.scalars(query).unique().all())
+    return {
+        "items": [
+            _staff_submission_response(item)
+            for item in submissions[offset : offset + limit]
+        ],
+        "total": len(submissions),
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@course_router.get("/{submission_id}")
+def get_course_submission(
+    course_id: int,
+    submission_id: int,
+    db: DbSession,
+    _staff: StaffMembership,
+):
+    # DB-only read: unlike the student view, staff inspection never polls
+    # Judge0 and never finalizes, so it performs no writes.
+    submission = db.scalar(
+        select(Submission)
+        .options(
+            selectinload(Submission.case_results).selectinload(
+                SubmissionCaseResult.test_case
+            )
+        )
+        .where(Submission.id == submission_id)
+    )
+    if (
+        submission is None
+        or submission.assignment_item_id is None
+        or submission.assignment_item_id not in _course_item_ids(db, course_id)
+    ):
+        raise ApiError(404, "submission_not_found", "Submission not found.")
+    return _staff_submission_response(submission)
+
+
+@course_router.post("/{submission_id}/approve-late")
+def approve_late_submission(
+    course_id: int,
+    submission_id: int,
+    db: DbSession,
+    membership: InstructorMembership,
+):
+    submission = db.scalar(select(Submission).where(Submission.id == submission_id))
+    if (
+        submission is None
+        or submission.assignment_item_id is None
+        or submission.assignment_item_id not in _course_item_ids(db, course_id)
+    ):
+        raise ApiError(404, "submission_not_found", "Submission not found.")
+    if not submission.is_late:
+        raise ApiError(409, "not_late", "Only late submissions need late approval.")
+    if submission.late_approved_at is None:
+        submission.late_approved_at = datetime.now(UTC).replace(tzinfo=None)
+        submission.late_approved_by_membership_id = membership.id
+        db.commit()
+        recompute_assignment_grade(
+            db, submission.student_id, submission.assignment_item_id
+        )
+        db.commit()
+    return _staff_submission_response(
+        db.scalar(
+            select(Submission)
+            .options(
+                selectinload(Submission.case_results).selectinload(
+                    SubmissionCaseResult.test_case
+                )
+            )
+            .where(Submission.id == submission_id)
+        )
+    )

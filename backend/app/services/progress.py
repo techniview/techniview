@@ -130,6 +130,10 @@ def get_or_create_progress(
     return progress
 
 
+def is_eligible(submission: Submission) -> bool:
+    return not submission.is_late or submission.late_approved_at is not None
+
+
 ERROR_COUNTER_FIELDS = {
     ErrorCategory.WRONG_ANSWER: "wrong_answer_count",
     ErrorCategory.COMPILE_ERROR: "compile_error_count",
@@ -156,13 +160,43 @@ def finalize_progress(db: Session, submission: Submission) -> None:
     progress.valid_attempt_count += 1
     progress.retry_count = max(0, progress.valid_attempt_count - 1)
     progress.last_attempt_at = now
-    score = submission.score or Decimal("0")
-    progress.best_score = max(progress.best_score, score)
-    if (
-        submission.status == SubmissionStatus.PASSED
-        and progress.first_passed_at is None
-    ):
-        progress.first_passed_at = now
+    if is_eligible(submission):
+        score = submission.score or Decimal("0")
+        progress.best_score = max(progress.best_score, score)
+        if (
+            submission.status == SubmissionStatus.PASSED
+            and progress.first_passed_at is None
+        ):
+            progress.first_passed_at = now
     if submission.primary_error is not None:
         field = ERROR_COUNTER_FIELDS[submission.primary_error]
         setattr(progress, field, getattr(progress, field) + 1)
+
+
+def recompute_assignment_grade(
+    db: Session, student_id: int, assignment_item_id: int
+) -> None:
+    progress = _locked_assignment_progress(db, student_id, assignment_item_id)
+    if progress is None:
+        return
+    eligible = list(
+        db.scalars(
+            select(Submission)
+            .where(
+                Submission.student_id == student_id,
+                Submission.assignment_item_id == assignment_item_id,
+                Submission.status != SubmissionStatus.INFRASTRUCTURE_ERROR,
+                Submission.completed_at.is_not(None),
+                (Submission.is_late.is_(False))
+                | (Submission.late_approved_at.is_not(None)),
+            )
+            .order_by(Submission.completed_at, Submission.id)
+        ).all()
+    )
+    progress.best_score = max(
+        ((row.score or Decimal("0")) for row in eligible), default=Decimal("0")
+    )
+    progress.first_passed_at = next(
+        (row.completed_at for row in eligible if row.status == SubmissionStatus.PASSED),
+        None,
+    )

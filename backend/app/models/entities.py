@@ -45,6 +45,7 @@ class UserRole(StrEnum):
 class MembershipRole(StrEnum):
     STUDENT = "student"
     INSTRUCTOR = "instructor"
+    TA = "ta"
 
 
 class Difficulty(StrEnum):
@@ -133,6 +134,9 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String(150))
     description: Mapped[str | None] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    join_code_hash: Mapped[bytes | None] = mapped_column(
+        BINARY(32), unique=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now()
     )
@@ -360,6 +364,11 @@ class Submission(Base):
     score: Mapped[Decimal | None] = mapped_column(Numeric(9, 8))
     primary_error: Mapped[ErrorCategory | None] = mapped_column(db_enum(ErrorCategory))
     python_exception_type: Mapped[str | None] = mapped_column(String(255))
+    is_late: Mapped[bool] = mapped_column(default=False)
+    late_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    # Plain id, deliberately no FK: the approver's own membership may later be
+    # hard-erased, which RESTRICT constraints would block.
+    late_approved_by_membership_id: Mapped[int | None] = mapped_column(ID_TYPE)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now()
     )
