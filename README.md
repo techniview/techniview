@@ -1,4 +1,4 @@
-# TechniView 
+# TechniView
 
 <img src="https://github.com/techniview/.github/blob/main/TechniView%20Logo.png" width="150" height="150" style="border-radius: 50%;" alt="TechniView Logo">
 
@@ -58,12 +58,12 @@ after cloning. It creates the locked Python environment, installs frontend
 dependencies, and turns the hooks on. Hooks run checks only. They do not install
 tools or rewrite files.
 
-`make check` runs the fast local checks. `make verify` also builds the frontend and
-runs the disposable MySQL/Judge0 integration suite. Here's what the checks cover:
+`make check` runs the local checks. `make verify` also builds the frontend and
+runs the temporary MySQL/Judge0 integration suite. The checks are:
 
 - ruff check backend - lint imports and style
 - ruff format --check backend - verify 88-column, double-quote formatting
-- pytest - runs cd backend && python -m pytest -q, must pass
+- pytest - runs the backend test suite
 - tsc --noEmit - strict typecheck for the frontend, no `any`, no unused vars
 - eslint - strict TypeScript plus react-hooks rules for the frontend
 - prettier --check - formatting for the frontend
@@ -95,11 +95,11 @@ starting the API. The local demo accounts are:
 - `teacher@techniview.local` / `teacher-demo`
 - `student@techniview.local` / `student-demo`
 
-For a backend started outside Compose, run these commands from `backend/` first:
+For a backend started outside Compose, run these commands from the repository root:
 
 ```
-alembic upgrade head
-python -m app.seed
+uv run alembic upgrade head
+uv run python -m app.seed
 ```
 
 The API uses an HTTP-only session cookie. Its OpenAPI contract is available at

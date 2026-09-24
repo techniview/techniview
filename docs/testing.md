@@ -26,20 +26,20 @@ uv run ruff format --check backend
 
 ## Local checks
 
-`make check` runs the checks that should be fast enough for every commit:
+`make check` runs the checks used for every commit:
 
 - Ruff lint and formatting checks
 - Backend pytest
 - Frontend TypeScript, ESLint, Prettier, and Vitest
 
 `make build` runs the frontend production build. `make verify` runs `make check`,
-the production build, and the disposable MySQL/Judge0 integration stack.
+the production build, and the temporary MySQL/Judge0 integration stack.
 
 Run one area while debugging:
 
 ```sh
-cd backend && python -m pytest -q
-cd backend && python -m pytest -q tests/test_submissions.py
+uv run python -m pytest -q
+uv run python -m pytest -q backend/tests/test_submissions.py
 cd frontend && npm test
 cd frontend && npm run build
 ```
