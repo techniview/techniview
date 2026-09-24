@@ -40,7 +40,7 @@ services:
       MYSQL_PASSWORD: p@ss%word
     tmpfs: [/var/lib/mysql]
     healthcheck:
-      test: [CMD, mysqladmin, ping, -h, localhost]
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1]
       interval: 2s
       timeout: 2s
       retries: 60
@@ -70,7 +70,9 @@ services:
     command: /api/scripts/workers
   backend:
     <<: *app
-    command: sh -c 'alembic upgrade head && python -m app.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --no-access-log'
+    # mysqladmin ping over the socket can report healthy before TCP accepts
+    # connections, so wait for a real TCP login before running migrations.
+    command: sh -c 'i=0; while [ $$i -lt 60 ]; do python -c "import os,pymysql;from urllib.parse import urlparse,unquote;u=urlparse(os.environ[\"DATABASE_URL\"]);pymysql.connect(host=u.hostname,port=(u.port or 3306),user=unquote(u.username or \"\"),password=unquote(u.password or \"\"),database=u.path.lstrip(\"/\"),connect_timeout=2).close()" 2>/dev/null && break; i=$$((i+1)); echo "waiting for mysql ($$i)"; sleep 2; done; alembic upgrade head && python -m app.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --no-access-log'
     depends_on:
       mysql:
         condition: service_healthy
