@@ -81,6 +81,12 @@ class AssignmentState(StrEnum):
     ARCHIVED = "archived"
 
 
+class QuestionSetState(StrEnum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
 class SubmissionStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -206,6 +212,7 @@ class Problem(Base):
     execution_mode: Mapped[ExecutionMode] = mapped_column(db_enum(ExecutionMode))
     function_name: Mapped[str] = mapped_column(String(255))
     starter_code: Mapped[str] = mapped_column(Text)
+    canonical_solution: Mapped[str | None] = mapped_column(Text)
     cpu_time_limit_seconds: Mapped[Decimal] = mapped_column(
         Numeric(6, 3), default=Decimal("2.000")
     )
@@ -222,7 +229,10 @@ class Problem(Base):
         secondary=problem_tag_assignments, lazy="selectin"
     )
     test_cases: Mapped[list[ProblemTestCase]] = relationship(
-        back_populates="problem", lazy="selectin", order_by="ProblemTestCase.case_order"
+        back_populates="problem",
+        lazy="selectin",
+        order_by="ProblemTestCase.case_order",
+        cascade="all, delete-orphan",
     )
 
 
@@ -278,6 +288,9 @@ class Assignment(Base):
     )
 
     id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    source_question_set_id: Mapped[int | None] = mapped_column(
+        ForeignKey("question_sets.id", ondelete="SET NULL")
+    )
     course_id: Mapped[int] = mapped_column(
         ForeignKey("courses.id", ondelete="RESTRICT"), index=True
     )
@@ -318,6 +331,48 @@ class AssignmentItem(Base):
     submission_limit: Mapped[int | None] = mapped_column(Integer)
 
     assignment: Mapped[Assignment] = relationship(back_populates="items")
+    problem: Mapped[Problem] = relationship(lazy="joined")
+
+
+class QuestionSet(Base):
+    __tablename__ = "question_sets"
+
+    id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[QuestionSetState] = mapped_column(
+        db_enum(QuestionSetState), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), server_default=func.now()
+    )
+    items: Mapped[list[QuestionSetItem]] = relationship(
+        back_populates="question_set",
+        lazy="selectin",
+        order_by="QuestionSetItem.item_order",
+        cascade="all, delete-orphan",
+    )
+
+
+class QuestionSetItem(Base):
+    __tablename__ = "question_set_items"
+    __table_args__ = (
+        UniqueConstraint("question_set_id", "item_order"),
+        UniqueConstraint("question_set_id", "problem_id"),
+    )
+
+    id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    question_set_id: Mapped[int] = mapped_column(
+        ForeignKey("question_sets.id", ondelete="CASCADE"), index=True
+    )
+    problem_id: Mapped[int] = mapped_column(
+        ForeignKey("problems.id", ondelete="RESTRICT")
+    )
+    item_order: Mapped[int] = mapped_column(Integer)
+    question_set: Mapped[QuestionSet] = relationship(back_populates="items")
     problem: Mapped[Problem] = relationship(lazy="joined")
 
 

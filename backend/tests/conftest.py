@@ -42,22 +42,30 @@ async def client(db_session):
 
 @pytest.fixture
 async def student_client(client):
-    response = await client.post(
-        "/api/auth/login",
-        json={"email": "student@techniview.local", "password": "student-demo"},
-    )
-    assert response.status_code == 200
-    return client
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as logged_in:
+        response = await logged_in.post(
+            "/api/auth/login",
+            json={"email": "student@techniview.local", "password": "student-demo"},
+        )
+        assert response.status_code == 200
+        yield logged_in
 
 
 @pytest.fixture
 async def teacher_client(client):
-    response = await client.post(
-        "/api/auth/login",
-        json={"email": "teacher@techniview.local", "password": "teacher-demo"},
-    )
-    assert response.status_code == 200
-    return client
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as logged_in:
+        response = await logged_in.post(
+            "/api/auth/login",
+            json={"email": "teacher@techniview.local", "password": "teacher-demo"},
+        )
+        assert response.status_code == 200
+        yield logged_in
 
 
 @pytest.fixture(scope="session")
