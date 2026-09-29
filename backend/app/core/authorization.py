@@ -32,3 +32,14 @@ def require_instructor(
     if membership.role != MembershipRole.INSTRUCTOR:
         raise ApiError(403, "instructor_required", "Instructor access is required.")
     return membership
+
+
+def require_staff(
+    course_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> CourseMembership:
+    membership = get_membership(db, course_id, user.id)
+    if membership.role not in (MembershipRole.INSTRUCTOR, MembershipRole.TA):
+        raise ApiError(403, "staff_required", "Instructor or TA access is required.")
+    return membership

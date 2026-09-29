@@ -7,6 +7,7 @@ from app.routers import (
     courses,
     curriculum,
     health,
+    join,
     problems,
     submissions,
 )
@@ -33,12 +34,14 @@ app.add_middleware(
 # All API routes under /api
 app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(join.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
 app.include_router(problems.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")
 app.include_router(assignments.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
+app.include_router(submissions.course_router, prefix="/api")
 app.include_router(submissions.internal_router, prefix="/api")
 install_error_handlers(app)
 
