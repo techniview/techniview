@@ -112,3 +112,9 @@ make integration # MySQL, Judge0, Docker, or callback failure
 For integration failures, preserve the service logs from the failed run before
 rerunning. The Compose command cleans up automatically, so a second run starts
 with a new database and new Judge0 queue.
+
+## Problem authoring and question sets
+
+The authoring API is available to professor accounts. Create/edit custom draft problems with nested `tags` and ordered `test_cases`; use the validate endpoint to run the canonical solution against every case before publishing. Copy a visible problem to start a separate custom draft. Hidden cases and canonical source are intentionally excluded from ordinary problem detail responses.
+
+Question sets are private to their owner. Replace their ordered contents with `PUT /api/question-sets/{id}/items`, then publish them. Creating an assignment from a published question set snapshots its ordered problem IDs into assignment items, so later edits to the source set do not affect the assignment.

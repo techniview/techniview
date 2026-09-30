@@ -4,6 +4,7 @@ from app.routers import (
     analytics,
     assignments,
     auth,
+    authoring,
     courses,
     curriculum,
     health,
@@ -37,6 +38,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(join.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
 app.include_router(problems.router, prefix="/api")
+app.include_router(authoring.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")
 app.include_router(assignments.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")

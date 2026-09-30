@@ -120,3 +120,9 @@ Add a new endpoint by creating a file in backend/app/routers and including it in
 # then in main.py:
 # app.include_router(canvas.router, prefix="/api")
 ```
+
+### Professor authored content
+
+Professors can create and copy problem drafts through `/api/problems`. Draft updates replace their ordered `test_cases` and `tags` collections. A draft needs a canonical Python solution that passes all cases before it can be published. Canonical solutions are stored for validation and are not returned by ordinary problem reads; hidden cases are likewise omitted from student-facing problem details. Published and archived problems are immutable; copy a problem to make a new editable draft.
+
+Professors can also create private question sets at `/api/question-sets`, replace their ordered problem list with `PUT /api/question-sets/{id}/items`, and publish or archive the set. A set can include built-in published problems and the owner's custom problems. `POST /api/courses/{course_id}/assignments` creates a draft assignment from an owned published question set; the selected problem order is copied into assignment items. Publish it with `POST /api/courses/{course_id}/assignments/{assignment_id}/publish`.
