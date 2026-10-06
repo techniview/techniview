@@ -5,7 +5,7 @@ the third before opening a backend or infrastructure PR.
 
 ## First-time setup
 
-Install uv, Node.js 20, Docker, and Git. uv manages Python 3.14 and the backend
+Install uv, Node.js 22, Docker, and Git. uv manages Python 3.14 and the backend
 virtual environment for you. Then run:
 
 ```sh
