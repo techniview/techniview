@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import App from "./App";
 
 describe("App", () => {
-    it("renders techniview", () => {
+    it("renders techniview", async () => {
         render(<App />);
-        expect(screen.getByText("techniview")).not.toBeNull();
+        expect(
+            await screen.findByRole("heading", { name: /techniview/i }),
+        ).not.toBeNull();
     });
 });
