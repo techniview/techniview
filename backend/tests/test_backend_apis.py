@@ -50,6 +50,14 @@ async def test_problem_catalog_redacts_hidden_tests_and_start_is_idempotent(
     assert detail.status_code == 200
     assert detail.json()["test_count"] == 2
     assert len(detail.json()["public_tests"]) == 1
+    assert detail.json()["typed_tags"] == [
+        {"name": "Arrays", "slug": "arrays", "kind": "general"},
+        {
+            "name": "Arrays & Hashing",
+            "slug": "arrays-and-hashing",
+            "kind": "technique",
+        },
+    ]
     assert "[[-2, 2]]" not in detail.text
 
     assert (
@@ -62,12 +70,57 @@ async def test_problem_catalog_redacts_hidden_tests_and_start_is_idempotent(
     assert count == 1
 
 
-async def test_curriculum_unlocks_only_after_prerequisites(student_client):
+async def test_curriculum_groups_by_technique_and_recommends_within_pools(
+    student_client,
+):
     curriculum = await student_client.get("/api/curriculum")
     assert curriculum.status_code == 200
-    assert [node["status"] for node in curriculum.json()] == ["completed", "available"]
+    pools = curriculum.json()
+    assert {pool["kind"] for pool in pools} == {"technique"}
+    assert all(
+        prerequisite in {pool["slug"] for pool in pools}
+        for pool in pools
+        for prerequisite in pool["prerequisite_pool_slugs"]
+    )
+    arrays = next(pool for pool in pools if pool["slug"] == "arrays-and-hashing")
+    assert arrays["tier"] == 1
+    assert arrays["tier_name"] == "Foundations"
+    assert arrays["optional"] is False
+    assert [item["status"] for item in arrays["problems"]] == [
+        "completed",
+        "not_started",
+    ]
+    assert [item["recommended"] for item in arrays["problems"]] == [False, True]
+    assert not any(pool["slug"] == "other-techniques" for pool in pools)
+    tries = next(pool for pool in pools if pool["slug"] == "tries")
+    trees = next(pool for pool in pools if pool["slug"] == "trees")
+    assert tries["tier"] == trees["tier"] == 5
+    assert tries["prerequisite_pool_slugs"] == ["trees"]
+    extensions = [pool for pool in pools if pool["optional"]]
+    assert {pool["slug"] for pool in extensions} == {
+        "bit-manipulation",
+        "math-and-geometry",
+    }
+    recommended = next(
+        item["problem"] for item in arrays["problems"] if item["recommended"]
+    )
+    detail = await student_client.get(f"/api/problems/{recommended['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["prompt"]
+    assert detail.json()["public_tests"]
+    assert "canonical_solution" not in detail.json()
     available = await student_client.get("/api/curriculum/available")
     assert [problem["title"] for problem in available.json()] == ["Count Evens"]
+
+    problem_types = await student_client.get("/api/curriculum?kind=problem_type")
+    assert problem_types.status_code == 200
+    assert all(pool["kind"] == "problem_type" for pool in problem_types.json())
+
+    all_problems = await student_client.get("/api/problems")
+    assert {item["title"] for item in all_problems.json()["items"]} >= {
+        "Sum a List",
+        "Count Evens",
+    }
 
 
 async def test_student_course_and_assignment_permissions(student_client):

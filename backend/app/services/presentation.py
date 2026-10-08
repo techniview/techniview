@@ -9,6 +9,11 @@ def problem_summary(problem: Problem) -> dict:
         "origin": problem.origin,
         "state": problem.state,
         "tags": sorted(tag.slug for tag in problem.tags),
+        "typed_tags": [
+            {"name": tag.name, "slug": tag.slug, "kind": tag.kind}
+            for tag in sorted(problem.tags, key=lambda item: (item.kind, item.slug))
+        ],
+        "source_category": problem.source_category,
     }
 
 

@@ -13,7 +13,6 @@ from .models import (
     AssignmentState,
     Course,
     CourseMembership,
-    CurriculumEdge,
     CurriculumNode,
     Difficulty,
     ExecutionMode,
@@ -22,6 +21,7 @@ from .models import (
     ProblemOrigin,
     ProblemState,
     ProblemTag,
+    ProblemTagKind,
     ProblemTestCase,
     StudentAssignmentProgress,
     StudentPracticeProgress,
@@ -54,6 +54,23 @@ def seed_demo(db: Session) -> None:
                 db.commit()
         return
 
+    catalog_is_loaded = (
+        db.scalar(
+            select(Problem.id)
+            .where(
+                Problem.owner_id.is_(None),
+                Problem.state == ProblemState.PUBLISHED,
+                Problem.source_dataset.is_not(None),
+                Problem.source_dataset != "demo",
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    demo_problem_state = (
+        ProblemState.ARCHIVED if catalog_is_loaded else ProblemState.PUBLISHED
+    )
+
     teacher = User(
         name="Demo Professor",
         email=DEMO_TEACHER_EMAIL,
@@ -71,9 +88,18 @@ def seed_demo(db: Session) -> None:
 
     loops = ProblemTag(name="Loops", slug="loops")
     arrays = ProblemTag(name="Arrays", slug="arrays")
+    arrays_technique = db.scalar(
+        select(ProblemTag).where(ProblemTag.slug == "arrays-and-hashing")
+    )
+    if arrays_technique is None:
+        arrays_technique = ProblemTag(
+            name="Arrays & Hashing",
+            slug="arrays-and-hashing",
+            kind=ProblemTagKind.TECHNIQUE,
+        )
     first = Problem(
         origin=ProblemOrigin.IMPORTED,
-        state=ProblemState.PUBLISHED,
+        state=demo_problem_state,
         title="Sum a List",
         prompt="Return the sum of the supplied integers.",
         difficulty=Difficulty.EASY,
@@ -84,11 +110,11 @@ def seed_demo(db: Session) -> None:
         source_problem_id="sum-list",
         attribution="TechniView demonstration data",
         license="CC BY 4.0",
-        tags=[arrays],
+        tags=[arrays, arrays_technique],
     )
     second = Problem(
         origin=ProblemOrigin.IMPORTED,
-        state=ProblemState.PUBLISHED,
+        state=demo_problem_state,
         title="Count Evens",
         prompt="Count the even integers in a list.",
         difficulty=Difficulty.MEDIUM,
@@ -99,7 +125,7 @@ def seed_demo(db: Session) -> None:
         source_problem_id="count-evens",
         attribution="TechniView demonstration data",
         license="CC BY 4.0",
-        tags=[arrays, loops],
+        tags=[arrays, arrays_technique, loops],
     )
     db.add_all([first, second])
     db.flush()
@@ -128,20 +154,13 @@ def seed_demo(db: Session) -> None:
             ),
         ]
     )
-    db.add_all(
-        [
-            CurriculumNode(problem_id=first.id, priority=1),
-            CurriculumNode(problem_id=second.id, priority=2),
-        ]
-    )
-    db.flush()
-    db.add(
-        CurriculumEdge(
-            prerequisite_problem_id=first.id,
-            problem_id=second.id,
+    if demo_problem_state == ProblemState.PUBLISHED:
+        db.add_all(
+            [
+                CurriculumNode(problem_id=first.id, priority=1),
+                CurriculumNode(problem_id=second.id, priority=2),
+            ]
         )
-    )
-
     course = Course(
         name="CS 101 Demo",
         description="Seeded development course",

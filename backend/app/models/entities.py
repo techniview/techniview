@@ -22,6 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -63,6 +64,12 @@ class ProblemState(StrEnum):
     DRAFT = "draft"
     PUBLISHED = "published"
     ARCHIVED = "archived"
+
+
+class ProblemTagKind(StrEnum):
+    GENERAL = "general"
+    TECHNIQUE = "technique"
+    PROBLEM_TYPE = "problem_type"
 
 
 class ExecutionMode(StrEnum):
@@ -187,10 +194,19 @@ problem_tag_assignments = Table(
 
 class ProblemTag(Base):
     __tablename__ = "problem_tags"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('general', 'technique', 'problem_type')",
+            name="ck_problem_tags_kind",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(80), unique=True)
     slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    kind: Mapped[ProblemTagKind] = mapped_column(
+        db_enum(ProblemTagKind), default=ProblemTagKind.GENERAL
+    )
 
 
 class Problem(Base):
@@ -219,6 +235,8 @@ class Problem(Base):
     memory_limit_kb: Mapped[int] = mapped_column(Integer, default=128000)
     source_dataset: Mapped[str | None] = mapped_column(String(255))
     source_problem_id: Mapped[str | None] = mapped_column(String(255))
+    source_version: Mapped[str | None] = mapped_column(String(64))
+    source_category: Mapped[str | None] = mapped_column(String(40))
     attribution: Mapped[str | None] = mapped_column(Text)
     license: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
@@ -248,8 +266,10 @@ class ProblemTestCase(Base):
     )
     case_order: Mapped[int] = mapped_column(Integer)
     visibility: Mapped[TestVisibility] = mapped_column(db_enum(TestVisibility))
-    input: Mapped[str] = mapped_column(Text)
-    expected_output: Mapped[str] = mapped_column(Text)
+    input: Mapped[str] = mapped_column(Text().with_variant(mysql.MEDIUMTEXT(), "mysql"))
+    expected_output: Mapped[str] = mapped_column(
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+    )
 
     problem: Mapped[Problem] = relationship(back_populates="test_cases")
 
@@ -263,17 +283,6 @@ class CurriculumNode(Base):
     priority: Mapped[int] = mapped_column(Integer, unique=True)
 
     problem: Mapped[Problem] = relationship(lazy="joined")
-
-
-class CurriculumEdge(Base):
-    __tablename__ = "curriculum_edges"
-
-    prerequisite_problem_id: Mapped[int] = mapped_column(
-        ForeignKey("curriculum_nodes.problem_id", ondelete="CASCADE"), primary_key=True
-    )
-    problem_id: Mapped[int] = mapped_column(
-        ForeignKey("curriculum_nodes.problem_id", ondelete="CASCADE"), primary_key=True
-    )
 
 
 class Assignment(Base):
