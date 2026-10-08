@@ -55,9 +55,13 @@ working tree. If it says uv or a Python tool is missing, run `make install`.
 
 ## Integration tests
 
-`make integration` starts a temporary Compose project with MySQL 8, Judge0,
-Judge0 workers, Redis, Postgres, and the API. It runs migrations against a fresh
-database and then removes the containers, network, and volumes when it exits.
+`make integration` builds the local Python-only Judge0 image from
+`internal-judge0-fork/` and starts a temporary Compose project with MySQL
+8, Judge0, Judge0 workers, Redis, Postgres, and the API. It runs migrations
+against a fresh database and then removes the containers, network, and volumes
+when it exits. See
+[`internal-judge0-fork/README.md`](../internal-judge0-fork/README.md)
+for image build and update details.
 
 The integration suite checks the parts SQLite and mocks cannot prove:
 
@@ -65,6 +69,7 @@ The integration suite checks the parts SQLite and mocks cannot prove:
 - MySQL REPEATABLE READ callback races
 - Duplicate callback delivery and progress counting
 - Real accepted, wrong-answer, and runtime-error Judge0 submissions
+- Python submissions without a caller-supplied Judge0 language ID
 - Completion through callbacks without API polling
 - Polling recovery when no callback arrives
 - UTF-8 source-size validation through the HTTP API

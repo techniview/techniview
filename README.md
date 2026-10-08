@@ -22,6 +22,7 @@ curl http://localhost:8000/api/health | jq
 ## What is in here
 
 - docker-compose.yml - brings up Judge0, Postgres, Redis, MySQL and the backend
+- internal-judge0-fork - Python-only Judge0 fork and maintenance notes
 - backend - FastAPI on Python 3.14
   - main.py
   - requirements.txt
@@ -49,6 +50,13 @@ Compose works without `.env` too, it falls back to dev defaults.
 Judge0 sends completed execution reports to the backend callback URL. Compose
 uses `http://backend:8000/api/internal/judge0/callbacks` by default. Set
 `JUDGE0_CALLBACK_BASE_URL` when Judge0 needs a different route to reach the API.
+TechniView maintains an internal image derived from Judge0 in
+`internal-judge0-fork/`, with Python 3.14 as its only active language.
+This is a TechniView-owned fork, not an official Judge0 image, and it is not
+published to a registry. Build and start it with `docker compose up -d --build`.
+TechniView submissions do not include a language selector or Judge0 language
+ID. The fork maps each request to its only active Python runtime internally;
+Judge0 still uses a language database key for its own records.
 
 ## Dev setup
 

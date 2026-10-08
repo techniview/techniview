@@ -2,8 +2,9 @@ name: techniview
 
 services:
   server:
-    container_name: techniview-judge0-server
-    image: mrkushalsm/judge0:latest
+    container_name: internal-judge0-fork-server
+    build: ./internal-judge0-fork
+    image: internal-judge0-fork:local
     ports:
       - "${JUDGE0_PORT:-2358}:2358"
     command: /api/scripts/server
@@ -35,8 +36,9 @@ services:
       - redis
 
   workers:
-    container_name: techniview-judge0-workers
-    image: mrkushalsm/judge0:latest
+    container_name: internal-judge0-fork-workers
+    build: ./internal-judge0-fork
+    image: internal-judge0-fork:local
     command: /api/scripts/workers
     cgroup: host
     environment:

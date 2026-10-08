@@ -80,7 +80,7 @@ def check_judge0(deep: bool = False):
                 "submit_ok": None,
                 "latency_ms": round((time.time() - t0) * 1000, 1),
             }
-        sub = judge0_submit("print(42)", 71, wait=True)
+        sub = judge0_submit("print(42)", wait=True)
         ok = sub.get("status", {}).get("id") == 3 and sub.get("stdout") == "42\n"
         return {
             "ok": ok,

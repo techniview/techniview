@@ -1,0 +1,11 @@
+--- a/app/controllers/submissions_controller.rb
++++ b/app/controllers/submissions_controller.rb
+@@ -161,3 +161,2 @@
+       :source_code,
+-      :language_id,
+       :compiler_options,
+@@ -183 +182,4 @@
+     submission_params[:additional_files] = Base64Service.decode(submission_params[:additional_files])
++    # This fork runs Python only. Judge0's model still requires its internal language key.
++    submission_params[:language_id] = Language.where(is_archived: false).first!.id
++

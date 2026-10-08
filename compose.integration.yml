@@ -1,7 +1,8 @@
 name: techniview-integration
 
 x-judge: &judge
-  image: mrkushalsm/judge0:latest
+  build: ./internal-judge0-fork
+  image: internal-judge0-fork:integration
   privileged: true
   cgroup: host
   security_opt: [seccomp=unconfined]

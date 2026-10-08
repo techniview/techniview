@@ -193,7 +193,6 @@ CREATE TABLE submissions (
     problem_id BIGINT UNSIGNED NOT NULL,
     assignment_item_id BIGINT UNSIGNED,
     source_code MEDIUMTEXT NOT NULL,
-    language_id SMALLINT UNSIGNED NOT NULL DEFAULT 71,
     status ENUM(
         'queued', 'running', 'passed', 'failed', 'compile_error',
         'runtime_error', 'timeout', 'resource_limit', 'infrastructure_error'
@@ -212,7 +211,6 @@ CREATE TABLE submissions (
     FOREIGN KEY (assignment_item_id, problem_id)
         REFERENCES assignment_items(id, problem_id) ON DELETE RESTRICT,
     FOREIGN KEY (late_accepted_by) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT chk_submissions_python CHECK (language_id = 71),
     CONSTRAINT chk_submissions_score CHECK (score IS NULL OR score BETWEEN 0 AND 1),
     CONSTRAINT chk_submissions_completion CHECK (
         (status IN ('queued', 'running') AND completed_at IS NULL AND score IS NULL)
