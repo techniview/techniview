@@ -51,7 +51,7 @@ async def test_create_rejects_client_owned_grading_fields(student_client):
     assert response.status_code == 422
 
 
-async def test_create_rejects_non_python_language(student_client):
+async def test_create_rejects_language_override(student_client):
     problem_id = await _first_problem_id(student_client)
     with patch("app.routers.submissions.judge0_submit") as mock_submit:
         response = await student_client.post(
@@ -103,7 +103,11 @@ async def test_submission_runs_every_server_owned_test_without_exposing_hidden_c
     assert "[[-2, 2]]" not in response.text
     assert "hidden-token" not in response.text
     assert mock_submit.call_count == 2
-    assert [call.args[3] for call in mock_submit.call_args_list] == ["6", "0"]
+    assert [call.kwargs["expected_output"] for call in mock_submit.call_args_list] == [
+        "6",
+        "0",
+    ]
+    assert all("language_id" not in call.kwargs for call in mock_submit.call_args_list)
     for call in mock_submit.call_args_list:
         assert "__techniview_target" in call.args[0]
 

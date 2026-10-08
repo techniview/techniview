@@ -51,7 +51,6 @@ class SubmissionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_code: str = Field(min_length=1, max_length=65535)
-    language_id: int = Field(default=71, gt=0)
     problem_id: int = Field(gt=0)
     assignment_item_id: int | None = Field(default=None, gt=0)
 
@@ -60,13 +59,6 @@ class SubmissionCreate(BaseModel):
     def _source_byte_limit(cls, value: str) -> str:
         if len(value.encode("utf-8")) > 65535:
             raise ValueError("source code must not exceed 65535 UTF-8 bytes")
-        return value
-
-    @field_validator("language_id")
-    @classmethod
-    def _python_only(cls, value: int) -> int:
-        if value != 71:
-            raise ValueError("only Python (language_id=71) is supported")
         return value
 
 
@@ -418,9 +410,8 @@ def create_submission(
         try:
             data = judge0_submit(
                 execution.source_code,
-                body.language_id,
-                execution.stdin,
-                execution.expected_output,
+                stdin=execution.stdin,
+                expected_output=execution.expected_output,
                 wait=wait,
                 timeout=20.0 if wait else 5.0,
                 callback_url=(
