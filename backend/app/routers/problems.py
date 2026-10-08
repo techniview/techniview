@@ -12,14 +12,11 @@ from ..models import (
     AssignmentRecipient,
     AssignmentState,
     CourseMembership,
-    CurriculumEdge,
-    CurriculumNode,
     Difficulty,
     MembershipRole,
     Problem,
     ProblemState,
     ProblemTag,
-    StudentPracticeProgress,
     User,
     problem_tag_assignments,
 )
@@ -160,52 +157,3 @@ def start_problem(
     _visible_problem(db, problem_id, user)
     get_or_create_progress(db, user.id, problem_id, assignment_item_id)
     db.commit()
-
-
-def curriculum_nodes(db: Session, user: User) -> list[dict]:
-    nodes = list(
-        db.scalars(
-            select(CurriculumNode)
-            .options(selectinload(CurriculumNode.problem).selectinload(Problem.tags))
-            .order_by(CurriculumNode.priority)
-        ).all()
-    )
-    edges = list(db.scalars(select(CurriculumEdge)).all())
-    prerequisites: dict[int, list[int]] = {node.problem_id: [] for node in nodes}
-    for edge in edges:
-        prerequisites.setdefault(edge.problem_id, []).append(
-            edge.prerequisite_problem_id
-        )
-    progress = {
-        row.problem_id: row
-        for row in db.scalars(
-            select(StudentPracticeProgress).where(
-                StudentPracticeProgress.student_id == user.id
-            )
-        )
-    }
-    completed = {
-        problem_id
-        for problem_id, row in progress.items()
-        if row.first_passed_at is not None
-    }
-    result = []
-    for node in nodes:
-        row = progress.get(node.problem_id)
-        if row is not None and row.first_passed_at is not None:
-            status = "completed"
-        elif row is not None and row.valid_attempt_count > 0:
-            status = "attempted"
-        elif all(item in completed for item in prerequisites[node.problem_id]):
-            status = "available"
-        else:
-            status = "locked"
-        result.append(
-            {
-                "problem": problem_summary(node.problem),
-                "priority": node.priority,
-                "prerequisite_problem_ids": sorted(prerequisites[node.problem_id]),
-                "status": status,
-            }
-        )
-    return result

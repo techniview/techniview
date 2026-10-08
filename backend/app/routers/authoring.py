@@ -132,6 +132,10 @@ def _problem_view(p):
         "cpu_time_limit_seconds": p.cpu_time_limit_seconds,
         "memory_limit_kb": p.memory_limit_kb,
         "tags": [t.slug for t in p.tags],
+        "typed_tags": [
+            {"name": t.name, "slug": t.slug, "kind": t.kind} for t in p.tags
+        ],
+        "source_category": p.source_category,
         "test_cases": [
             {
                 "case_order": c.case_order,

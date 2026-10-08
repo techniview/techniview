@@ -10,6 +10,7 @@ from ..models import (
     MembershipRole,
     ProblemOrigin,
     ProblemState,
+    ProblemTagKind,
     UserRole,
 )
 
@@ -93,6 +94,12 @@ class PublicTestCaseResponse(BaseModel):
     expected_output: str
 
 
+class ProblemTagResponse(BaseModel):
+    name: str
+    slug: str
+    kind: ProblemTagKind
+
+
 class ProblemSummaryResponse(BaseModel):
     id: int
     title: str
@@ -100,6 +107,8 @@ class ProblemSummaryResponse(BaseModel):
     origin: ProblemOrigin
     state: ProblemState
     tags: list[str]
+    typed_tags: list[ProblemTagResponse] = Field(default_factory=list)
+    source_category: str | None = None
 
 
 class ProblemDetailResponse(ProblemSummaryResponse):
@@ -120,11 +129,21 @@ class ProblemListResponse(BaseModel):
     offset: int
 
 
-class CurriculumNodeResponse(BaseModel):
+class CurriculumProblemResponse(BaseModel):
     problem: ProblemSummaryResponse
-    priority: int
-    prerequisite_problem_ids: list[int]
     status: str
+    recommended: bool = False
+
+
+class CurriculumPoolResponse(BaseModel):
+    slug: str
+    name: str
+    kind: ProblemTagKind
+    tier: int | None = None
+    tier_name: str | None = None
+    optional: bool = False
+    prerequisite_pool_slugs: list[str] = Field(default_factory=list)
+    problems: list[CurriculumProblemResponse]
 
 
 class AssignmentItemResponse(BaseModel):

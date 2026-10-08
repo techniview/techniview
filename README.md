@@ -126,3 +126,51 @@ Add a new endpoint by creating a file in backend/app/routers and including it in
 Professors can create and copy problem drafts through `/api/problems`. Draft updates replace their ordered `test_cases` and `tags` collections. A draft needs a canonical Python solution that passes all cases before it can be published. Canonical solutions are stored for validation and are not returned by ordinary problem reads; hidden cases are likewise omitted from student-facing problem details. Published and archived problems are immutable; copy a problem to make a new editable draft.
 
 Professors can also create private question sets at `/api/question-sets`, replace their ordered problem list with `PUT /api/question-sets/{id}/items`, and publish or archive the set. A set can include built-in published problems and the owner's custom problems. `POST /api/courses/{course_id}/assignments` creates a draft assignment from an owned published question set; the selected problem order is copied into assignment items. Publish it with `POST /api/courses/{course_id}/assignments/{assignment_id}/publish`.
+
+### Built-in problem catalog
+
+The built-in catalog combines APPS and APPS+ and removes duplicate statements.
+The selected 500 problems include the 150-problem TechniView Trail and 350
+additional practice problems. The raw datasets and curation scripts stay outside
+this repository. The reviewed 500-problem import catalog is tracked at
+`backend/data/problem_catalog.json`; it is loaded into MySQL and is not used as
+the runtime store. Both dataset repositories identify their data as MIT licensed:
+[APPS](https://github.com/hendrycks/apps/blob/main/LICENSE) and
+[APPS+](https://github.com/Ablustrund/APPS_Plus/blob/main/LICENSE).
+
+After applying migrations, import the reviewed catalog JSON with:
+
+```
+cd backend
+uv run python -m scripts.import_problem_catalog data/problem_catalog.json
+```
+
+When this replaces the earlier APPS+ catalog, the importer archives its old
+problems and the seeded demo problems, then removes them from the active
+curriculum. Existing assignments can still refer to those archived rows.
+
+The importer checks catalog size, source version, unique source IDs, typed tags,
+test metadata, and public/hidden test visibility before writing. The October 7
+selection audit rebuilt all 150 Trail entries around interview patterns and
+independently calculated test answers. All 500 catalog reference solutions passed
+8,371 stored cases through the backend execution wrapper on the local Python
+runtime; 5,156 of those cases cover the Trail. This is a local execution check,
+not a Judge0 deployment test. Trail reference syntax was also checked for Python
+3.8 compatibility. Source data, test generators, and audit results live outside
+the repository in `~/.local/share/techniview/trail-audit-20261007/`.
+
+Linked-list inputs use arrays that the execution wrapper converts to `ListNode`
+objects. Binary-tree inputs use breadth-first arrays with `null` for missing
+children. Tree parameters are identified from the stored starter's `TreeNode`
+annotations, so removing annotations from a submission does not change its input
+contract. Returned trees are serialized in the same format. The platform supplies
+both node classes. Each adapted problem describes its calling convention.
+
+Technique tags group problems into the tiered TechniView Trail. Each pool
+includes its tier, tier name, whether it is an extension, and any prerequisite
+pools. Prerequisites guide recommendations but do not block access. A pool
+recommends its next problem after the student passes one problem in every
+prerequisite pool. Within each pool, problems are ordered easy to hard. Browse
+the Trail at `GET /api/curriculum`; use `?kind=problem_type` for the secondary
+classification view. The response includes problem IDs and summaries; fetch a
+full statement and public examples with `GET /api/problems/{problem_id}`.
