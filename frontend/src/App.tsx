@@ -4,6 +4,10 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import LoadingState from "./components/LoadingState";
 import LoginPage from "./pages/LoginPage";
+import StudentStatisticsPage from "./pages/student/StudentStatisticsPage";
+import TeacherClassPage from "./pages/teacher/TeacherClassPage";
+import TeacherProblemPage from "./pages/teacher/TeacherProblemPage";
+import TeacherOverallStatsPage from "./pages/teacher/TeacherOverallStatsPage";
 import { useAuth } from "./auth/useAuth";
 
 function RoleHomeRedirect() {
@@ -25,18 +29,6 @@ function RoleHomeRedirect() {
     );
 }
 
-function StudentStatisticsPlaceholder() {
-    return <h1>Student Statistics</h1>;
-}
-
-function TeacherClassPlaceholder() {
-    return <h1>Class Overview</h1>;
-}
-
-function TeacherProblemsPlaceholder() {
-    return <h1>Problems</h1>;
-}
-
 function TeacherProblemDetailPlaceholder() {
     return <h1>Problem Details</h1>;
 }
@@ -52,7 +44,7 @@ export default function App() {
                         <Route element={<AppLayout />}>
                             <Route
                                 path="/student/statistics"
-                                element={<StudentStatisticsPlaceholder />}
+                                element={<StudentStatisticsPage />}
                             />
 
                             <Route
@@ -62,11 +54,15 @@ export default function App() {
                             >
                                 <Route
                                     path="/teacher/class"
-                                    element={<TeacherClassPlaceholder />}
+                                    element={<TeacherClassPage />}
+                                />
+                                <Route
+                                    path="/teacher/statistics"
+                                    element={<TeacherOverallStatsPage />}
                                 />
                                 <Route
                                     path="/teacher/problems"
-                                    element={<TeacherProblemsPlaceholder />}
+                                    element={<TeacherProblemPage />}
                                 />
                                 <Route
                                     path="/teacher/problems/:problemId"
