@@ -12,6 +12,7 @@ const studentNavigation: NavigationItem[] = [
 
 const professorNavigation: NavigationItem[] = [
     { label: "Class Overview", to: "/teacher/class" },
+    { label: "Overall Statistics", to: "/teacher/statistics" },
     { label: "Problems", to: "/teacher/problems" },
 ];
 

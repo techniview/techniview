@@ -43,6 +43,17 @@ export type ProblemAnalytics = {
     metrics: AnalyticsMetrics;
 };
 
+export type StudentProblemAnalytics = {
+    student: {
+        id: number;
+        name: string;
+        email: string;
+        role: "student" | "professor";
+    };
+    problem: ProblemSummary;
+    metrics: AnalyticsMetrics;
+};
+
 export type ClassAnalytics = {
     summary: AnalyticsMetrics;
     items: ProblemAnalytics[];
