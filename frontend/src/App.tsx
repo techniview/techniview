@@ -4,7 +4,9 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import LoadingState from "./components/LoadingState";
 import LoginPage from "./pages/LoginPage";
+import ProblemPage from "./pages/ProblemPage";
 import StudentStatisticsPage from "./pages/student/StudentStatisticsPage";
+import StudentProblemsPage from "./pages/student/StudentProblemsPage";
 import TeacherClassPage from "./pages/teacher/TeacherClassPage";
 import TeacherProblemPage from "./pages/teacher/TeacherProblemPage";
 import TeacherOverallStatsPage from "./pages/teacher/TeacherOverallStatsPage";
@@ -29,10 +31,6 @@ function RoleHomeRedirect() {
     );
 }
 
-function TeacherProblemDetailPlaceholder() {
-    return <h1>Problem Details</h1>;
-}
-
 export default function App() {
     return (
         <BrowserRouter>
@@ -45,6 +43,15 @@ export default function App() {
                             <Route
                                 path="/student/statistics"
                                 element={<StudentStatisticsPage />}
+                            />
+                            <Route
+                                path="/student/problems"
+                                element={<StudentProblemsPage />}
+                            />
+
+                            <Route
+                                path="/student/problems/:problemId"
+                                element={<ProblemPage />}
                             />
 
                             <Route
@@ -66,7 +73,7 @@ export default function App() {
                                 />
                                 <Route
                                     path="/teacher/problems/:problemId"
-                                    element={<TeacherProblemDetailPlaceholder />}
+                                    element={<ProblemPage />}
                                 />
                             </Route>
                         </Route>
