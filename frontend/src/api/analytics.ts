@@ -104,6 +104,29 @@ export type CourseList = {
     items: Course[];
 };
 
+export type Assignment = {
+    id: number;
+    course_id: number;
+    title: string;
+    description: string | null;
+    state: "draft" | "published" | "archived";
+    available_at: string | null;
+    due_at: string | null;
+    items: Array<{
+        id: number;
+        item_order: number;
+        points: number;
+        submission_limit: number | null;
+        problem: {
+            id: number;
+        };
+    }>;
+};
+
+export type AssignmentList = {
+    items: Assignment[];
+};
+
 export type ClassMember = {
     id: number;
     user_id: number;
@@ -119,6 +142,10 @@ export type MemberList = {
 
 export function getTeacherCourses() {
     return apiRequest<CourseList>("/api/courses");
+}
+
+export function getStudentAssignments(courseId: number) {
+    return apiRequest<AssignmentList>(`/api/courses/${courseId}/assignments?limit=100`);
 }
 
 export function getClassMembers(courseId: number) {

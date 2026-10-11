@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
     getClassAnalytics,
     getClassMembers,
@@ -212,7 +213,11 @@ export default function TeacherProblemPage() {
                         <tbody>
                             {rows.map(({ problem, metrics, unavailable }) => (
                                 <tr key={problem.id}>
-                                    <th scope="row">{problem.title}</th>
+                                    <th scope="row">
+                                        <Link to={`/teacher/problems/${problem.id}`}>
+                                            {problem.title}
+                                        </Link>
+                                    </th>
                                     <td>{problem.difficulty}</td>
                                     <td>
                                         {unavailable
