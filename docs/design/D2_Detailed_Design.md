@@ -223,7 +223,7 @@ The table gives one decision for each class category for each component. “Curr
 US and AC rows come from User_Stories.md. The NFR rows are explicit candidate requirements derived from the security and deployment design, not approved acceptance criteria. The course has not supplied numeric latency, availability, accessibility, retention, or compliance targets.
 
 | ID and short text | Priority | Design elements that satisfy it | Relevant edge cases and figures | How and gaps |
-|---|---|---|---|
+|---|---|---|---|---|
 | US-01: Students access and run coding problems in a web environment | Must | Problem, ProblemTestCase; GET /api/problems; POST /api/submissions; build_case_execution; browser problem routes | EC-13 to EC-16, EC-25 to EC-28, EC-41 to EC-44; D1 Figure 1; D2 Figure 1 | API serves statements and submits Python source to Judge0. Browser has problem and detail routes. Gap: frontend flow and language support are limited to Python; no local setup is needed. |
 | AC-01.1: A selected problem submission runs against cases and returns feedback | Must | Submission, SubmissionCaseResult; POST/GET /api/submissions; Judge0 callback; submission response | EC-25 to EC-28, EC-41 to EC-44; D1 Figure 1; D2 Figure 1 | Per-case results produce aggregate score and public-case messages. Hidden cases affect score but their expected outputs are not returned. |
 | US-02: Students track progress and performance | Must | StudentPracticeProgress, StudentAssignmentProgress; GET /api/me/analytics; student statistics route | EC-26, EC-29 to EC-32; D1 Figure 1; D2 Figure 1 | Finalization updates progress and analytics returns counts and error metrics. Gap: no specified retention window or performance target. |
