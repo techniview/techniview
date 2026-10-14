@@ -7,6 +7,8 @@
 
 This document details the Database component and its submission grading and assignment progress computations. It defers the Backend Server's remaining routes, the Code Runner internals, and the Web UI to D2. The design is based on repository commit `2257305`. The User Data DB and Question DB are table groups in one MySQL 8.0 database; the Backend Server calls the repository's internal Judge0 fork.
 
+This is the D1 design snapshot. The implementation has since added course enrollment, problem authoring, question sets, assignment recipients, curriculum, staff submission review, and health routes. D2 records the current implementation and its gaps.
+
 The D0 figure uses stick figures for users, cylinders for databases, squares for user interfaces, and rectangles with inner lines for servers. In the D1 data model, each box is a table containing fields that affect behavior. Dashed boxes are Question DB tables; solid boxes are User Data DB tables. Lines are foreign-key relationships, and their labels name the relationship. `PK` means primary key, `FK` means foreign key, `UQ` marks a field in a unique constraint, and `IX` marks an indexed field. A `UQ` or `IX` mark may be part of a composite key; the index table gives the exact columns. Crow's-foot marks show cardinality at both ends: a bar means one, a circle means zero, and a three-pronged foot means many.
 
 ## Data model
@@ -17,7 +19,11 @@ The relational model fits because grading relies on foreign keys, unique constra
 
 ### Figure 1. D1 data model
 
-The editable source for this diagram is [Figure_1_data_model.svg](Figure_1_data_model.svg). The PNG included with this document is the figure image.
+**Diagram title:** TechniView D1 data model. **Project title:** TechniView Design Diagram. **Goal:** create a web-based learning platform for technical computer science questions. **Conventions:** each box is a table; solid boxes are User Data DB tables and dashed boxes are Question DB tables; labeled lines are foreign-key relationships; PK, FK, UQ, and IX mark keys and indexes; crow's-foot marks show cardinality.
+
+The editable source is [the SVG](images/D1_Data_Model.svg).
+
+![D1 data model](images/D1_Data_Model.png)
 
 ```mermaid
 erDiagram
@@ -142,14 +148,9 @@ erDiagram
 | `assignment_items(assignment_id, item_order)` unique | Prevent duplicate positions in an assignment. |
 | `assignment_items(id, problem_id)` unique | Support the composite foreign key from a submission to its assignment item. |
 | `submissions(id, problem_id)` unique | Provide a unique submission/problem pair for related records. |
-| `assignment_items(id, problem_id)` unique | Support the assignment-item/problem pair checked when a submission is created. |
-| `submissions(id, problem_id)` unique | Provide a unique submission/problem pair for related records. |
 | `student_practice_progress(student_id, problem_id)` primary key | Find or lock one student's practice progress row. |
 | `submission_case_results(judge0_token)` unique | Match a Judge0 report to its case row. |
 | `submission_case_results(callback_token_hash)` unique | Find and authenticate callbacks without storing the callback secret. |
-| `submissions(id, problem_id)` unique | Provide a unique submission/problem pair for related records. |
-| `student_practice_progress(student_id, problem_id)` primary key | Find or lock one student's practice progress row. |
-| `student_practice_progress(student_id, problem_id)` primary key | Find or lock one student's practice progress row. |
 | `student_assignment_progress(student_id, assignment_item_id)` primary key | Find or lock one student's progress row. |
 | `user_sessions(expires_at)` | Find expired sessions for cleanup. |
 

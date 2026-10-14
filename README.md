@@ -31,8 +31,8 @@ curl http://localhost:8000/api/health | jq
   - app/services - response shaping and shared analytics formulas
   - app/models - SQLAlchemy application schema
   - migrations - Alembic schema revisions
-- frontend - Vite + React + strict TypeScript, currently just shows "techniview"
-- docs - for the research writeup
+- frontend - Vite + React + strict TypeScript, with login, student problem/statistics, and teacher class/problem/analytics routes
+- docs - research notes and tests; the design set is in [docs/design](docs/design/), with D0, D1, D2, user stories, and review notes
 - .githooks - versioned pre-commit hook
 - pyproject.toml - backend dependencies and Ruff/pytest settings
 - uv.lock - reproducible Python dependency lockfile
