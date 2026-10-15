@@ -117,6 +117,9 @@ The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
 
 Student submission requests return `202` with a submission ID. The application
 worker dispatches cases to Judge0 and finalizes them through callbacks or polling.
+`POST /api/problems/{id}/run` executes public cases without storing a submission
+or consuming an assignment attempt. The problem page offers separate Run and
+Submit actions; Submit uses the durable worker pipeline and all server-owned cases.
 Keep `app_worker` running alongside the API. Course enrollment, email verification,
 and password recovery use an email outbox; local Compose captures messages in the
 worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
@@ -137,6 +140,10 @@ checks completion by reading MySQL without polling the submission API. The stack
 uses separate containers, no host ports, and temporary database storage; it does
 not read your `.env`. Judge0 uses the same privileged cgroup access as the dev
 stack. Containers are removed when the command exits.
+
+For a hosted installation, use [the production deployment guide](docs/deployment.md).
+The production Compose stack serves HTTPS, keeps databases and Judge0 off host
+ports, imports the reviewed catalog, and does not create demo accounts.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 
@@ -199,3 +206,8 @@ prerequisite pool. Within each pool, problems are ordered easy to hard. Browse
 the Trail at `GET /api/curriculum`; use `?kind=problem_type` for the secondary
 classification view. The response includes problem IDs and summaries; fetch a
 full statement and public examples with `GET /api/problems/{problem_id}`.
+The catalog also contains explicit problem prerequisite edges. The importer checks
+them for missing nodes and cycles, and the curriculum response marks unfinished
+nodes as locked until their prerequisites are completed. The initial 147 edges
+follow the existing technique-pool prerequisites. Maintainers can revise those
+edges in the catalog without changing student progress records.

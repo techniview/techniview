@@ -7,10 +7,11 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..models import (
+    CurriculumEdge,
     CurriculumNode,
     Difficulty,
     ExecutionMode,
@@ -54,6 +55,38 @@ def _load_catalog(path: Path) -> dict:
         or not set(curriculum_ids) <= source_ids
     ):
         raise ValueError("Curriculum IDs must be unique catalog problem IDs.")
+    edges = catalog.get("curriculum_edges", [])
+    if not isinstance(edges, list) or any(
+        not isinstance(edge, list)
+        or len(edge) != 2
+        or not all(isinstance(identifier, str) for identifier in edge)
+        for edge in edges
+    ):
+        raise ValueError("Curriculum edges must be pairs of problem IDs.")
+    valid_ids = set(curriculum_ids)
+    graph: dict[str, set[str]] = {source_id: set() for source_id in curriculum_ids}
+    for prerequisite, target in edges:
+        if prerequisite not in valid_ids or target not in valid_ids:
+            raise ValueError("Curriculum edge refers to a missing curriculum problem.")
+        if prerequisite == target or prerequisite in graph[target]:
+            raise ValueError("Curriculum edge is duplicate or self-referencing.")
+        graph[target].add(prerequisite)
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> None:
+        if node in visiting:
+            raise ValueError("Curriculum prerequisites contain a cycle.")
+        if node in visited:
+            return
+        visiting.add(node)
+        for prerequisite in graph[node]:
+            visit(prerequisite)
+        visiting.remove(node)
+        visited.add(node)
+
+    for node in graph:
+        visit(node)
     return catalog
 
 
@@ -246,6 +279,20 @@ def import_catalog(db: Session, path: Path) -> dict[str, int]:
         else:
             node.priority = priority
 
+    db.flush()
+    catalog_ids = [problem.id for problem in catalog_problems]
+    db.execute(delete(CurriculumEdge).where(CurriculumEdge.problem_id.in_(catalog_ids)))
+    by_source_id = {
+        item["source_problem_id"]: problem.id
+        for item, problem in zip(problems, catalog_problems, strict=True)
+    }
+    db.add_all(
+        CurriculumEdge(
+            prerequisite_problem_id=by_source_id[prerequisite],
+            problem_id=by_source_id[target],
+        )
+        for prerequisite, target in catalog.get("curriculum_edges", [])
+    )
     db.commit()
     return {
         "imported": imported,

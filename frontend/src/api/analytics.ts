@@ -210,18 +210,6 @@ export function getGradeCsv(courseId: number, assignmentId?: number) {
     return apiText(`/api/courses/${courseId}/exports/grades.csv${query}`);
 }
 
-export function getResearchCsv(
-    courseId: number,
-    assignmentId: number,
-    publicationKey: string,
-) {
-    const params = new URLSearchParams({
-        assignment_id: String(assignmentId),
-        publication_key: publicationKey,
-    });
-    return apiText(`/api/courses/${courseId}/exports/research.csv?${params}`);
-}
-
 export function getStudentProblemAnalytics(
     courseId: number,
     studentId: number,

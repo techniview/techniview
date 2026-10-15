@@ -307,23 +307,3 @@ def export_course_grades(
             "Cache-Control": "private, no-store",
         },
     )
-
-
-@router.get("/courses/{course_id}/exports/research.csv")
-def export_course_research(
-    course_id: int,
-    db: DbSession,
-    _membership: InstructorMembership,
-    assignment_id: int,
-    publication_key: str = Query(min_length=1, max_length=200),
-):
-    from ..services.reporting import research_csv
-
-    return Response(
-        research_csv(db, course_id, assignment_id, publication_key),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": 'attachment; filename="research.csv"',
-            "Cache-Control": "private, no-store",
-        },
-    )

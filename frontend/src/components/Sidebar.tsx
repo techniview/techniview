@@ -10,6 +10,7 @@ type NavigationItem = {
 
 const studentNavigation: NavigationItem[] = [
     { label: "My Classes", to: "/student/courses" },
+    { label: "Curriculum", to: "/student/curriculum" },
     { label: "My Statistics", to: "/student/statistics" },
     { label: "Available Problems", to: "/student/problems" },
 ];

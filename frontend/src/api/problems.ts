@@ -63,6 +63,27 @@ export function startProblem(problemId: number, assignmentItemId?: number) {
     });
 }
 
+export type PublicRunResult = {
+    passed_count: number;
+    test_count: number;
+    public_results: Array<{
+        case_order: number;
+        status_id: number;
+        input: string;
+        expected_output: string;
+        stdout: string | null;
+        stderr: string | null;
+        compile_output: string | null;
+    }>;
+};
+
+export function runPublicCases(problemId: number, sourceCode: string) {
+    return apiRequest<PublicRunResult>(`/api/problems/${problemId}/run`, {
+        method: "POST",
+        body: JSON.stringify({ source_code: sourceCode }),
+    });
+}
+
 export function getAvailableProblems(offset = 0) {
     return apiRequest<ProblemListResponse>(`/api/problems?limit=100&offset=${offset}`);
 }

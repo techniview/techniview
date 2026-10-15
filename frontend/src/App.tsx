@@ -13,6 +13,7 @@ import StudentStatisticsPage from "./pages/student/StudentStatisticsPage";
 import StudentProblemsPage from "./pages/student/StudentProblemsPage";
 import StudentCoursePage from "./pages/student/StudentCoursePage";
 import StudentCoursesPage from "./pages/student/StudentCoursesPage";
+import StudentCurriculumPage from "./pages/student/StudentCurriculumPage";
 import TeacherClassPage from "./pages/teacher/TeacherClassPage";
 import TeacherProblemPage from "./pages/teacher/TeacherProblemPage";
 import TeacherOverallStatsPage from "./pages/teacher/TeacherOverallStatsPage";
@@ -57,6 +58,10 @@ export default function App() {
                             <Route
                                 path="/student/problems"
                                 element={<StudentProblemsPage />}
+                            />
+                            <Route
+                                path="/student/curriculum"
+                                element={<StudentCurriculumPage />}
                             />
                             <Route
                                 path="/student/courses/:courseId"

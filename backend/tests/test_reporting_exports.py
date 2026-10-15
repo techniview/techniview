@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from app.core.errors import ApiError
 from app.models import (
     AssignmentItem,
     CourseMembership,
@@ -13,6 +14,7 @@ from app.models import (
     User,
 )
 from app.services.rebuild_progress import rebuild_progress
+from app.services.reporting import research_csv
 from sqlalchemy import select
 
 
@@ -61,20 +63,23 @@ async def test_research_export_has_stable_pseudonyms_and_no_payload(
         )
     )
     db_session.commit()
-    path = (
-        f"/api/courses/{membership.course_id}/exports/research.csv"
-        f"?assignment_id={item.assignment_id}&publication_key=study-one"
-    )
+    path = f"/api/courses/{membership.course_id}/exports/research.csv"
+    assert (await teacher_client.get(path)).status_code == 404
     monkeypatch.delenv("RESEARCH_EXPORT_SECRET", raising=False)
-    assert (await teacher_client.get(path)).status_code == 503
+    with pytest.raises(ApiError) as unconfigured:
+        research_csv(db_session, membership.course_id, item.assignment_id, "study-one")
+    assert unconfigured.value.status_code == 503
     monkeypatch.setenv("RESEARCH_EXPORT_SECRET", "test-only-secret" * 3)
-    first = await teacher_client.get(path)
-    second = await teacher_client.get(path)
-    assert first.status_code == 200
-    assert first.text == second.text
-    assert "PRIVATE" not in first.text
-    assert student.email not in first.text
-    row = next(csv.DictReader(io.StringIO(first.text)))
+    first = research_csv(
+        db_session, membership.course_id, item.assignment_id, "study-one"
+    )
+    second = research_csv(
+        db_session, membership.course_id, item.assignment_id, "study-one"
+    )
+    assert first == second
+    assert "PRIVATE" not in first
+    assert student.email not in first
+    row = next(csv.DictReader(io.StringIO(first)))
     assert len(row["participant"]) == 64
     assert "student_id" not in row
     assert "problem_id" not in row
@@ -163,40 +168,16 @@ def test_summaries_include_historical_recipients_and_fractional_time(db_session)
 
 
 @pytest.mark.anyio
-async def test_research_selection_and_instructor_access(
+async def test_research_export_is_not_an_instructor_route(
     teacher_client, db_session, monkeypatch
 ):
-    from app.models import MembershipRole
-
-    student, membership, item = context(db_session)
+    _student, membership, _item = context(db_session)
     monkeypatch.setenv("RESEARCH_EXPORT_SECRET", "test-only-secret" * 3)
     path = f"/api/courses/{membership.course_id}/exports/research.csv"
-    assert (await teacher_client.get(path)).status_code == 422
-    assert (
-        await teacher_client.get(
-            path,
-            params={
-                "assignment_id": 99999,
-                "publication_key": "study",
-            },
-        )
-    ).status_code == 404
-    teacher = db_session.scalar(
-        select(CourseMembership).where(
-            CourseMembership.role == MembershipRole.INSTRUCTOR,
-        )
-    )
-    teacher.role = MembershipRole.TA
-    db_session.commit()
-    assert (
-        await teacher_client.get(
-            path,
-            params={
-                "assignment_id": item.assignment_id,
-                "publication_key": "study",
-            },
-        )
-    ).status_code == 403
+    assert (await teacher_client.get(path)).status_code == 404
+    with pytest.raises(ApiError) as missing:
+        research_csv(db_session, membership.course_id, 99999, "study")
+    assert missing.value.status_code == 404
 
 
 def test_research_publications_use_distinct_pseudonyms(db_session, monkeypatch):

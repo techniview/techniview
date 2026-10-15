@@ -1,0 +1,149 @@
+name: techniview
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST to the public DNS name}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    environment: &application_environment
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      MYSQL_DB: ${MYSQL_DB:?Set MYSQL_DB}
+      JUDGE0_URL: http://server:2358
+      JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: https://${PUBLIC_HOST:?Set PUBLIC_HOST}
+      PUBLIC_APP_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}
+      EMAIL_DELIVERY_MODE: resend
+      EMAIL_SIGNING_KEY: ${EMAIL_SIGNING_KEY:?Set EMAIL_SIGNING_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
+      RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      server:
+        condition: service_started
+    command: >-
+      sh -c "alembic upgrade head &&
+      python -m scripts.import_problem_catalog data/problem_catalog.json &&
+      exec uvicorn main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips='*'"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ping', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 30
+
+  app_worker:
+    build: ./backend
+    environment: *application_environment
+    depends_on:
+      backend:
+        condition: service_healthy
+      server:
+        condition: service_started
+    command: python -m app.worker
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DB:?Set MYSQL_DB}
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u $$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  server:
+    build: ./internal-judge0-fork
+    cgroup: host
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    environment: &judge_environment
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      JUDGE0_POSTGRES_HOST: db
+      JUDGE0_POSTGRES_PORT: 5432
+      JUDGE0_POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      JUDGE0_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      JUDGE0_POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      JUDGE0_REDIS_HOST: redis
+      JUDGE0_REDIS_PORT: 6379
+      JUDGE0_REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    depends_on:
+      - db
+      - redis
+    command: /api/scripts/server
+
+  workers:
+    build: ./internal-judge0-fork
+    cgroup: host
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    environment: *judge_environment
+    depends_on:
+      - db
+      - redis
+      - server
+    command: /api/scripts/workers
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+
+volumes:
+  caddy_data:
+  caddy_config:
+  mysql_data:
+  postgres_data:
+  redis_data:

@@ -7,26 +7,28 @@ assignment filters select coursework only. The response keeps the overall
 rows, not just the page. A problem assigned more than once contributes once per
 assignment to the metrics. Practice contributes one progress record per problem.
 
-Course instructors can download these reports. Grade exports accept an optional
-`assignment_id`; research exports require `assignment_id` and `publication_key`:
+Course instructors can download grade reports with an optional `assignment_id`:
 
 - `/api/courses/{course_id}/exports/grades.csv` includes every current recipient
   and item in published or archived assignments, including students who withdrew
   and students who have not started. An explicit recipient removal excludes that
   student from the current export and course summary; the audit and submissions
   remain. Scores use eligible attempts, including approved late work.
-- `/api/courses/{course_id}/exports/research.csv` includes assignment submission
-  outcomes. It excludes names, emails, source code, execution output, exception
-  text, test data, timestamps, and submission IDs. Participants receive stable
-  HMAC identifiers scoped to the course and publication key. Problem and assignment
-  contexts also use pseudonyms, with no operational IDs exported. Timings are seconds
-  since the participant's first attempt in the selected assignment, plus processing
-  duration. These are pseudonyms, not a guarantee
-  against identification through knowledge of a student's outcomes.
 
-Set `RESEARCH_EXPORT_SECRET` to a random secret of at least 32 bytes in the backend
-process environment. Keep it stable for longitudinal exports. Rotating it changes
-all participant identifiers. Research exports return 503 until it is configured.
+Research export is a deployment command, not an instructor API. From an operator
+shell in the backend container, set `RESEARCH_EXPORT_SECRET` to a stable secret of
+at least 32 bytes and `RESEARCH_PUBLICATION_KEY` to the approved publication key,
+then run `python -m scripts.export_research COURSE_ID ASSIGNMENT_ID OUTPUT.csv`.
+The command creates a new file with owner-only permissions and refuses to
+overwrite an existing file. It excludes names, emails, source code, execution
+output, exception text, test data, timestamps, and submission IDs. Participants
+receive HMAC identifiers scoped to the course and publication key. Timings are
+relative to each participant's first attempt in the selected assignment.
+Pseudonyms do not prevent identification through knowledge of outcomes, so review
+the export before release.
+
+Keep `RESEARCH_EXPORT_SECRET` stable for longitudinal exports. Rotating it changes
+all participant identifiers. The command returns an error until it is configured.
 Neither report includes unassigned practice activity. Spreadsheet formula prefixes
 in text cells are escaped.
 

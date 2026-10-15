@@ -1,11 +1,14 @@
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import APIRouter, Query
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..core.dependencies import CurrentUser, DbSession
 from ..core.errors import ApiError
+from ..core.judge0 import judge0_submit
 from ..models import (
     Assignment,
     AssignmentItem,
@@ -18,14 +21,45 @@ from ..models import (
     Problem,
     ProblemState,
     ProblemTag,
+    TestVisibility,
     User,
     problem_tag_assignments,
 )
-from ..schemas.contracts import ProblemDetailResponse, ProblemListResponse
+from ..schemas.contracts import (
+    ProblemDetailResponse,
+    ProblemListResponse,
+    PublicRunResponse,
+)
+from ..services.execution import build_case_execution
 from ..services.presentation import problem_detail, problem_summary
 from ..services.progress import get_or_create_progress
 
 router = APIRouter(prefix="/problems", tags=["problems"])
+MAX_SOURCE_CODE_BYTES = 65535
+MAX_RUN_TEXT_BYTES = 8192
+JUDGE0_ACCEPTED_STATUS = 3
+JUDGE0_INCOMPLETE_STATUSES = frozenset((1, 2, 13))
+
+
+class RunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_code: str = Field(min_length=1, max_length=MAX_SOURCE_CODE_BYTES)
+
+    @field_validator("source_code")
+    @classmethod
+    def source_byte_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > MAX_SOURCE_CODE_BYTES:
+            raise ValueError("source code must not exceed 65535 UTF-8 bytes")
+        return value
+
+
+def _run_text(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("Judge0 returned invalid execution output")
+    return value.encode("utf-8")[:MAX_RUN_TEXT_BYTES].decode("utf-8", errors="ignore")
 
 
 def _assignment_contexts(db: Session, user_id: int, problem_id: int | None = None):
@@ -196,3 +230,77 @@ def start_problem(
     _visible_problem(db, problem_id, user)
     get_or_create_progress(db, user.id, problem_id, assignment_item_id)
     db.commit()
+
+
+@router.post("/{problem_id}/run", response_model=PublicRunResponse)
+def run_public_cases(
+    problem_id: int, body: RunRequest, db: DbSession, user: CurrentUser
+):
+    problem = _visible_problem(db, problem_id, user)
+    cases = [
+        case for case in problem.test_cases if case.visibility == TestVisibility.PUBLIC
+    ]
+    if not cases:
+        raise ApiError(409, "no_public_cases", "This problem has no public cases.")
+    results = []
+    for case in cases:
+        execution = build_case_execution(problem, case, body.source_code)
+        try:
+            report = judge0_submit(
+                execution.source_code,
+                stdin=execution.stdin,
+                expected_output=execution.expected_output,
+                wait=True,
+                timeout=10,
+                cpu_time_limit=float(problem.cpu_time_limit_seconds),
+                memory_limit=problem.memory_limit_kb,
+            )
+        except httpx.HTTPError as error:
+            raise ApiError(
+                502, "runner_unavailable", "The code runner is unavailable."
+            ) from error
+        if not isinstance(report, dict):
+            raise ApiError(
+                502,
+                "runner_invalid_response",
+                "The code runner returned an invalid result.",
+            )
+        status = report.get("status")
+        if not isinstance(status, dict) or not isinstance(status.get("id"), int):
+            raise ApiError(
+                502,
+                "runner_invalid_response",
+                "The code runner returned an invalid result.",
+            )
+        status_id = status["id"]
+        if status_id in JUDGE0_INCOMPLETE_STATUSES:
+            raise ApiError(
+                502,
+                "runner_incomplete",
+                "The code runner did not finish a public case.",
+            )
+        try:
+            results.append(
+                {
+                    "case_order": case.case_order,
+                    "status_id": status_id,
+                    "input": case.input,
+                    "expected_output": case.expected_output,
+                    "stdout": _run_text(report.get("stdout")),
+                    "stderr": _run_text(report.get("stderr")),
+                    "compile_output": _run_text(report.get("compile_output")),
+                }
+            )
+        except ValueError as error:
+            raise ApiError(
+                502,
+                "runner_invalid_response",
+                "The code runner returned an invalid result.",
+            ) from error
+    return {
+        "passed_count": sum(
+            result["status_id"] == JUDGE0_ACCEPTED_STATUS for result in results
+        ),
+        "test_count": len(results),
+        "public_results": results,
+    }
