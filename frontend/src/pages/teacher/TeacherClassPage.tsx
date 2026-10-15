@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-    getClassAnalytics,
-    getClassMembers,
+    getAllClassAnalytics,
+    getAllClassMembers,
     getStudentProblemAnalytics,
-    getTeacherCourses,
+    getActiveStaffCourse,
     type ClassMember,
     type Course,
 } from "../../api/analytics";
@@ -56,27 +56,24 @@ export default function TeacherClassPage() {
 
         async function loadClass() {
             try {
-                const courses = await getTeacherCourses();
-                const teacherCourse = courses.items[0];
+                const teacherCourse = await getActiveStaffCourse();
                 if (!teacherCourse) {
                     throw new Error("No course found.");
                 }
 
-                const [memberResponse, analytics] = await Promise.all([
-                    getClassMembers(teacherCourse.id),
-                    getClassAnalytics(teacherCourse.id),
+                const [members, problems] = await Promise.all([
+                    getAllClassMembers(teacherCourse.id),
+                    getAllClassAnalytics(teacherCourse.id),
                 ]);
                 if (!isCurrent) {
                     return;
                 }
 
                 setCourse(teacherCourse);
-                setMembers(
-                    memberResponse.items.filter((member) => member.role === "student"),
-                );
-                setProblems(analytics.items);
-                if (analytics.items[0]) {
-                    setSelectedProblemId(String(analytics.items[0].problem.id));
+                setMembers(members.filter((member) => member.role === "student"));
+                setProblems(problems);
+                if (problems[0]) {
+                    setSelectedProblemId(String(problems[0].problem.id));
                 }
             } catch {
                 if (isCurrent) {

@@ -187,7 +187,7 @@ async def test_teacher_analytics_include_unfinished_recipients(teacher_client):
         "median_completion_seconds": 900.0,
         "total_valid_attempts": 2,
         "total_retries": 1,
-        "avg_retries_per_student": 0.5,
+        "avg_retries_per_student": 1.0,
         "errors": {
             "wrong_answer": 1,
             "compile_error": 0,
@@ -269,6 +269,9 @@ async def test_analytics_count_repeated_unstarted_assignment_items(
             course_id=instructor.course_id,
         )
     )
+    from app.services.summaries import refresh_course_problem
+
+    refresh_course_problem(db_session, instructor.course_id, problem.id)
     db_session.commit()
 
     response = await teacher_client.get(

@@ -38,6 +38,7 @@ class CourseResponse(BaseModel):
     timezone: str
     archived_at: datetime | None
     membership_role: MembershipRole
+    withdrawn_at: datetime | None
 
 
 class MemberResponse(BaseModel):
@@ -109,6 +110,14 @@ class ProblemSummaryResponse(BaseModel):
     tags: list[str]
     typed_tags: list[ProblemTagResponse] = Field(default_factory=list)
     source_category: str | None = None
+    available_assignment_item_id: int | None = None
+
+
+class ProblemAssignmentContextResponse(BaseModel):
+    assignment_item_id: int
+    assignment_title: str
+    course_id: int
+    course_name: str
 
 
 class ProblemDetailResponse(ProblemSummaryResponse):
@@ -120,6 +129,25 @@ class ProblemDetailResponse(ProblemSummaryResponse):
     test_count: int
     attribution: str | None
     license: str | None
+    assignment_contexts: list[ProblemAssignmentContextResponse] = Field(
+        default_factory=list
+    )
+
+
+class PublicRunCaseResponse(BaseModel):
+    case_order: int
+    status_id: int
+    input: str
+    expected_output: str
+    stdout: str | None
+    stderr: str | None
+    compile_output: str | None
+
+
+class PublicRunResponse(BaseModel):
+    passed_count: int
+    test_count: int
+    public_results: list[PublicRunCaseResponse]
 
 
 class ProblemListResponse(BaseModel):
@@ -214,10 +242,17 @@ class AnalyticsOverviewResponse(BaseModel):
 
 
 class AnalyticsFilters(BaseModel):
+    scope: str = "all"
+    course_id: int | None = None
+    assignment_id: int | None = None
     difficulty: Difficulty | None
     tag: str | None
 
 
 class StudentAnalyticsResponse(BaseModel):
+    items: list[ProblemAnalyticsResponse] = []
+    total: int = 0
+    limit: int = 50
+    offset: int = 0
     metrics: AnalyticsMetrics
     filters: AnalyticsFilters

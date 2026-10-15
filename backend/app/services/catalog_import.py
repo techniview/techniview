@@ -54,6 +54,10 @@ def _load_catalog(path: Path) -> dict:
         or not set(curriculum_ids) <= source_ids
     ):
         raise ValueError("Curriculum IDs must be unique catalog problem IDs.")
+    if "curriculum_edges" in catalog:
+        raise ValueError(
+            "Catalog problem prerequisites are not supported by the Trail."
+        )
     return catalog
 
 
@@ -184,6 +188,7 @@ def import_catalog(db: Session, path: Path) -> dict[str, int]:
                 )
             problem = existing
             existing_count += 1
+            problem.state = ProblemState.PUBLISHED
             problem.difficulty = Difficulty(item["difficulty"])
             problem.source_category = item["source_category"]
             problem.attribution = catalog["attribution"]

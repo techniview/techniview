@@ -1,9 +1,12 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from ..core.authorization import require_active_course
 from ..core.errors import ApiError
 from ..models import (
     Assignment,
@@ -12,6 +15,7 @@ from ..models import (
     AssignmentState,
     CourseMembership,
     ErrorCategory,
+    MembershipRole,
     StudentAssignmentProgress,
     StudentPracticeProgress,
     Submission,
@@ -31,6 +35,13 @@ def require_assigned_item(
     assignment_item_id: int,
 ) -> AssignmentItem:
     now = utc_now()
+    course_id = db.scalar(
+        select(Assignment.course_id)
+        .join(AssignmentItem)
+        .where(AssignmentItem.id == assignment_item_id)
+    )
+    if course_id is not None:
+        require_active_course(db, course_id)
     row = db.execute(
         select(AssignmentItem, AssignmentRecipient)
         .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
@@ -48,7 +59,9 @@ def require_assigned_item(
             Assignment.state == AssignmentState.PUBLISHED,
             or_(Assignment.available_at.is_(None), Assignment.available_at <= now),
             CourseMembership.user_id == student_id,
+            CourseMembership.role == MembershipRole.STUDENT,
             CourseMembership.withdrawn_at.is_(None),
+            AssignmentRecipient.removed_at.is_(None),
         )
         .with_for_update()
     ).first()
@@ -97,37 +110,58 @@ def get_or_create_progress(
     problem_id: int,
     assignment_item_id: int | None,
 ):
+    from .summaries import refresh_course_problem
+
     now = utc_now()
     if assignment_item_id is not None:
         require_assigned_item(db, student_id, problem_id, assignment_item_id)
+        _open_progress(
+            db,
+            StudentAssignmentProgress,
+            {"student_id": student_id, "assignment_item_id": assignment_item_id},
+            now,
+        )
         progress = _locked_assignment_progress(
             db,
             student_id,
             assignment_item_id,
         )
-        if progress is None:
-            progress = StudentAssignmentProgress(
-                student_id=student_id,
-                assignment_item_id=assignment_item_id,
-                first_opened_at=now,
-            )
-            db.add(progress)
-        elif progress.first_opened_at is None:
-            progress.first_opened_at = now
+        db.flush()
+        item = db.get(AssignmentItem, assignment_item_id)
+        course_id = db.get(Assignment, item.assignment_id).course_id
+        refresh_course_problem(db, course_id, problem_id)
         return progress
 
     db.scalar(select(User.id).where(User.id == student_id).with_for_update())
+    _open_progress(
+        db,
+        StudentPracticeProgress,
+        {"student_id": student_id, "problem_id": problem_id},
+        now,
+    )
     progress = _locked_practice_progress(db, student_id, problem_id)
-    if progress is None:
-        progress = StudentPracticeProgress(
-            student_id=student_id,
-            problem_id=problem_id,
-            first_opened_at=now,
-        )
-        db.add(progress)
-    elif progress.first_opened_at is None:
-        progress.first_opened_at = now
     return progress
+
+
+def _open_progress(db: Session, model, key: dict[str, int], now: datetime) -> None:
+    """Insert before locking, avoiding InnoDB gap locks on absent progress rows."""
+    table = model.__table__
+    values = {**key, "first_opened_at": now}
+    dialect = db.bind.dialect.name
+    if dialect == "mysql":
+        stmt = mysql_insert(table).values(**values)
+        stmt = stmt.on_duplicate_key_update(
+            first_opened_at=func.coalesce(table.c.first_opened_at, now)
+        )
+    elif dialect == "sqlite":
+        stmt = sqlite_insert(table).values(**values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=list(key),
+            set_={"first_opened_at": func.coalesce(table.c.first_opened_at, now)},
+        )
+    else:
+        raise RuntimeError(f"unsupported database dialect: {dialect}")
+    db.execute(stmt)
 
 
 def is_eligible(submission: Submission) -> bool:
@@ -144,6 +178,8 @@ ERROR_COUNTER_FIELDS = {
 
 
 def finalize_progress(db: Session, submission: Submission) -> None:
+    from .summaries import refresh_course_problem
+
     if submission.status == SubmissionStatus.INFRASTRUCTURE_ERROR:
         return
     if submission.assignment_item_id is not None:
@@ -171,11 +207,19 @@ def finalize_progress(db: Session, submission: Submission) -> None:
     if submission.primary_error is not None:
         field = ERROR_COUNTER_FIELDS[submission.primary_error]
         setattr(progress, field, getattr(progress, field) + 1)
+    if submission.assignment_item_id is not None:
+        item = db.get(AssignmentItem, submission.assignment_item_id)
+        db.flush()
+        refresh_course_problem(
+            db, db.get(Assignment, item.assignment_id).course_id, submission.problem_id
+        )
 
 
 def recompute_assignment_grade(
     db: Session, student_id: int, assignment_item_id: int
 ) -> None:
+    from .summaries import refresh_course_problem
+
     progress = _locked_assignment_progress(db, student_id, assignment_item_id)
     if progress is None:
         return
@@ -199,4 +243,10 @@ def recompute_assignment_grade(
     progress.first_passed_at = next(
         (row.completed_at for row in eligible if row.status == SubmissionStatus.PASSED),
         None,
+    )
+
+    item = db.get(AssignmentItem, assignment_item_id)
+    db.flush()
+    refresh_course_problem(
+        db, db.get(Assignment, item.assignment_id).course_id, item.problem_id
     )

@@ -13,6 +13,7 @@ from app.models import (
     StudentAssignmentProgress,
     Submission,
 )
+from app.worker.submissions import process_next_submission
 from sqlalchemy import select
 
 pytestmark = pytest.mark.anyio
@@ -74,22 +75,27 @@ def overdue_context(db_session):
     }
 
 
-async def _submit_pass(client, problem_id, item_id):
-    with patch("app.routers.submissions.judge0_submit", side_effect=ALL_PASS):
-        return await client.post(
-            "/api/submissions?wait=true",
-            json={
-                "source_code": "def sum_list(values):\n    return sum(values)\n",
-                "problem_id": problem_id,
-                "assignment_item_id": item_id,
-            },
-        )
+async def _submit_pass(client, db_session, problem_id, item_id):
+    created = await client.post(
+        "/api/submissions",
+        json={
+            "source_code": "def sum_list(values):\n    return sum(values)\n",
+            "problem_id": problem_id,
+            "assignment_item_id": item_id,
+        },
+    )
+    assert created.status_code == 202
+    with patch("app.worker.submissions.judge0_submit", side_effect=ALL_PASS):
+        assert process_next_submission(db_session, "late-test")
+    return await client.get(f"/api/submissions/{created.json()['id']}")
 
 
-async def test_late_submission_excluded_until_approved(client, overdue_context):
+async def test_late_submission_excluded_until_approved(
+    client, db_session, overdue_context
+):
     await _login(client, "student@techniview.local", "student-demo")
     response = await _submit_pass(
-        client, overdue_context["problem_id"], overdue_context["item_id"]
+        client, db_session, overdue_context["problem_id"], overdue_context["item_id"]
     )
     assert response.status_code == 200
     body = response.json()
@@ -125,7 +131,7 @@ async def test_late_pass_does_not_move_best_until_approved(
 ):
     await _login(client, "student@techniview.local", "student-demo")
     await _submit_pass(
-        client, overdue_context["problem_id"], overdue_context["item_id"]
+        client, db_session, overdue_context["problem_id"], overdue_context["item_id"]
     )
     progress = db_session.get(
         StudentAssignmentProgress,
@@ -150,10 +156,10 @@ async def test_late_pass_does_not_move_best_until_approved(
     assert progress.first_passed_at is not None
 
 
-async def test_approve_guards(client, overdue_context):
+async def test_approve_guards(client, db_session, overdue_context):
     await _login(client, "student@techniview.local", "student-demo")
     response = await _submit_pass(
-        client, overdue_context["problem_id"], overdue_context["item_id"]
+        client, db_session, overdue_context["problem_id"], overdue_context["item_id"]
     )
     submission_id = response.json()["id"]
     course_id = overdue_context["course_id"]
@@ -182,19 +188,20 @@ async def test_approve_on_time_submission_rejected(client, db_session):
     course_id = (await client.get("/api/courses")).json()["items"][0]["id"]
     listing = await client.get(f"/api/courses/{course_id}/submissions")
     assert listing.json()["total"] == 0
-    # Seeded assignment is due in the future; submit on time via wait flow.
+    # Seeded assignment is due in the future.
     await _login(client, "student@techniview.local", "student-demo")
     assignments = await client.get(f"/api/courses/{course_id}/assignments")
     on_time_item = assignments.json()["items"][0]["items"][0]
-    with patch("app.routers.submissions.judge0_submit", side_effect=ALL_PASS):
+    with patch("app.worker.submissions.judge0_submit", side_effect=ALL_PASS):
         created = await client.post(
-            "/api/submissions?wait=true",
+            "/api/submissions",
             json={
                 "source_code": "x",
                 "problem_id": on_time_item["problem"]["id"],
                 "assignment_item_id": on_time_item["id"],
             },
         )
+        assert process_next_submission(db_session, "on-time-test")
     assert created.json()["is_late"] is False
     await _login(client, "teacher@techniview.local", "teacher-demo")
     rejected = await client.post(

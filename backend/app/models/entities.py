@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     BINARY,
+    JSON,
     BigInteger,
     CheckConstraint,
     Column,
@@ -126,6 +127,7 @@ class User(Base):
         DateTime(timezone=False), server_default=func.now()
     )
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
 
 
 class UserSession(Base):
@@ -309,6 +311,8 @@ class Assignment(Base):
     state: Mapped[AssignmentState] = mapped_column(db_enum(AssignmentState), index=True)
     available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    recipient_mode: Mapped[str] = mapped_column(String(16), default="all")
+    selected_membership_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now()
     )
@@ -403,6 +407,7 @@ class AssignmentRecipient(Base):
     assignment_id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True)
     membership_id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True)
     course_id: Mapped[int] = mapped_column(ID_TYPE)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
 
 
 class Submission(Base):
@@ -437,6 +442,11 @@ class Submission(Base):
         DateTime(timezone=False), server_default=func.now()
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    claim_owner: Mapped[str | None] = mapped_column(String(64))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    next_check_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), index=True
+    )
 
     case_results: Mapped[list[SubmissionCaseResult]] = relationship(
         back_populates="submission",
@@ -467,6 +477,9 @@ class SubmissionCaseResult(Base):
     stdout: Mapped[str | None] = mapped_column(Text)
     stderr: Mapped[str | None] = mapped_column(Text)
     compile_output: Mapped[str | None] = mapped_column(Text)
+    dispatch_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False)
+    )
 
     submission: Mapped[Submission] = relationship(back_populates="case_results")
     test_case: Mapped[ProblemTestCase] = relationship(lazy="joined")
@@ -525,7 +538,7 @@ class CourseProblemAnalytics(Base):
     assigned_count: Mapped[int] = mapped_column(Integer, default=0)
     started_count: Mapped[int] = mapped_column(Integer, default=0)
     completed_count: Mapped[int] = mapped_column(Integer, default=0)
-    completion_seconds_sum: Mapped[int] = mapped_column(BigInteger, default=0)
+    completion_seconds_sum: Mapped[Decimal] = mapped_column(Numeric(20, 6), default=0)
     valid_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     wrong_answer_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -552,3 +565,71 @@ class CourseProblemErrorCount(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), onupdate=func.now()
     )
+
+
+class AssignmentAudit(Base):
+    __tablename__ = "assignment_audits"
+
+    id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), index=True)
+    actor_membership_id: Mapped[int] = mapped_column(
+        ForeignKey("course_memberships.id")
+    )
+    action: Mapped[str] = mapped_column(String(40))
+    before: Mapped[dict] = mapped_column(JSON)
+    after: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CourseEnrollment(Base):
+    __tablename__ = "course_enrollments"
+    __table_args__ = (UniqueConstraint("course_id", "email"),)
+
+    id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), index=True)
+    email: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[bytes | None] = mapped_column(BINARY(32), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AccountToken(Base):
+    __tablename__ = "account_tokens"
+
+    id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    course_id: Mapped[int | None] = mapped_column(ForeignKey("courses.id"))
+    purpose: Mapped[str] = mapped_column(String(16))
+    nonce: Mapped[str] = mapped_column(String(64), unique=True)
+    token_hash: Mapped[bytes] = mapped_column(BINARY(32), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class EmailJob(Base):
+    __tablename__ = "email_jobs"
+
+    id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True, autoincrement=True)
+    recipient: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(16))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    course_id: Mapped[int | None] = mapped_column(ForeignKey("courses.id"))
+    token_id: Mapped[int | None] = mapped_column(ForeignKey("account_tokens.id"))
+    enrollment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("course_enrollments.id", ondelete="SET NULL")
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    claimed_by: Mapped[str | None] = mapped_column(String(64))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_error: Mapped[str | None] = mapped_column(String(255))
+
+
+class AccountRequestThrottle(Base):
+    __tablename__ = "account_request_throttles"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime)
+    request_count: Mapped[int] = mapped_column(Integer)

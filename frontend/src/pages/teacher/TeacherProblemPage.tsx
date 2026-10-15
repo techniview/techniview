@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-    getClassAnalytics,
-    getClassMembers,
+    getAllClassAnalytics,
+    getAllClassMembers,
     getStudentProblemAnalytics,
-    getTeacherCourses,
+    getActiveStaffCourse,
     type ClassMember,
     type Course,
 } from "../../api/analytics";
@@ -53,26 +53,25 @@ export default function TeacherProblemPage() {
 
         async function loadPage() {
             try {
-                const courses = await getTeacherCourses();
-                const teacherCourse = courses.items[0];
+                const teacherCourse = await getActiveStaffCourse();
                 if (!teacherCourse) {
                     throw new Error("No course found.");
                 }
 
-                const [memberResponse, analytics] = await Promise.all([
-                    getClassMembers(teacherCourse.id),
-                    getClassAnalytics(teacherCourse.id),
+                const [members, problems] = await Promise.all([
+                    getAllClassMembers(teacherCourse.id),
+                    getAllClassAnalytics(teacherCourse.id),
                 ]);
                 if (!isCurrent) {
                     return;
                 }
 
-                const classStudents = memberResponse.items.filter(
+                const classStudents = members.filter(
                     (member) => member.role === "student",
                 );
                 setCourse(teacherCourse);
                 setStudents(classStudents);
-                setProblems(analytics.items);
+                setProblems(problems);
                 if (classStudents[0]) {
                     setSelectedStudentId(String(classStudents[0].user_id));
                 }

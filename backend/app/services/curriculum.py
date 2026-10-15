@@ -255,7 +255,6 @@ def build_curriculum(db: Session, user: User, kind: ProblemTagKind) -> list[dict
             )
         )
     }
-
     pools: dict[str, dict] = {}
     problem_pool_slugs: dict[int, set[str]] = {}
     if kind == ProblemTagKind.TECHNIQUE:
@@ -324,8 +323,13 @@ def build_curriculum(db: Session, user: User, kind: ProblemTagKind) -> list[dict
         ready = all(completed_counts.get(prereq, 0) > 0 for prereq in prereqs)
         if ready:
             next_item = next(
-                (item for item in items if item["status"] != "completed"), None
+                (item for item in items if item["status"] == "attempted"), None
             )
+            if next_item is None:
+                next_item = next(
+                    (item for item in items if item["status"] == "not_started"),
+                    None,
+                )
             if next_item is not None:
                 next_item["recommended"] = True
         result.append(

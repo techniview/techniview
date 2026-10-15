@@ -57,7 +57,7 @@ working tree. If it says uv or a Python tool is missing, run `make install`.
 
 `make integration` builds the local Python-only Judge0 image from
 `internal-judge0-fork/` and starts a temporary Compose project with MySQL
-8, Judge0, Judge0 workers, Redis, Postgres, and the API. It runs migrations
+8, Judge0, Judge0 workers, Redis, Postgres, the API, and the application worker. It runs migrations
 against a fresh database and then removes the containers, network, and volumes
 when it exits. See
 [`internal-judge0-fork/README.md`](../internal-judge0-fork/README.md)
@@ -72,7 +72,15 @@ The integration suite checks the parts SQLite and mocks cannot prove:
 - Python submissions without a caller-supplied Judge0 language ID
 - Completion through callbacks without API polling
 - Polling recovery when no callback arrives
+- Asynchronous submission dispatch by the application worker
 - UTF-8 source-size validation through the HTTP API
+- Fifty concurrent students submitting the same problem, with one durable result
+  and one Judge0 case per request
+
+On October 14, 2026, the clean disposable stack passed all eight integration
+checks, including the fifty-request burst, on Linux x86_64 with 16 logical CPUs,
+23 GiB RAM, and Docker 29.9.0. The burst completed in the test's 120-second
+deadline. This is a local concurrency check, not a hosted capacity guarantee.
 
 Judge0 uses privileged cgroup access in this disposable stack because the runner
 needs the same sandbox controls as local development. Do not point it at a

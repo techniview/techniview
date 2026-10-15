@@ -1,5 +1,5 @@
 import base64
-import secrets
+import re
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal
 from enum import IntEnum
@@ -11,8 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from ..core.authorization import get_membership
-from ..core.config import settings
+from ..core.authorization import get_membership, require_active_course
 from ..core.dependencies import (
     CurrentUser,
     DbSession,
@@ -20,25 +19,25 @@ from ..core.dependencies import (
     StaffMembership,
 )
 from ..core.errors import ApiError
-from ..core.judge0 import judge0_get, judge0_submit
 from ..core.security import hash_token
 from ..models import (
     Assignment,
     AssignmentItem,
+    Course,
     ErrorCategory,
     Submission,
     SubmissionCaseResult,
     SubmissionStatus,
     TestVisibility,
+    User,
 )
-from ..services.execution import build_case_execution
 from ..services.progress import (
     finalize_progress,
     get_or_create_progress,
     recompute_assignment_grade,
     require_assigned_item,
 )
-from .problems import _visible_problem
+from .problems import _staffed_problem_ids, _visible_problem
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 internal_router = APIRouter(prefix="/internal/judge0", tags=["internal"])
@@ -173,6 +172,8 @@ def _report_text(value: object) -> str | None:
 
 
 def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
+    if _is_terminal(case_result.judge0_status_id):
+        return
     if not isinstance(data, dict):
         raise ValueError("Judge0 returned a non-object submission report")
     status = data.get("status") or {}
@@ -220,6 +221,7 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
             if any(
                 result.judge0_status_id == Judge0Status.PROCESSING for result in results
             )
+            or submission.status == SubmissionStatus.RUNNING
             else SubmissionStatus.QUEUED
         )
         return
@@ -243,6 +245,16 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
             error for error in ERROR_PRIORITY if error in errors
         )
         submission.status = ERROR_STATUSES[submission.primary_error]
+    exception_names = []
+    for result in results:
+        if result.judge0_status_id in (6, 7, 9, 10, 11, 12, 14):
+            # Keep only a Python-style exception class, never the message or traceback.
+            matches = re.findall(
+                r"(?m)^([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Interrupt|Exit))(?::|$)",
+                result.stderr or result.compile_output or "",
+            )
+            exception_names.extend(matches[-1:])
+    submission.python_exception_type = exception_names[0] if exception_names else None
     finalize_progress(db, submission)
 
 
@@ -250,6 +262,13 @@ def _submission_response(submission: Submission) -> dict:
     public_results = [
         {
             "case_order": result.test_case.case_order,
+            "input": result.test_case.input,
+            "expected_output": result.test_case.expected_output,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "compile_output": result.compile_output,
+            "execution_time_ms": result.execution_time_ms,
+            "memory_kb": result.memory_kb,
             "status_id": result.judge0_status_id,
             "friendly_message": (
                 get_status_message(result.judge0_status_id)
@@ -274,6 +293,12 @@ def _submission_response(submission: Submission) -> dict:
         "passed_count": passed_count,
         "test_count": len(submission.case_results),
         "public_results": public_results,
+        "problem_id": submission.problem_id,
+        "assignment_item_id": submission.assignment_item_id,
+        "primary_error": submission.primary_error,
+        "python_exception_type": submission.python_exception_type,
+        "submitted_at": submission.submitted_at,
+        "completed_at": submission.completed_at,
         "poll_url": f"/api/submissions/{submission.id}",
     }
 
@@ -297,15 +322,26 @@ def _reserve_submission(
         body.problem_id,
         body.assignment_item_id,
     )
+    context = [
+        Submission.student_id == student_id,
+        Submission.problem_id == body.problem_id,
+        Submission.assignment_item_id == body.assignment_item_id,
+    ]
+    # The student row serializes reservations in this context. A locking read of
+    # an empty submissions range takes InnoDB gap locks across other students.
+    reserved = list(db.scalars(select(Submission).where(*context)).all())
+    if any(
+        row.status in (SubmissionStatus.QUEUED, SubmissionStatus.RUNNING)
+        for row in reserved
+    ):
+        raise ApiError(
+            409,
+            "active_submission",
+            "An attempt is already queued or running in this context.",
+        )
     if item is not None and item.submission_limit is not None:
-        reserved_count = db.scalar(
-            select(func.count())
-            .select_from(Submission)
-            .where(
-                Submission.student_id == student_id,
-                Submission.assignment_item_id == item.id,
-                Submission.status != SubmissionStatus.INFRASTRUCTURE_ERROR,
-            )
+        reserved_count = sum(
+            row.status != SubmissionStatus.INFRASTRUCTURE_ERROR for row in reserved
         )
         if reserved_count >= item.submission_limit:
             raise ApiError(
@@ -322,8 +358,7 @@ def _reserve_submission(
         is_late=_is_late_submission(db, item),
     )
     db.add(submission)
-    db.commit()
-    db.refresh(submission)
+    db.flush()
     return submission
 
 
@@ -337,6 +372,15 @@ def _is_late_submission(db: Session, item: AssignmentItem | None) -> bool:
 
 
 def _load_submission(db: Session, submission_id: int) -> Submission | None:
+    # Course is the first lock across assignment and reporting mutations.
+    course_id = db.scalar(
+        select(Assignment.course_id)
+        .join(AssignmentItem)
+        .join(Submission, Submission.assignment_item_id == AssignmentItem.id)
+        .where(Submission.id == submission_id)
+    )
+    if course_id is not None:
+        db.scalar(select(Course.id).where(Course.id == course_id).with_for_update())
     submission = db.scalar(
         select(Submission)
         .options(lazyload(Submission.case_results))
@@ -377,94 +421,77 @@ def _mark_case_infrastructure_error(
     db.commit()
 
 
-@router.post("")
-@router.post("/")
-def create_submission(
-    body: SubmissionCreate,
-    db: DbSession,
-    user: CurrentUser,
-    wait: bool = False,
-):
+@router.post("", status_code=202)
+@router.post("/", status_code=202)
+def create_submission(body: SubmissionCreate, db: DbSession, user: CurrentUser):
+    # Lock before the first consistent read so a second request for this student
+    # sees the prior reservation after it waits for the first transaction.
+    db.scalar(select(User.id).where(User.id == user.id).with_for_update())
     problem = _visible_problem(db, body.problem_id, user)
     if not problem.test_cases:
         raise ApiError(409, "problem_has_no_tests", "The problem has no test cases.")
-    submission = _reserve_submission(db, body, user.id)
-    callback_tokens: dict[int, str] = {}
-    results: dict[int, SubmissionCaseResult] = {}
-    for test_case in problem.test_cases:
-        callback_token = secrets.token_urlsafe(32)
-        result = SubmissionCaseResult(
-            submission_id=submission.id,
-            test_case_id=test_case.id,
-            callback_token_hash=hash_token(callback_token),
-            judge0_status_id=Judge0Status.IN_QUEUE,
-            test_case=test_case,
+    if (
+        problem.owner_id is not None
+        and problem.owner_id != user.id
+        and body.assignment_item_id is None
+        and problem.id not in _staffed_problem_ids(db, user.id)
+    ):
+        raise ApiError(
+            422,
+            "assignment_context_required",
+            "Custom coursework requires its assignment item.",
         )
-        callback_tokens[test_case.id] = callback_token
-        results[test_case.id] = result
-        db.add(result)
-    db.commit()
+    submission = _reserve_submission(db, body, user.id)
     for test_case in problem.test_cases:
-        execution = build_case_execution(problem, test_case, body.source_code)
-        result = results[test_case.id]
-        try:
-            data = judge0_submit(
-                execution.source_code,
-                stdin=execution.stdin,
-                expected_output=execution.expected_output,
-                wait=wait,
-                timeout=20.0 if wait else 5.0,
-                callback_url=(
-                    f"{settings.JUDGE0_CALLBACK_BASE_URL}/"
-                    f"{callback_tokens[test_case.id]}"
-                ),
-                cpu_time_limit=float(problem.cpu_time_limit_seconds),
-                memory_limit=problem.memory_limit_kb,
+        db.add(
+            SubmissionCaseResult(
+                submission_id=submission.id,
+                test_case_id=test_case.id,
+                judge0_status_id=Judge0Status.IN_QUEUE,
             )
-            token = data["token"]
-            db.refresh(result)
-            if result.judge0_token is None:
-                result.judge0_token = token
-            if wait:
-                _update_case_result(result, data)
-        except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
-            _mark_case_infrastructure_error(db, submission.id, test_case.id)
-            raise _judge0_error(error) from error
-        db.commit()
-    submission = _load_submission(db, submission.id)
-    if submission is None:
-        raise RuntimeError("submission disappeared while it was being graded")
-    _finalize_submission(db, submission)
+        )
     db.commit()
-    submission = _load_submission(db, submission.id)
-    if submission is None:
-        raise RuntimeError("submission disappeared after grading")
+    db.refresh(submission)
     return _submission_response(submission)
+
+
+@router.get("")
+def list_student_submissions(
+    db: DbSession,
+    user: CurrentUser,
+    problem_id: int | None = None,
+    assignment_item_id: int | None = None,
+    status: SubmissionStatus | None = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    query = select(Submission).where(Submission.student_id == user.id)
+    if problem_id is not None:
+        query = query.where(Submission.problem_id == problem_id)
+    if assignment_item_id is not None:
+        query = query.where(Submission.assignment_item_id == assignment_item_id)
+    if status is not None:
+        query = query.where(Submission.status == status)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.scalars(query.order_by(Submission.id.desc()).offset(offset).limit(limit))
+    return {
+        "items": [_submission_response(row) for row in rows],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/{submission_id}")
 def get_submission(submission_id: int, db: DbSession, user: CurrentUser):
-    submission = _load_submission(db, submission_id)
-    if submission is not None and submission.student_id != user.id:
-        submission = None
+    submission = db.scalar(
+        select(Submission).where(
+            Submission.id == submission_id, Submission.student_id == user.id
+        )
+    )
     if submission is None:
         raise ApiError(404, "submission_not_found", "Submission not found.")
-    if submission.status not in TERMINAL_SUBMISSION_STATUSES:
-        for result in submission.case_results:
-            if _is_terminal(result.judge0_status_id):
-                continue
-            if result.judge0_token is None:
-                raise RuntimeError("queued case has no Judge0 token")
-            try:
-                data = judge0_get(result.judge0_token)
-                _update_case_result(result, data)
-            except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
-                db.rollback()
-                raise _judge0_error(error) from error
-        _finalize_submission(db, submission)
-        db.commit()
-        db.refresh(submission)
-    return _submission_response(submission)
+    return {**_submission_response(submission), "source_code": submission.source_code}
 
 
 @internal_router.put("/callbacks/{callback_token}", include_in_schema=False)
@@ -504,6 +531,10 @@ def receive_judge0_callback(
         and reported_token != result.judge0_token
     ):
         raise HTTPException(status_code=409, detail="callback token mismatch")
+    if submission.status in TERMINAL_SUBMISSION_STATUSES or _is_terminal(
+        result.judge0_status_id
+    ):
+        return {"ok": True}
     if reported_token is not None:
         result.judge0_token = reported_token
     try:
@@ -601,7 +632,7 @@ def list_course_submissions(
     offset: int = Query(0, ge=0),
 ):
     if student_id is not None:
-        get_membership(db, course_id, student_id)
+        get_membership(db, course_id, student_id, include_withdrawn=True)
     query = _staff_submission_query(db, course_id)
     if student_id is not None:
         query = query.where(Submission.student_id == student_id)
@@ -663,7 +694,8 @@ def approve_late_submission(
     db: DbSession,
     membership: InstructorMembership,
 ):
-    submission = db.scalar(select(Submission).where(Submission.id == submission_id))
+    require_active_course(db, course_id)
+    submission = _load_submission(db, submission_id)
     if (
         submission is None
         or submission.assignment_item_id is None
@@ -675,7 +707,7 @@ def approve_late_submission(
     if submission.late_approved_at is None:
         submission.late_approved_at = datetime.now(UTC).replace(tzinfo=None)
         submission.late_approved_by_membership_id = membership.id
-        db.commit()
+        db.flush()
         recompute_assignment_grade(
             db, submission.student_id, submission.assignment_item_id
         )

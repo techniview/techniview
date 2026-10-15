@@ -1,15 +1,20 @@
 from .base import Base
 from .entities import (
+    AccountRequestThrottle,
+    AccountToken,
     Assignment,
+    AssignmentAudit,
     AssignmentItem,
     AssignmentRecipient,
     AssignmentState,
     Course,
+    CourseEnrollment,
     CourseMembership,
     CourseProblemAnalytics,
     CourseProblemErrorCount,
     CurriculumNode,
     Difficulty,
+    EmailJob,
     ErrorCategory,
     ExecutionMode,
     MembershipRole,
@@ -36,6 +41,11 @@ from .entities import (
 
 __all__ = [
     "Base",
+    "AccountToken",
+    "EmailJob",
+    "CourseEnrollment",
+    "AssignmentAudit",
+    "AccountRequestThrottle",
     "Assignment",
     "AssignmentItem",
     "AssignmentRecipient",

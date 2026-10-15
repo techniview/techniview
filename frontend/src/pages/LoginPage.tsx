@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { login } from "../api/auth";
 import { useAuth } from "../auth/useAuth";
 
 type LoginLocationState = {
     from?: {
         pathname: string;
+        search: string;
+        hash: string;
     };
 };
 
@@ -38,7 +40,9 @@ export default function LoginPage() {
             await refreshUser();
 
             const state = location.state as LoginLocationState | null;
-            const destination = state?.from?.pathname ?? dashboardForRole(user.role);
+            const destination = state?.from
+                ? `${state.from.pathname}${state.from.search}${state.from.hash}`
+                : dashboardForRole(user.role);
             navigate(destination, { replace: true });
         } catch {
             setError("The email or password is incorrect.");
@@ -91,6 +95,9 @@ export default function LoginPage() {
                         {isSubmitting ? "Signing in..." : "Sign in"}
                     </button>
                 </form>
+                <p>
+                    <Link to="/forgot-password">Forgot your password?</Link>
+                </p>
             </section>
         </main>
     );

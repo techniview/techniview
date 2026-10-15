@@ -1,7 +1,13 @@
 import Editor from "@monaco-editor/react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { getProblem, startProblem, type ProblemDetail } from "../api/problems";
+import {
+    getProblem,
+    runPublicCases,
+    startProblem,
+    type ProblemDetail,
+    type PublicRunResult,
+} from "../api/problems";
 import { createSubmission, getSubmission, type Submission } from "../api/submissions";
 import ErrorState from "../components/ErrorState";
 import LoadingState from "../components/LoadingState";
@@ -10,6 +16,25 @@ const POLL_INTERVAL_MS = 1000;
 
 function formatDifficulty(difficulty: ProblemDetail["difficulty"]) {
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+}
+
+function initialAssignmentItemId(
+    problem: ProblemDetail,
+    search: string,
+): number | null {
+    const requested = new URLSearchParams(search).get("assignment_item_id");
+    if (requested !== null) {
+        const context = problem.assignment_contexts.find(
+            (item) => item.assignment_item_id === Number(requested),
+        );
+        if (!context) {
+            throw new Error("Assignment context is unavailable.");
+        }
+        return context.assignment_item_id;
+    }
+    return problem.origin === "custom"
+        ? (problem.assignment_contexts[0]?.assignment_item_id ?? null)
+        : null;
 }
 
 function submissionMessage(submission: Submission): string {
@@ -31,6 +56,8 @@ export default function ProblemPage() {
     const [problem, setProblem] = useState<ProblemDetail | null>(null);
     const [sourceCode, setSourceCode] = useState("");
     const [submission, setSubmission] = useState<Submission | null>(null);
+    const [runResult, setRunResult] = useState<PublicRunResult | null>(null);
+    const [assignmentItemId, setAssignmentItemId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRunning, setIsRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,13 +70,19 @@ export default function ProblemPage() {
         }
 
         let isCurrent = true;
-        Promise.all([getProblem(parsedProblemId), startProblem(parsedProblemId)])
-            .then(([loadedProblem]) => {
+        getProblem(parsedProblemId)
+            .then(async (loadedProblem) => {
+                const selected = initialAssignmentItemId(
+                    loadedProblem,
+                    location.search,
+                );
+                await startProblem(parsedProblemId, selected ?? undefined);
                 if (!isCurrent) {
                     return;
                 }
                 setProblem(loadedProblem);
                 setSourceCode(loadedProblem.starter_code);
+                setAssignmentItemId(selected);
             })
             .catch(() => {
                 if (isCurrent) {
@@ -65,7 +98,7 @@ export default function ProblemPage() {
         return () => {
             isCurrent = false;
         };
-    }, [parsedProblemId]);
+    }, [location.search, parsedProblemId]);
 
     useEffect(() => {
         if (!submission || submission.done) {
@@ -104,16 +137,38 @@ export default function ProblemPage() {
 
         setError(null);
         setSubmission(null);
+        setRunResult(null);
         setIsRunning(true);
         try {
-            const createdSubmission = await createSubmission(problem.id, sourceCode);
+            setRunResult(await runPublicCases(problem.id, sourceCode));
+        } catch {
+            setError("We could not run the public cases. Please try again.");
+        } finally {
+            setIsRunning(false);
+        }
+    }
+
+    async function handleSubmit() {
+        if (!problem || !sourceCode.trim() || isRunning) {
+            return;
+        }
+        setError(null);
+        setSubmission(null);
+        setRunResult(null);
+        setIsRunning(true);
+        try {
+            const createdSubmission = await createSubmission(
+                problem.id,
+                sourceCode,
+                assignmentItemId ?? undefined,
+            );
             setSubmission(createdSubmission);
             if (createdSubmission.done) {
                 setIsRunning(false);
             }
         } catch {
             setIsRunning(false);
-            setError("We could not run your code. Please try again.");
+            setError("We could not submit your code. Please try again.");
         }
     }
 
@@ -149,6 +204,40 @@ export default function ProblemPage() {
                     {problem.test_count} test cases
                 </p>
             </header>
+
+            {problem.assignment_contexts.length > 0 && (
+                <label>
+                    Work for
+                    <select
+                        disabled={isRunning}
+                        value={assignmentItemId ?? ""}
+                        onChange={(event) => {
+                            const selected = event.target.value
+                                ? Number(event.target.value)
+                                : null;
+                            setAssignmentItemId(selected);
+                            setSubmission(null);
+                            setRunResult(null);
+                            setError(null);
+                            void startProblem(problem.id, selected ?? undefined).catch(
+                                () => setError("We could not start this assignment."),
+                            );
+                        }}
+                    >
+                        {problem.origin !== "custom" && (
+                            <option value="">Independent practice</option>
+                        )}
+                        {problem.assignment_contexts.map((context) => (
+                            <option
+                                key={context.assignment_item_id}
+                                value={context.assignment_item_id}
+                            >
+                                {context.course_name}: {context.assignment_title}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            )}
 
             {error && <ErrorState message={error} />}
 
@@ -202,8 +291,40 @@ export default function ProblemPage() {
                         onClick={() => void handleRun()}
                         type="button"
                     >
-                        {isRunning ? "Running..." : "Run code"}
+                        {isRunning ? "Working..." : "Run public cases"}
                     </button>
+                    <button
+                        disabled={isRunning || !sourceCode.trim()}
+                        onClick={() => void handleSubmit()}
+                        type="button"
+                    >
+                        Submit for grading
+                    </button>
+                    {runResult && (
+                        <section
+                            aria-live="polite"
+                            aria-labelledby="run-result-heading"
+                        >
+                            <h3 id="run-result-heading">Public case results</h3>
+                            <p>
+                                {runResult.passed_count}/{runResult.test_count} passed.
+                                This run did not use a graded attempt.
+                            </p>
+                            <ul>
+                                {runResult.public_results.map((result) => (
+                                    <li key={result.case_order}>
+                                        Test {result.case_order}:{" "}
+                                        {result.status_id === 3 ? "Passed" : "Failed"}
+                                        {result.stdout && <pre>{result.stdout}</pre>}
+                                        {result.stderr && <pre>{result.stderr}</pre>}
+                                        {result.compile_output && (
+                                            <pre>{result.compile_output}</pre>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
                     {submission && (
                         <section aria-live="polite" aria-labelledby="result-heading">
                             <h3 id="result-heading">Execution result</h3>

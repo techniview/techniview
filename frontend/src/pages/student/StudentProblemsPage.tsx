@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-    getStudentAssignments,
-    getTeacherCourses,
-    type Course,
-} from "../../api/analytics";
 import { getAvailableProblems, type ProblemSummary } from "../../api/problems";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
@@ -13,12 +8,19 @@ function formatDifficulty(difficulty: ProblemSummary["difficulty"]): string {
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
 }
 
+async function allAvailableProblems(): Promise<ProblemSummary[]> {
+    const problems: ProblemSummary[] = [];
+    while (true) {
+        const page = await getAvailableProblems(problems.length);
+        problems.push(...page.items);
+        if (page.items.length === 0 || problems.length >= page.total) {
+            return problems;
+        }
+    }
+}
+
 export default function StudentProblemsPage() {
     const [problems, setProblems] = useState<ProblemSummary[]>([]);
-    const [assignedProblemIds, setAssignedProblemIds] = useState<Set<number>>(
-        new Set(),
-    );
-    const [course, setCourse] = useState<Course | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,26 +29,10 @@ export default function StudentProblemsPage() {
 
         async function loadProblems() {
             try {
-                const [problemResponse, courses] = await Promise.all([
-                    getAvailableProblems(),
-                    getTeacherCourses(),
-                ]);
-                const studentCourse = courses.items[0];
-                if (!studentCourse) {
-                    throw new Error("No course found.");
-                }
-
-                const assignments = await getStudentAssignments(studentCourse.id);
-                const assignedIds = new Set(
-                    assignments.items.flatMap((assignment) =>
-                        assignment.items.map((item) => item.problem.id),
-                    ),
-                );
+                const problems = await allAvailableProblems();
 
                 if (isCurrent) {
-                    setProblems(problemResponse.items);
-                    setAssignedProblemIds(assignedIds);
-                    setCourse(studentCourse);
+                    setProblems(problems);
                 }
             } catch {
                 if (isCurrent) {
@@ -77,10 +63,7 @@ export default function StudentProblemsPage() {
             <header className="page-header">
                 <p className="eyebrow">Student dashboard</p>
                 <h1>Available Problems</h1>
-                <p>
-                    Practice problems available to you
-                    {course ? ` in ${course.name}` : ""}.
-                </p>
+                <p>Practice problems available to you.</p>
             </header>
 
             <div className="table-wrapper">
@@ -105,7 +88,9 @@ export default function StudentProblemsPage() {
                                 )?.name ??
                                 problem.tags[0] ??
                                 "General";
-                            const isAssigned = assignedProblemIds.has(problem.id);
+                            const assignmentItemId =
+                                problem.available_assignment_item_id;
+                            const isAssigned = assignmentItemId !== null;
 
                             return (
                                 <tr key={problem.id}>
@@ -120,7 +105,9 @@ export default function StudentProblemsPage() {
                                         )}
                                     </td>
                                     <td>
-                                        <Link to={`/student/problems/${problem.id}`}>
+                                        <Link
+                                            to={`/student/problems/${problem.id}${isAssigned ? `?assignment_item_id=${assignmentItemId}` : ""}`}
+                                        >
                                             Open problem
                                         </Link>
                                     </td>

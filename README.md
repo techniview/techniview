@@ -31,6 +31,7 @@ curl http://localhost:8000/api/health | jq
   - app/services - response shaping and shared analytics formulas
   - app/models - SQLAlchemy application schema
   - migrations - Alembic schema revisions
+  - app/worker - durable Judge0 dispatch, polling recovery, and email delivery
 - frontend - Vite + React + strict TypeScript, with login, student problem/statistics, and teacher class/problem/analytics routes
 - docs - research notes and tests; the design set is in [docs/design](docs/design/), with D0, D1, D2, user stories, and review notes
 - .githooks - versioned pre-commit hook
@@ -98,7 +99,7 @@ run the matching `make` command above to fix or reproduce it.
 ## Backend notes
 
 Docker Compose applies the database migration and loads idempotent demo data before
-starting the API. The local demo accounts are:
+starting the API and application worker. The local demo accounts are:
 
 - `teacher@techniview.local` / `teacher-demo`
 - `student@techniview.local` / `student-demo`
@@ -114,12 +115,35 @@ The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
 `/api/docs`. Analytics use `difficulty`, `tag`, and, for course views,
 `assignment_id` query filters.
 
+Student submission requests return `202` with a submission ID. The application
+worker dispatches cases to Judge0 and finalizes them through callbacks or polling.
+`POST /api/problems/{id}/run` executes public cases without storing a submission
+or consuming an assignment attempt. The problem page offers separate Run and
+Submit actions; Submit uses the durable worker pipeline and all server-owned cases.
+Keep `app_worker` running alongside the API. Course enrollment, email verification,
+and password recovery use an email outbox; local Compose captures messages in the
+worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
+`EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both API
+and worker. The frontend handles join links, email verification, and password
+recovery through its public account pages. See
+[course and account setup](docs/course-accounts.md).
+
+Course summaries update with grading transactions. Set a stable
+`RESEARCH_EXPORT_SECRET` of at least 32 bytes before producing a research CSV.
+See [backend reporting](docs/backend-reporting.md) for export fields and the
+offline progress rebuild procedure. The [database recovery guide](docs/database-recovery.md)
+has the Compose backup and restore steps.
+
 `make integration` runs migrations against a fresh MySQL database, forces overlapping
 callbacks under REPEATABLE READ, and runs Python submissions through Judge0. It
 checks completion by reading MySQL without polling the submission API. The stack
 uses separate containers, no host ports, and temporary database storage; it does
 not read your `.env`. Judge0 uses the same privileged cgroup access as the dev
 stack. Containers are removed when the command exits.
+
+For a hosted installation, use [the production deployment guide](docs/deployment.md).
+The production Compose stack serves HTTPS, keeps databases and Judge0 off host
+ports, imports the reviewed catalog, and does not create demo accounts.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 
@@ -182,3 +206,6 @@ prerequisite pool. Within each pool, problems are ordered easy to hard. Browse
 the Trail at `GET /api/curriculum`; use `?kind=problem_type` for the secondary
 classification view. The response includes problem IDs and summaries; fetch a
 full statement and public examples with `GET /api/problems/{problem_id}`.
+Trail progression is defined by the technique pools and their tiers. Individual
+problems do not have prerequisites; students can open any published practice
+problem even when another pool is currently recommended.

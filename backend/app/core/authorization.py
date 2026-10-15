@@ -4,18 +4,20 @@ from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import CourseMembership, MembershipRole, User
+from ..models import Course, CourseMembership, MembershipRole, User
 from .db import get_db
 from .errors import ApiError
 from .security import get_current_user
 
 
-def get_membership(db: Session, course_id: int, user_id: int) -> CourseMembership:
+def get_membership(
+    db: Session, course_id: int, user_id: int, *, include_withdrawn: bool = False
+) -> CourseMembership:
     membership = db.scalar(
         select(CourseMembership).where(
             CourseMembership.course_id == course_id,
             CourseMembership.user_id == user_id,
-            CourseMembership.withdrawn_at.is_(None),
+            (True if include_withdrawn else CourseMembership.withdrawn_at.is_(None)),
         )
     )
     if membership is None:
@@ -43,3 +45,17 @@ def require_staff(
     if membership.role not in (MembershipRole.INSTRUCTOR, MembershipRole.TA):
         raise ApiError(403, "staff_required", "Instructor or TA access is required.")
     return membership
+
+
+def require_active_course(db: Session, course_id: int) -> Course:
+    course = db.scalar(
+        select(Course)
+        .where(Course.id == course_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if course is None:
+        raise ApiError(404, "course_not_found", "Course not found.")
+    if course.archived_at is not None:
+        raise ApiError(409, "course_archived", "This class is archived and read-only.")
+    return course

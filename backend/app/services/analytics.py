@@ -41,11 +41,12 @@ def calculate_metrics(records: list[MetricRecord]) -> AnalyticsMetrics:
         if record.first_opened_at is not None and record.first_passed_at is not None
     ]
     assigned_count = len(records)
+    started_count = sum(record.first_opened_at is not None for record in records)
     completed_count = len(completion_times)
     retries = sum(record.retry_count for record in records)
     return AnalyticsMetrics(
         assigned_count=assigned_count,
-        started_count=sum(record.first_opened_at is not None for record in records),
+        started_count=started_count,
         completed_count=completed_count,
         completion_rate=(completed_count / assigned_count if assigned_count else None),
         avg_completion_seconds=(
@@ -56,7 +57,7 @@ def calculate_metrics(records: list[MetricRecord]) -> AnalyticsMetrics:
         ),
         total_valid_attempts=sum(record.valid_attempt_count for record in records),
         total_retries=retries,
-        avg_retries_per_student=(retries / assigned_count if assigned_count else None),
+        avg_retries_per_student=(retries / started_count if started_count else None),
         errors=ErrorCounts(
             wrong_answer=sum(record.wrong_answer_count for record in records),
             compile_error=sum(record.compile_error_count for record in records),

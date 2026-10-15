@@ -30,6 +30,9 @@ x-app: &app
     JUDGE0_URL: http://judge:2358
     JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
     INTEGRATION_TESTS: "1"
+    EMAIL_DELIVERY_MODE: capture
+    EMAIL_SIGNING_KEY: techniview-integration-only-email-key-2026
+    EMAIL_FROM: TechniView <noreply@example.test>
 
 services:
   mysql:
@@ -91,4 +94,14 @@ services:
       judge:
         condition: service_started
       workers:
+        condition: service_started
+      app_worker:
+        condition: service_started
+  app_worker:
+    <<: *app
+    command: python -m app.worker
+    depends_on:
+      backend:
+        condition: service_healthy
+      judge:
         condition: service_started

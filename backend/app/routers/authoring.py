@@ -429,6 +429,12 @@ def replace_items(
 def publish_question_set(question_set_id: int, db: DbSession, user: CurrentUser):
     _professor(user)
     q = _qs(db, question_set_id, user)
+    if q.state != QuestionSetState.DRAFT:
+        raise ApiError(
+            409,
+            "question_set_not_draft",
+            "Only draft question sets can be published.",
+        )
     if not q.items:
         raise ApiError(
             422, "empty_question_set", "Question set must contain at least one problem."

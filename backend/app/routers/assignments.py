@@ -1,16 +1,20 @@
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from ..core.authorization import get_membership
-from ..core.dependencies import CurrentUser, DbSession, InstructorMembership
+from ..core.authorization import get_membership, require_active_course
+from ..core.dependencies import (
+    CurrentUser,
+    DbSession,
+    InstructorMembership,
+    StaffMembership,
+)
 from ..core.errors import ApiError
 from ..models import (
     Assignment,
+    AssignmentAudit,
     AssignmentItem,
     AssignmentRecipient,
     AssignmentState,
@@ -20,27 +24,26 @@ from ..models import (
     QuestionSet,
     QuestionSetState,
 )
+from ..schemas.assignment_management import (
+    AssignmentCreate,
+    AssignmentEdit,
+    AssignmentItemInput,
+    RecipientChange,
+)
 from ..schemas.contracts import AssignmentListResponse, AssignmentResponse
+from ..services.assignments import (
+    audit,
+    change_recipients,
+    load_assignment,
+    publish,
+    replace_items,
+    student_memberships,
+    validate_dates,
+)
 from ..services.presentation import assignment_response
+from ..services.reporting import grade_rows
 
 router = APIRouter(prefix="/courses/{course_id}/assignments", tags=["assignments"])
-
-
-class AssignmentFromQuestionSet(BaseModel):
-    title: str = Field(min_length=1, max_length=150)
-    description: str | None = None
-    question_set_id: int = Field(gt=0)
-    available_at: datetime | None = None
-    due_at: datetime | None = None
-
-    @field_validator("available_at", "due_at")
-    @classmethod
-    def normalize_timestamp(cls, value: datetime | None) -> datetime | None:
-        if value is None:
-            return None
-        if value.tzinfo is not None:
-            return value.astimezone(UTC).replace(tzinfo=None)
-        return value
 
 
 def _assignment_query(course_id: int):
@@ -60,18 +63,22 @@ def _can_view_assignment(
     membership: CourseMembership,
     db: Session,
 ) -> bool:
-    if membership.role in (MembershipRole.INSTRUCTOR, MembershipRole.TA):
+    if membership.withdrawn_at is None and membership.role in (
+        MembershipRole.INSTRUCTOR,
+        MembershipRole.TA,
+    ):
         return True
     now = datetime.now(UTC).replace(tzinfo=None)
     if assignment.available_at is not None and assignment.available_at > now:
         return False
-    if assignment.state != AssignmentState.PUBLISHED:
+    if assignment.state == AssignmentState.DRAFT:
         return False
     return db.scalar(
         select(
             exists().where(
                 AssignmentRecipient.assignment_id == assignment.id,
                 AssignmentRecipient.membership_id == membership.id,
+                AssignmentRecipient.removed_at.is_(None),
             )
         )
     )
@@ -80,60 +87,85 @@ def _can_view_assignment(
 @router.post("", response_model=AssignmentResponse, status_code=201)
 def create_assignment_from_question_set(
     course_id: int,
-    body: AssignmentFromQuestionSet,
+    body: AssignmentCreate,
     db: DbSession,
     user: CurrentUser,
     membership: InstructorMembership,
 ):
-    question_set = db.scalar(
-        select(QuestionSet)
-        .options(selectinload(QuestionSet.items))
-        .where(QuestionSet.id == body.question_set_id, QuestionSet.owner_id == user.id)
-    )
-    if question_set is None or question_set.state != QuestionSetState.PUBLISHED:
-        raise ApiError(404, "question_set_not_found", "Question set not found.")
-    if body.due_at and body.available_at and body.due_at < body.available_at:
-        raise ApiError(
-            422, "invalid_assignment_dates", "Due date must follow availability."
+    require_active_course(db, course_id)
+    items = body.items
+    if body.question_set_id is not None:
+        question_set = db.scalar(
+            select(QuestionSet).where(
+                QuestionSet.id == body.question_set_id, QuestionSet.owner_id == user.id
+            )
         )
+        if question_set is None or question_set.state != QuestionSetState.PUBLISHED:
+            raise ApiError(404, "question_set_not_found", "Question set not found.")
+        items = [
+            AssignmentItemInput(problem_id=i.problem_id) for i in question_set.items
+        ]
     assignment = Assignment(
         course_id=course_id,
         assigned_by_membership_id=membership.id,
-        source_question_set_id=question_set.id,
+        source_question_set_id=body.question_set_id,
         title=body.title,
         description=body.description,
         state=AssignmentState.DRAFT,
         available_at=body.available_at,
         due_at=body.due_at,
+        recipient_mode=body.recipient_mode,
+        selected_membership_ids=body.selected_membership_ids,
     )
-    assignment.items = [
-        AssignmentItem(
-            problem_id=item.problem_id, item_order=index, points=Decimal("1")
-        )
-        for index, item in enumerate(question_set.items, start=1)
-    ]
+    validate_dates(assignment)
+    if body.recipient_mode == "selected":
+        student_memberships(db, course_id, body.selected_membership_ids)
     db.add(assignment)
     db.flush()
-    students = db.scalars(
-        select(CourseMembership).where(
-            CourseMembership.course_id == course_id,
-            CourseMembership.role == MembershipRole.STUDENT,
-            CourseMembership.withdrawn_at.is_(None),
-        )
-    ).all()
-    db.add_all(
-        AssignmentRecipient(
-            assignment_id=assignment.id,
-            membership_id=student.id,
-            course_id=course_id,
-        )
-        for student in students
-    )
+    replace_items(db, assignment, items, user.id)
     db.commit()
-    saved_assignment = db.scalar(
-        _assignment_query(course_id).where(Assignment.id == assignment.id)
-    )
-    return assignment_response(saved_assignment)
+    return assignment_response(assignment)
+
+
+@router.patch("/{assignment_id}", response_model=AssignmentResponse)
+def edit_assignment(
+    course_id: int,
+    assignment_id: int,
+    body: AssignmentEdit,
+    db: DbSession,
+    user: CurrentUser,
+    membership: InstructorMembership,
+):
+    assignment = load_assignment(db, course_id, assignment_id, writable=True)
+    changes = body.model_dump(exclude_unset=True)
+    frozen = {"items", "recipient_mode", "selected_membership_ids"}
+    if assignment.state != AssignmentState.DRAFT and frozen & changes.keys():
+        raise ApiError(
+            409,
+            "assignment_frozen",
+            "Published items and limits cannot change. Edit recipients separately.",
+        )
+    before = {}
+    after = {}
+    for name in changes.keys() - {"items"}:
+        previous = getattr(assignment, name)
+        value = changes[name]
+        before[name] = (
+            previous.isoformat() if isinstance(previous, datetime) else previous
+        )
+        after[name] = value.isoformat() if isinstance(value, datetime) else value
+        setattr(assignment, name, value)
+    validate_dates(assignment)
+    if assignment.state == AssignmentState.DRAFT:
+        if assignment.recipient_mode == "selected":
+            student_memberships(db, course_id, assignment.selected_membership_ids)
+        if body.items is not None:
+            before["items"] = [i.problem_id for i in assignment.items]
+            replace_items(db, assignment, body.items, user.id)
+            after["items"] = [i.model_dump(mode="json") for i in body.items]
+    audit(db, assignment, membership.id, "edit", before, after)
+    db.commit()
+    return assignment_response(assignment)
 
 
 @router.post("/{assignment_id}/publish", response_model=AssignmentResponse)
@@ -144,22 +176,122 @@ def publish_assignment(
     user: CurrentUser,
     _membership: InstructorMembership,
 ):
-    assignment = db.scalar(
-        _assignment_query(course_id).where(Assignment.id == assignment_id)
-    )
-    if assignment is None:
-        raise ApiError(404, "assignment_not_found", "Assignment not found.")
-    if assignment.state != AssignmentState.DRAFT:
-        raise ApiError(
-            409, "assignment_not_draft", "Only draft assignments can be published."
-        )
-    if not assignment.items:
-        raise ApiError(
-            422, "empty_assignment", "Assignment must contain at least one problem."
-        )
-    assignment.state = AssignmentState.PUBLISHED
+    assignment = load_assignment(db, course_id, assignment_id, writable=True)
+    publish(db, assignment, _membership.id)
     db.commit()
     return assignment_response(assignment)
+
+
+@router.post("/{assignment_id}/recipients", status_code=204)
+def edit_recipients(
+    course_id: int,
+    assignment_id: int,
+    body: RecipientChange,
+    db: DbSession,
+    _membership: InstructorMembership,
+):
+    assignment = load_assignment(db, course_id, assignment_id, writable=True)
+    change_recipients(db, assignment, body, _membership.id)
+    db.commit()
+
+
+@router.get("/{assignment_id}/recipients")
+def get_recipients(
+    course_id: int, assignment_id: int, db: DbSession, _membership: InstructorMembership
+):
+    load_assignment(db, course_id, assignment_id)
+    return {
+        "items": [
+            {"membership_id": r.membership_id, "removed_at": r.removed_at}
+            for r in db.scalars(
+                select(AssignmentRecipient)
+                .where(AssignmentRecipient.assignment_id == assignment_id)
+                .order_by(AssignmentRecipient.membership_id)
+            )
+        ]
+    }
+
+
+@router.post("/{assignment_id}/archive", response_model=AssignmentResponse)
+def archive_assignment(
+    course_id: int, assignment_id: int, db: DbSession, _membership: InstructorMembership
+):
+    assignment = load_assignment(db, course_id, assignment_id, writable=True)
+    if assignment.state == AssignmentState.DRAFT:
+        raise ApiError(
+            409,
+            "assignment_not_published",
+            "Only published assignments can be archived.",
+        )
+    assignment.state = AssignmentState.ARCHIVED
+    audit(
+        db,
+        assignment,
+        _membership.id,
+        "archive",
+        {"state": "published"},
+        {"state": "archived"},
+    )
+    db.commit()
+    return assignment_response(assignment)
+
+
+@router.get("/{assignment_id}/audit")
+def assignment_audit(
+    course_id: int,
+    assignment_id: int,
+    db: DbSession,
+    _membership: InstructorMembership,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    load_assignment(db, course_id, assignment_id)
+    query = select(AssignmentAudit).where(
+        AssignmentAudit.assignment_id == assignment_id
+    )
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.scalars(
+        query.order_by(AssignmentAudit.id.desc()).offset(offset).limit(limit)
+    )
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "actor_membership_id": r.actor_membership_id,
+                "action": r.action,
+                "before": r.before,
+                "after": r.after,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/{assignment_id}/grades")
+def assignment_grades(
+    course_id: int,
+    assignment_id: int,
+    db: DbSession,
+    _membership: StaffMembership,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    assignment = load_assignment(db, course_id, assignment_id)
+    if assignment.state == AssignmentState.DRAFT:
+        raise ApiError(
+            409, "assignment_not_published", "Publish before reading grades."
+        )
+    rows = grade_rows(db, course_id, assignment_id)
+    return {
+        "items": rows[offset : offset + limit],
+        "total": len(rows),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("", response_model=AssignmentListResponse)
@@ -170,11 +302,13 @@ def list_assignments(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    membership = get_membership(db, course_id, user.id)
-    query = _assignment_query(course_id).order_by(Assignment.created_at.desc())
-    if membership.role == MembershipRole.STUDENT:
+    membership = get_membership(db, course_id, user.id, include_withdrawn=True)
+    query = _assignment_query(course_id).order_by(
+        Assignment.created_at.desc(), Assignment.id.desc()
+    )
+    if membership.role == MembershipRole.STUDENT or membership.withdrawn_at is not None:
         query = query.where(
-            Assignment.state == AssignmentState.PUBLISHED,
+            Assignment.state != AssignmentState.DRAFT,
             or_(
                 Assignment.available_at.is_(None),
                 Assignment.available_at <= datetime.now(UTC).replace(tzinfo=None),
@@ -182,6 +316,7 @@ def list_assignments(
             exists().where(
                 AssignmentRecipient.assignment_id == Assignment.id,
                 AssignmentRecipient.membership_id == membership.id,
+                AssignmentRecipient.removed_at.is_(None),
             ),
         )
     assignments = list(db.scalars(query).unique().all())
@@ -202,7 +337,7 @@ def get_assignment(
     db: DbSession,
     user: CurrentUser,
 ):
-    membership = get_membership(db, course_id, user.id)
+    membership = get_membership(db, course_id, user.id, include_withdrawn=True)
     assignment = db.scalar(
         _assignment_query(course_id).where(Assignment.id == assignment_id)
     )

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Response
+from fastapi import APIRouter, Cookie, Request, Response
 from sqlalchemy import select
 
 from ..core.config import settings
@@ -14,6 +14,17 @@ from ..core.security import (
 )
 from ..models import User, UserSession
 from ..schemas.contracts import LoginRequest, UserResponse
+from ..schemas.course_management import (
+    EmailVerificationRequest,
+    PasswordRecoveryRequest,
+    PasswordResetRequest,
+)
+from ..services.account_recovery import (
+    request_password_reset,
+    reset_password,
+    verify_email,
+)
+from ..services.account_throttle import throttle_account_request
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -21,7 +32,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=UserResponse)
 def login(body: LoginRequest, response: Response, db: DbSession):
     email = body.email.strip().lower()
-    user = db.scalar(select(User).where(User.email == email))
+    user = db.scalar(
+        select(User)
+        .where(User.email == email)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if (
         user is None
         or user.disabled_at is not None
@@ -66,3 +82,27 @@ def logout(
 @router.get("/me", response_model=UserResponse)
 def me(user: CurrentUser):
     return user
+
+
+@router.post("/password-recovery", status_code=202)
+def recover_password(body: PasswordRecoveryRequest, db: DbSession, request: Request):
+    throttle_account_request(
+        db, "recovery", request.client.host if request.client else "unknown"
+    )
+    request_password_reset(db, body.email)
+    return {
+        "message": "If the account is eligible, a password reset link will be sent."
+    }
+
+
+@router.post("/password-reset", status_code=204)
+def change_password(body: PasswordResetRequest, db: DbSession, response: Response):
+    if body.password != body.password_confirm:
+        raise ApiError(422, "password_mismatch", "Passwords do not match.")
+    reset_password(db, body.token, body.password)
+    response.delete_cookie(settings.SESSION_COOKIE_NAME, path="/")
+
+
+@router.post("/verify-email", response_model=UserResponse)
+def confirm_email(body: EmailVerificationRequest, db: DbSession):
+    return verify_email(db, body.token)

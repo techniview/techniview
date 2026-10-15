@@ -1,9 +1,21 @@
 import pytest
-from app.models import CourseMembership, MembershipRole
+from app.core.config import settings
+from app.models import AccountToken, CourseMembership, MembershipRole, User
 from app.seed import DEMO_COURSE_JOIN_TOKEN
+from app.services.account_recovery import account_token_value
 from sqlalchemy import func, select
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+def capture_email(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "EMAIL_DELIVERY_MODE", "capture")
+    monkeypatch.setattr(
+        settings, "EMAIL_SIGNING_KEY", "test-signing-key-with-at-least-32-characters"
+    )
+    monkeypatch.setattr(settings, "EMAIL_CAPTURE_DIR", str(tmp_path))
+
 
 JOIN = f"/api/join/{DEMO_COURSE_JOIN_TOKEN}"
 
@@ -32,9 +44,24 @@ async def test_join_signup_and_login_variants_are_idempotent(client, db_session)
             "password_confirm": "password123",
         },
     )
-    assert signup.status_code == 200
-    assert signup.json()["email"] == "newkid@techniview.local"
-    assert signup.json()["role"] == "student"
+    assert signup.status_code == 202
+    account = db_session.scalar(
+        select(User).where(User.email == "newkid@techniview.local")
+    )
+    assert (
+        db_session.scalar(
+            select(CourseMembership).where(CourseMembership.user_id == account.id)
+        )
+        is None
+    )
+    token = db_session.scalar(
+        select(AccountToken).where(AccountToken.user_id == account.id)
+    )
+    verified = await client.post(
+        "/api/auth/verify-email", json={"token": account_token_value(token)}
+    )
+    assert verified.status_code == 200
+    assert verified.json()["email"] == "newkid@techniview.local"
 
     # Same link again via login variant: no duplicate membership.
     login = await client.post(
@@ -139,7 +166,7 @@ async def test_ta_keeps_read_access_but_cannot_manage(client, db_session):
     ).status_code == 403
 
 
-async def test_instructor_hard_erase_removes_class_data(client, db_session):
+async def test_instructor_withdrawal_preserves_class_data(client, db_session):
     await _login(client, "teacher@techniview.local", "teacher-demo")
     course_id = (await client.get("/api/courses")).json()["items"][0]["id"]
     members = (await client.get(f"/api/courses/{course_id}/members")).json()
@@ -152,8 +179,8 @@ async def test_instructor_hard_erase_removes_class_data(client, db_session):
         f"/api/courses/{course_id}/members/{student_row['id']}"
     )
     assert response.status_code == 204
-    assert db_session.get(CourseMembership, student_row["id"]) is None
-    # Seeded student had assignment progress + recipient rows: both gone.
+    assert db_session.get(CourseMembership, student_row["id"]).withdrawn_at is not None
+    # Historical recipients and assignment progress remain available.
     from app.models import AssignmentRecipient, StudentAssignmentProgress
 
     assert (
@@ -162,7 +189,7 @@ async def test_instructor_hard_erase_removes_class_data(client, db_session):
             .select_from(AssignmentRecipient)
             .where(AssignmentRecipient.membership_id == student_row["id"])
         )
-        == 0
+        > 0
     )
     assert (
         db_session.scalar(
@@ -170,7 +197,7 @@ async def test_instructor_hard_erase_removes_class_data(client, db_session):
             .select_from(StudentAssignmentProgress)
             .where(StudentAssignmentProgress.student_id == me["id"])
         )
-        == 0
+        > 0
     )
 
 
@@ -188,7 +215,7 @@ async def test_join_signup_blank_name_rejected(client):
     assert response.json()["error"]["code"] == "invalid_name"
 
 
-async def test_cannot_remove_member_who_authored_assignments(client, db_session):
+async def test_withdrawal_preserves_authored_assignments(client, db_session):
     from app.models import Assignment, AssignmentState
 
     await _login(client, "teacher@techniview.local", "teacher-demo")
@@ -205,8 +232,7 @@ async def test_cannot_remove_member_who_authored_assignments(client, db_session)
     )
     db_session.add(assignment)
     db_session.commit()
-    # Add a second instructor so the last-instructor guard passes and the
-    # authored-assignments guard is the one under test.
+    # A second instructor keeps the course manageable after withdrawal.
     student_row = next(item for item in members["items"] if item["role"] == "student")
     await client.patch(
         f"/api/courses/{course_id}/members/{student_row['id']}",
@@ -215,8 +241,11 @@ async def test_cannot_remove_member_who_authored_assignments(client, db_session)
     response = await client.delete(
         f"/api/courses/{course_id}/members/{instructor_row['id']}"
     )
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "member_authored_assignments"
+    assert response.status_code == 204
+    assert db_session.get(Assignment, assignment.id) is not None
+    assert (
+        db_session.get(CourseMembership, instructor_row["id"]).withdrawn_at is not None
+    )
 
 
 async def test_ta_sees_staff_problems_in_listing(client, db_session):

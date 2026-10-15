@@ -21,6 +21,20 @@ def build_database_url(
 
 
 class Settings:
+    EMAIL_DELIVERY_MODE = os.getenv("EMAIL_DELIVERY_MODE", "disabled")
+    EMAIL_CAPTURE_DIR = os.getenv("EMAIL_CAPTURE_DIR", "/tmp/techniview-mail")
+    EMAIL_SIGNING_KEY = os.getenv("EMAIL_SIGNING_KEY", "")
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    EMAIL_FROM = os.getenv("EMAIL_FROM", "")
+    PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:5173")
+    PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
+    EMAIL_VERIFICATION_MINUTES = int(os.getenv("EMAIL_VERIFICATION_MINUTES", "1440"))
+    EMAIL_TOKEN_COOLDOWN_SECONDS = int(os.getenv("EMAIL_TOKEN_COOLDOWN_SECONDS", "60"))
+    EMAIL_MAX_ATTEMPTS = int(os.getenv("EMAIL_MAX_ATTEMPTS", "5"))
+    EMAIL_LEASE_SECONDS = int(os.getenv("EMAIL_LEASE_SECONDS", "60"))
+    WORKER_LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "60"))
+    WORKER_POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "2"))
+    WORKER_RECOVERY_SECONDS = int(os.getenv("WORKER_RECOVERY_SECONDS", "600"))
     # MySQL (platform DB)
     MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql")
     MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
