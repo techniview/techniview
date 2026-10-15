@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
     getStudentAssignments,
     getTeacherCourses,
+    type Assignment,
     type Course,
 } from "../../api/analytics";
 import { getAvailableProblems, type ProblemSummary } from "../../api/problems";
@@ -13,11 +14,22 @@ function formatDifficulty(difficulty: ProblemSummary["difficulty"]): string {
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
 }
 
+async function courseAssignments(courseId: number): Promise<Assignment[]> {
+    const assignments: Assignment[] = [];
+    while (true) {
+        const page = await getStudentAssignments(courseId, assignments.length);
+        assignments.push(...page.items);
+        if (assignments.length >= page.total || page.items.length === 0) {
+            return assignments;
+        }
+    }
+}
+
 export default function StudentProblemsPage() {
     const [problems, setProblems] = useState<ProblemSummary[]>([]);
-    const [assignedProblemIds, setAssignedProblemIds] = useState<Set<number>>(
-        new Set(),
-    );
+    const [assignmentItemsByProblem, setAssignmentItemsByProblem] = useState<
+        Map<number, number>
+    >(new Map());
     const [course, setCourse] = useState<Course | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -32,21 +44,24 @@ export default function StudentProblemsPage() {
                     getTeacherCourses(),
                 ]);
                 const studentCourse = courses.items[0];
-                if (!studentCourse) {
-                    throw new Error("No course found.");
-                }
-
-                const assignments = await getStudentAssignments(studentCourse.id);
-                const assignedIds = new Set(
-                    assignments.items.flatMap((assignment) =>
-                        assignment.items.map((item) => item.problem.id),
+                const assignmentLists = await Promise.all(
+                    courses.items.map((item) => courseAssignments(item.id)),
+                );
+                const assignedItems = new Map<number, number>();
+                assignmentLists.forEach((list) =>
+                    list.forEach((assignment) =>
+                        assignment.items.forEach((item) => {
+                            if (!assignedItems.has(item.problem.id)) {
+                                assignedItems.set(item.problem.id, item.id);
+                            }
+                        }),
                     ),
                 );
 
                 if (isCurrent) {
                     setProblems(problemResponse.items);
-                    setAssignedProblemIds(assignedIds);
-                    setCourse(studentCourse);
+                    setAssignmentItemsByProblem(assignedItems);
+                    setCourse(studentCourse ?? null);
                 }
             } catch {
                 if (isCurrent) {
@@ -105,7 +120,10 @@ export default function StudentProblemsPage() {
                                 )?.name ??
                                 problem.tags[0] ??
                                 "General";
-                            const isAssigned = assignedProblemIds.has(problem.id);
+                            const assignmentItemId = assignmentItemsByProblem.get(
+                                problem.id,
+                            );
+                            const isAssigned = assignmentItemId !== undefined;
 
                             return (
                                 <tr key={problem.id}>
@@ -120,7 +138,9 @@ export default function StudentProblemsPage() {
                                         )}
                                     </td>
                                     <td>
-                                        <Link to={`/student/problems/${problem.id}`}>
+                                        <Link
+                                            to={`/student/problems/${problem.id}${isAssigned ? `?assignment_item_id=${assignmentItemId}` : ""}`}
+                                        >
                                             Open problem
                                         </Link>
                                     </td>

@@ -1,9 +1,11 @@
 import csv
 import io
 import re
+from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
+from ..core.config import settings
 from ..core.errors import ApiError
 from ..core.security import hash_token
 from ..models import (
@@ -148,23 +150,45 @@ def _import_entries(db, course_id, entries):
 
 def _queue_pending(db, course_id: int, entry: dict[str, str]) -> None:
     pending = db.scalar(
-        select(CourseEnrollment).where(
+        select(CourseEnrollment)
+        .where(
             CourseEnrollment.course_id == course_id,
             CourseEnrollment.email == entry["email"],
         )
+        .with_for_update()
     )
     if pending is not None:
         pending.name = entry["name"]
+        active_job = db.scalar(
+            select(EmailJob.id)
+            .where(
+                EmailJob.enrollment_id == pending.id,
+                EmailJob.kind == "enrollment",
+                EmailJob.sent_at.is_(None),
+                or_(
+                    EmailJob.attempts < settings.EMAIL_MAX_ATTEMPTS,
+                    EmailJob.claimed_at
+                    >= now_utc() - timedelta(seconds=settings.EMAIL_LEASE_SECONDS),
+                ),
+            )
+            .limit(1)
+        )
+        if active_job is None:
+            _queue_enrollment_email(db, pending)
         return
     pending = CourseEnrollment(course_id=course_id, **entry)
     db.add(pending)
     db.flush()
     pending.token_hash = hash_token(enrollment_token_value(pending))
+    _queue_enrollment_email(db, pending)
+
+
+def _queue_enrollment_email(db, pending: CourseEnrollment) -> None:
     db.add(
         EmailJob(
             recipient=pending.email,
             kind="enrollment",
-            course_id=course_id,
+            course_id=pending.course_id,
             enrollment_id=pending.id,
             available_at=now_utc(),
         )

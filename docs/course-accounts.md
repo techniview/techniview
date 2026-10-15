@@ -26,8 +26,10 @@ accounts, and staff accounts. An invalid row rejects the whole import.
 
 Verified existing students join immediately. New or unverified students receive
 a pending roster entry and an email with a link restricted to their email address.
-Importing the same pending entry again updates its name without sending another
-email. Newly enrolled existing students receive a course notification.
+Importing the same pending entry again updates its name. It queues a new email
+if the previous invitation was sent or ran out of delivery retries; an email
+that is still queued or retrying is left alone. Newly enrolled existing students
+receive a course notification.
 `GET /api/courses/{id}/enrollments` lists pending entries for staff;
 `DELETE /api/courses/{id}/enrollments/{enrollment_id}` cancels one, invalidating
 its link and pending verification tokens for that course.

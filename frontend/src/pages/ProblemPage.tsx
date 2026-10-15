@@ -12,6 +12,25 @@ function formatDifficulty(difficulty: ProblemDetail["difficulty"]) {
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
 }
 
+function initialAssignmentItemId(
+    problem: ProblemDetail,
+    search: string,
+): number | null {
+    const requested = new URLSearchParams(search).get("assignment_item_id");
+    if (requested !== null) {
+        const context = problem.assignment_contexts.find(
+            (item) => item.assignment_item_id === Number(requested),
+        );
+        if (!context) {
+            throw new Error("Assignment context is unavailable.");
+        }
+        return context.assignment_item_id;
+    }
+    return problem.origin === "custom"
+        ? (problem.assignment_contexts[0]?.assignment_item_id ?? null)
+        : null;
+}
+
 function submissionMessage(submission: Submission): string {
     if (!submission.done) {
         return submission.status === "running"
@@ -31,6 +50,7 @@ export default function ProblemPage() {
     const [problem, setProblem] = useState<ProblemDetail | null>(null);
     const [sourceCode, setSourceCode] = useState("");
     const [submission, setSubmission] = useState<Submission | null>(null);
+    const [assignmentItemId, setAssignmentItemId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRunning, setIsRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,13 +63,19 @@ export default function ProblemPage() {
         }
 
         let isCurrent = true;
-        Promise.all([getProblem(parsedProblemId), startProblem(parsedProblemId)])
-            .then(([loadedProblem]) => {
+        getProblem(parsedProblemId)
+            .then(async (loadedProblem) => {
+                const selected = initialAssignmentItemId(
+                    loadedProblem,
+                    location.search,
+                );
+                await startProblem(parsedProblemId, selected ?? undefined);
                 if (!isCurrent) {
                     return;
                 }
                 setProblem(loadedProblem);
                 setSourceCode(loadedProblem.starter_code);
+                setAssignmentItemId(selected);
             })
             .catch(() => {
                 if (isCurrent) {
@@ -65,7 +91,7 @@ export default function ProblemPage() {
         return () => {
             isCurrent = false;
         };
-    }, [parsedProblemId]);
+    }, [location.search, parsedProblemId]);
 
     useEffect(() => {
         if (!submission || submission.done) {
@@ -106,7 +132,11 @@ export default function ProblemPage() {
         setSubmission(null);
         setIsRunning(true);
         try {
-            const createdSubmission = await createSubmission(problem.id, sourceCode);
+            const createdSubmission = await createSubmission(
+                problem.id,
+                sourceCode,
+                assignmentItemId ?? undefined,
+            );
             setSubmission(createdSubmission);
             if (createdSubmission.done) {
                 setIsRunning(false);
@@ -149,6 +179,39 @@ export default function ProblemPage() {
                     {problem.test_count} test cases
                 </p>
             </header>
+
+            {problem.assignment_contexts.length > 0 && (
+                <label>
+                    Work for
+                    <select
+                        disabled={isRunning}
+                        value={assignmentItemId ?? ""}
+                        onChange={(event) => {
+                            const selected = event.target.value
+                                ? Number(event.target.value)
+                                : null;
+                            setAssignmentItemId(selected);
+                            setSubmission(null);
+                            setError(null);
+                            void startProblem(problem.id, selected ?? undefined).catch(
+                                () => setError("We could not start this assignment."),
+                            );
+                        }}
+                    >
+                        {problem.origin !== "custom" && (
+                            <option value="">Independent practice</option>
+                        )}
+                        {problem.assignment_contexts.map((context) => (
+                            <option
+                                key={context.assignment_item_id}
+                                value={context.assignment_item_id}
+                            >
+                                {context.course_name}: {context.assignment_title}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            )}
 
             {error && <ErrorState message={error} />}
 

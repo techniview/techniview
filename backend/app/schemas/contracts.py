@@ -111,6 +111,13 @@ class ProblemSummaryResponse(BaseModel):
     source_category: str | None = None
 
 
+class ProblemAssignmentContextResponse(BaseModel):
+    assignment_item_id: int
+    assignment_title: str
+    course_id: int
+    course_name: str
+
+
 class ProblemDetailResponse(ProblemSummaryResponse):
     prompt: str
     execution_mode: ExecutionMode
@@ -120,6 +127,9 @@ class ProblemDetailResponse(ProblemSummaryResponse):
     test_count: int
     attribution: str | None
     license: str | None
+    assignment_contexts: list[ProblemAssignmentContextResponse] = Field(
+        default_factory=list
+    )
 
 
 class ProblemListResponse(BaseModel):

@@ -11,6 +11,7 @@ from ..models import (
     AssignmentItem,
     AssignmentRecipient,
     AssignmentState,
+    Course,
     CourseMembership,
     Difficulty,
     MembershipRole,
@@ -27,28 +28,44 @@ from ..services.progress import get_or_create_progress
 router = APIRouter(prefix="/problems", tags=["problems"])
 
 
-def _assigned_problem_ids(db: Session, user_id: int) -> set[int]:
+def _assignment_contexts(db: Session, user_id: int, problem_id: int | None = None):
     now = datetime.now(UTC).replace(tzinfo=None)
-    return set(
-        db.scalars(
-            select(AssignmentItem.problem_id)
-            .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
-            .join(
-                AssignmentRecipient,
-                AssignmentRecipient.assignment_id == AssignmentItem.assignment_id,
-            )
-            .join(
-                CourseMembership,
-                CourseMembership.id == AssignmentRecipient.membership_id,
-            )
-            .where(
-                CourseMembership.user_id == user_id,
-                CourseMembership.withdrawn_at.is_(None),
-                Assignment.state == AssignmentState.PUBLISHED,
-                or_(Assignment.available_at.is_(None), Assignment.available_at <= now),
-            )
-        ).all()
+    query = (
+        select(
+            AssignmentItem.id,
+            AssignmentItem.problem_id,
+            Assignment.title,
+            Course.id,
+            Course.name,
+        )
+        .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
+        .join(Course, Course.id == Assignment.course_id)
+        .join(
+            AssignmentRecipient,
+            AssignmentRecipient.assignment_id == AssignmentItem.assignment_id,
+        )
+        .join(
+            CourseMembership,
+            CourseMembership.id == AssignmentRecipient.membership_id,
+        )
+        .where(
+            CourseMembership.user_id == user_id,
+            CourseMembership.withdrawn_at.is_(None),
+            AssignmentRecipient.removed_at.is_(None),
+            Course.archived_at.is_(None),
+            Assignment.state == AssignmentState.PUBLISHED,
+            or_(Assignment.available_at.is_(None), Assignment.available_at <= now),
+        )
     )
+    if problem_id is not None:
+        query = query.where(AssignmentItem.problem_id == problem_id)
+    return db.execute(
+        query.order_by(Course.name, Assignment.title, AssignmentItem.id)
+    ).all()
+
+
+def _assigned_problem_ids(db: Session, user_id: int) -> set[int]:
+    return {row[1] for row in _assignment_contexts(db, user_id)}
 
 
 def _staffed_problem_ids(db: Session, user_id: int) -> set[int]:
@@ -144,7 +161,19 @@ def get_problem(
     db: DbSession,
     user: CurrentUser,
 ):
-    return problem_detail(_visible_problem(db, problem_id, user))
+    detail = problem_detail(_visible_problem(db, problem_id, user))
+    detail["assignment_contexts"] = [
+        {
+            "assignment_item_id": item_id,
+            "assignment_title": title,
+            "course_id": course_id,
+            "course_name": course_name,
+        }
+        for item_id, _problem_id, title, course_id, course_name in _assignment_contexts(
+            db, user.id, problem_id
+        )
+    ]
+    return detail
 
 
 @router.post("/{problem_id}/start", status_code=204)

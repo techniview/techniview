@@ -155,8 +155,10 @@ export function getTeacherCourses() {
     return apiRequest<CourseList>("/api/courses");
 }
 
-export function getStudentAssignments(courseId: number) {
-    return apiRequest<AssignmentList>(`/api/courses/${courseId}/assignments?limit=100`);
+export function getStudentAssignments(courseId: number, offset = 0) {
+    return apiRequest<AssignmentList>(
+        `/api/courses/${courseId}/assignments?limit=100&offset=${offset}`,
+    );
 }
 
 export function getClassMembers(courseId: number) {

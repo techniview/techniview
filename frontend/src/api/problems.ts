@@ -42,14 +42,22 @@ export type ProblemDetail = {
     test_count: number;
     attribution: string | null;
     license: string | null;
+    assignment_contexts: Array<{
+        assignment_item_id: number;
+        assignment_title: string;
+        course_id: number;
+        course_name: string;
+    }>;
 };
 
 export function getProblem(problemId: number) {
     return apiRequest<ProblemDetail>(`/api/problems/${problemId}`);
 }
 
-export function startProblem(problemId: number) {
-    return apiRequest<undefined>(`/api/problems/${problemId}/start`, {
+export function startProblem(problemId: number, assignmentItemId?: number) {
+    const query =
+        assignmentItemId === undefined ? "" : `?assignment_item_id=${assignmentItemId}`;
+    return apiRequest<undefined>(`/api/problems/${problemId}/start${query}`, {
         method: "POST",
     });
 }
