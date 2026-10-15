@@ -206,8 +206,6 @@ prerequisite pool. Within each pool, problems are ordered easy to hard. Browse
 the Trail at `GET /api/curriculum`; use `?kind=problem_type` for the secondary
 classification view. The response includes problem IDs and summaries; fetch a
 full statement and public examples with `GET /api/problems/{problem_id}`.
-The catalog also contains explicit problem prerequisite edges. The importer checks
-them for missing nodes and cycles, and the curriculum response marks unfinished
-nodes as locked until their prerequisites are completed. The initial 147 edges
-follow the existing technique-pool prerequisites. Maintainers can revise those
-edges in the catalog without changing student progress records.
+Trail progression is defined by the technique pools and their tiers. Individual
+problems do not have prerequisites; students can open any published practice
+problem even when another pool is currently recommended.

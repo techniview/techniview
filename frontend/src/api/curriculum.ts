@@ -3,9 +3,8 @@ import type { ProblemSummary } from "./problems";
 
 export type CurriculumProblem = {
     problem: ProblemSummary;
-    status: "locked" | "not_started" | "attempted" | "completed";
+    status: "not_started" | "attempted" | "completed";
     recommended: boolean;
-    prerequisite_problem_ids: number[];
 };
 
 export type CurriculumPool = {

@@ -161,7 +161,6 @@ class CurriculumProblemResponse(BaseModel):
     problem: ProblemSummaryResponse
     status: str
     recommended: bool = False
-    prerequisite_problem_ids: list[int] = Field(default_factory=list)
 
 
 class CurriculumPoolResponse(BaseModel):

@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..models import (
-    CurriculumEdge,
     CurriculumNode,
     Difficulty,
     Problem,
@@ -256,10 +255,6 @@ def build_curriculum(db: Session, user: User, kind: ProblemTagKind) -> list[dict
             )
         )
     }
-    prerequisites: dict[int, list[int]] = defaultdict(list)
-    for edge in db.scalars(select(CurriculumEdge)):
-        prerequisites[edge.problem_id].append(edge.prerequisite_problem_id)
-
     pools: dict[str, dict] = {}
     problem_pool_slugs: dict[int, set[str]] = {}
     if kind == ProblemTagKind.TECHNIQUE:
@@ -288,12 +283,6 @@ def build_curriculum(db: Session, user: User, kind: ProblemTagKind) -> list[dict
             status = "completed"
         elif row is not None and row.valid_attempt_count > 0:
             status = "attempted"
-        elif any(
-            progress.get(prerequisite) is None
-            or progress[prerequisite].first_passed_at is None
-            for prerequisite in prerequisites[node.problem_id]
-        ):
-            status = "locked"
         else:
             status = "not_started"
         for pool_slug in problem_pool_slugs[node.problem_id]:
@@ -303,7 +292,6 @@ def build_curriculum(db: Session, user: User, kind: ProblemTagKind) -> list[dict
                     "priority": node.priority,
                     "status": status,
                     "recommended": False,
-                    "prerequisite_problem_ids": sorted(prerequisites[node.problem_id]),
                 }
             )
 
@@ -352,7 +340,6 @@ def build_curriculum(db: Session, user: User, kind: ProblemTagKind) -> list[dict
                         "problem": problem_summary(item["problem"]),
                         "status": item["status"],
                         "recommended": item["recommended"],
-                        "prerequisite_problem_ids": item["prerequisite_problem_ids"],
                     }
                     for item in items
                 ],

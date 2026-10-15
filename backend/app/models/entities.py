@@ -287,17 +287,6 @@ class CurriculumNode(Base):
     problem: Mapped[Problem] = relationship(lazy="joined")
 
 
-class CurriculumEdge(Base):
-    __tablename__ = "curriculum_edges"
-
-    prerequisite_problem_id: Mapped[int] = mapped_column(
-        ForeignKey("curriculum_nodes.problem_id", ondelete="CASCADE"), primary_key=True
-    )
-    problem_id: Mapped[int] = mapped_column(
-        ForeignKey("curriculum_nodes.problem_id", ondelete="CASCADE"), primary_key=True
-    )
-
-
 class Assignment(Base):
     __tablename__ = "assignments"
     __table_args__ = (
