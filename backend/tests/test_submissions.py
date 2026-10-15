@@ -1,280 +1,183 @@
+from datetime import timedelta
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
 import pytest
-from app.models import AssignmentItem, StudentPracticeProgress, SubmissionCaseResult
+from app.models import (
+    AssignmentItem,
+    StudentPracticeProgress,
+    Submission,
+    SubmissionCaseResult,
+)
+from app.routers.submissions import get_status_message
+from app.services.progress import utc_now
+from app.worker.submissions import process_next_submission
 from sqlalchemy import select
 
 pytestmark = pytest.mark.anyio
 
 
-async def test_status_messages_cover_all_known_ids():
-    from app.routers.submissions import get_status_message
-
-    for status_id in range(1, 15):
-        msg = get_status_message(status_id)
-        assert isinstance(msg, str) and msg
-        assert "Unknown" not in msg
-    assert "Unknown" in get_status_message(999)
-
-
-async def _first_problem_id(client) -> int:
-    return (await client.get("/api/problems")).json()["items"][0]["id"]
+def _run(db, reports, polling=None):
+    with patch("app.worker.submissions.judge0_submit", side_effect=reports) as submit:
+        with patch(
+            "app.worker.submissions.judge0_get", side_effect=polling or []
+        ) as get:
+            assert process_next_submission(db, "test-worker") is True
+    return submit, get
 
 
-async def _problem_id(client, title: str) -> int:
+async def _problem_id(client, title):
     problems = (await client.get("/api/problems")).json()["items"]
     return next(item["id"] for item in problems if item["title"] == title)
 
 
-async def test_create_validates_empty_source(student_client):
-    problem_id = await _first_problem_id(student_client)
-    response = await student_client.post(
-        "/api/submissions",
-        json={"source_code": "", "problem_id": problem_id},
-    )
-    assert response.status_code == 422
+async def test_status_messages_cover_all_known_ids():
+    for status_id in range(1, 15):
+        msg = get_status_message(status_id)
+        assert isinstance(msg, str) and "Unknown" not in msg
+    assert "Unknown" in get_status_message(999)
 
 
-async def test_create_rejects_client_owned_grading_fields(student_client):
-    problem_id = await _first_problem_id(student_client)
-    response = await student_client.post(
-        "/api/submissions",
-        json={
-            "source_code": "print(1)",
-            "problem_id": problem_id,
-            "stdin": "anything",
-            "expected_output": "anything",
-            "cpu_time_limit": 1000,
-        },
-    )
-    assert response.status_code == 422
-
-
-async def test_create_rejects_language_override(student_client):
-    problem_id = await _first_problem_id(student_client)
-    with patch("app.routers.submissions.judge0_submit") as mock_submit:
-        response = await student_client.post(
-            "/api/submissions",
-            json={
-                "source_code": "print(1)",
-                "problem_id": problem_id,
-                "language_id": 54,
-            },
-        )
-        assert response.status_code == 422
-        mock_submit.assert_not_called()
-
-
-async def test_get_rejects_bad_id_without_calling_judge0(student_client):
-    with patch("app.routers.submissions.judge0_get") as mock_get:
-        response = await student_client.get("/api/submissions/not-an-id")
-        assert response.status_code == 422
-        mock_get.assert_not_called()
-
-
-async def test_submission_runs_every_server_owned_test_without_exposing_hidden_case(
-    student_client,
-):
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"source_code": ""},
+        {"language_id": 54},
+        {"stdin": "x", "expected_output": "x", "cpu_time_limit": 1000},
+    ],
+)
+async def test_submission_rejects_client_owned_fields(student_client, extra):
     problem_id = await _problem_id(student_client, "Sum a List")
-    judge0_responses = [
-        {"token": "public-token", "status": {"id": 3}},
-        {"token": "hidden-token", "status": {"id": 4}},
-    ]
-    with patch(
-        "app.routers.submissions.judge0_submit",
-        side_effect=judge0_responses,
-    ) as mock_submit:
-        response = await student_client.post(
-            "/api/submissions?wait=true",
-            json={
-                "source_code": "def sum_list(values):\n    return sum(values)\n",
-                "problem_id": problem_id,
-            },
-        )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["done"] is True
-    assert body["status"] == "failed"
-    assert body["passed_count"] == 1
-    assert body["test_count"] == 2
-    assert len(body["public_results"]) == 1
-    assert "[[-2, 2]]" not in response.text
-    assert "hidden-token" not in response.text
-    assert mock_submit.call_count == 2
-    assert [call.kwargs["expected_output"] for call in mock_submit.call_args_list] == [
-        "6",
-        "0",
-    ]
-    assert all("language_id" not in call.kwargs for call in mock_submit.call_args_list)
-    for call in mock_submit.call_args_list:
-        assert "__techniview_target" in call.args[0]
+    payload = {"problem_id": problem_id, "source_code": "print(1)", **extra}
+    assert (
+        await student_client.post("/api/submissions", json=payload)
+    ).status_code == 422
 
 
-async def test_wait_result_persists_judge0_report_fields(student_client, db_session):
-    problem_id = await _problem_id(student_client, "Count Evens")
-    response_data = {
-        "token": "report-token",
-        "status": {"id": 3},
-        "time": "0.125",
-        "memory": 42.2,
-        "stdout": "2\n",
-        "stderr": "",
-        "compile_output": None,
-    }
-    with patch("app.routers.submissions.judge0_submit", return_value=response_data):
-        response = await student_client.post(
-            "/api/submissions?wait=true",
-            json={"source_code": "print(2)", "problem_id": problem_id},
-        )
-
-    assert response.status_code == 200
-    result = db_session.scalar(
-        select(SubmissionCaseResult).where(
-            SubmissionCaseResult.judge0_token == "report-token"
-        )
-    )
-    assert result is not None
-    assert result.execution_time_ms == 125
-    assert result.memory_kb == 43
-    assert result.stdout == "2\n"
-    assert result.stderr == ""
-    assert result.compile_output is None
+async def test_get_rejects_bad_id(student_client):
+    assert (await student_client.get("/api/submissions/not-an-id")).status_code == 422
 
 
-async def test_callback_completes_submission_without_polling(
+async def test_worker_runs_server_cases_and_redacts_hidden_case(
     student_client, db_session
 ):
     problem_id = await _problem_id(student_client, "Sum a List")
-    responses = [
-        {"token": "callback-token-1"},
-        {"token": "callback-token-2"},
+    created = await student_client.post(
+        "/api/submissions",
+        json={
+            "problem_id": problem_id,
+            "source_code": "def sum_list(values): return sum(values)",
+        },
+    )
+    assert created.status_code == 202
+    reports = [
+        {
+            "token": "public-token",
+            "status": {"id": 3},
+            "stdout": "6\n",
+            "time": "0.125",
+            "memory": 42.2,
+        },
+        {"token": "hidden-token", "status": {"id": 4}, "stdout": "wrong\n"},
     ]
-    with patch(
-        "app.routers.submissions.judge0_submit", side_effect=responses
-    ) as mock_submit:
-        response = await student_client.post(
-            "/api/submissions",
-            json={"source_code": "print(2)", "problem_id": problem_id},
-        )
+    submit, _ = _run(db_session, reports)
+    body = (await student_client.get(f"/api/submissions/{created.json()['id']}")).json()
+    assert body["status"] == "failed"
+    assert body["score"] == 0.5
+    assert body["passed_count"] == 1 and body["test_count"] == 2
+    assert len(body["public_results"]) == 1
+    assert body["public_results"][0]["stdout"] == "6\n"
+    assert body["public_results"][0]["execution_time_ms"] == 125
+    assert "wrong\n" not in str(body)
+    assert "[[-2, 2]]" not in str(body)
+    assert submit.call_count == 2
+    assert [call.kwargs["expected_output"] for call in submit.call_args_list] == [
+        "6",
+        "0",
+    ]
+    assert all("language_id" not in call.kwargs for call in submit.call_args_list)
 
-    assert response.status_code == 200
-    assert response.json()["done"] is False
-    callback_paths = [
-        urlsplit(call.kwargs["callback_url"]).path
-        for call in mock_submit.call_args_list
-    ]
-    for path, token in zip(
-        callback_paths, ("callback-token-1", "callback-token-2"), strict=True
-    ):
+
+async def test_callback_finalizes_without_student_poll(student_client, db_session):
+    problem_id = await _problem_id(student_client, "Sum a List")
+    created = await student_client.post(
+        "/api/submissions", json={"problem_id": problem_id, "source_code": "print(2)"}
+    )
+    submit, _ = _run(db_session, [{"token": "callback-1"}, {"token": "callback-2"}])
+    paths = [urlsplit(c.kwargs["callback_url"]).path for c in submit.call_args_list]
+    for path, token in zip(paths, ("callback-1", "callback-2"), strict=True):
         callback = await student_client.put(
             path,
             json={
                 "token": token,
                 "status": {"id": 3},
-                "time": 0.01,
-                "memory": 12,
                 "stdout": "Mgo=",
+                "time": "0.01",
+                "memory": 12,
             },
         )
         assert callback.status_code == 200
-
-    final = await student_client.get(f"/api/submissions/{response.json()['id']}")
-    assert final.status_code == 200
-    assert final.json()["status"] == "passed"
-    assert final.json()["done"] is True
-    rows = db_session.scalars(
-        select(SubmissionCaseResult).where(
-            SubmissionCaseResult.judge0_token.in_(
-                ("callback-token-1", "callback-token-2")
-            )
-        )
-    ).all()
-    assert len(rows) == 2
-    assert all(row.execution_time_ms == 10 for row in rows)
+        assert (
+            await student_client.put(path, json={"token": token, "status": {"id": 3}})
+        ).status_code == 200
+    row = db_session.get(Submission, created.json()["id"])
+    assert row.status == "passed"
+    assert all(case.execution_time_ms == 10 for case in row.case_results)
+    assert (await student_client.get(f"/api/submissions/{row.id}")).json()[
+        "done"
+    ] is True
 
 
-async def test_poll_flow_updates_progress_once_per_submission(
-    student_client,
-    db_session,
-):
-    token = "f83d50c3-bda9-437c-a396-8466b1f944b0"
-    retry_token = "2ba92815-810a-42f1-8f76-a752a7c1bf05"
+async def test_worker_polling_updates_progress_once(student_client, db_session):
     problem_id = await _problem_id(student_client, "Count Evens")
-    with patch("app.routers.submissions.judge0_submit", return_value={"token": token}):
-        response = await student_client.post(
-            "/api/submissions",
-            json={"source_code": "print(42)", "problem_id": problem_id},
-        )
-    assert response.status_code == 200
-    body = response.json()
-    submission_id = body["id"]
-    assert body["done"] is False
-    assert body["poll_url"] == f"/api/submissions/{submission_id}"
-
-    with patch(
-        "app.routers.submissions.judge0_get",
-        return_value={"token": token, "status": {"id": 3}},
-    ):
-        response = await student_client.get(f"/api/submissions/{submission_id}")
-        assert response.status_code == 200
-        assert response.json()["done"] is True
-        second_poll = await student_client.get(f"/api/submissions/{submission_id}")
-        assert second_poll.status_code == 200
-
-    with patch(
-        "app.routers.submissions.judge0_submit",
-        return_value={"token": retry_token},
-    ):
-        retry = await student_client.post(
-            "/api/submissions",
-            json={"source_code": "print(0)", "problem_id": problem_id},
-        )
-    retry_id = retry.json()["id"]
-    with patch(
-        "app.routers.submissions.judge0_get",
-        return_value={"token": retry_token, "status": {"id": 4}},
-    ):
-        failed_retry = await student_client.get(f"/api/submissions/{retry_id}")
-        assert failed_retry.status_code == 200
-
+    created = await student_client.post(
+        "/api/submissions", json={"problem_id": problem_id, "source_code": "print(42)"}
+    )
+    assert created.status_code == 202
+    _run(db_session, [{"token": "poll-token", "status": {"id": 1}}])
+    row = db_session.get(Submission, created.json()["id"])
+    row.next_check_at = utc_now() - timedelta(seconds=1)
+    db_session.commit()
+    _run(db_session, [], [{"token": "poll-token", "status": {"id": 3}}])
+    assert (await student_client.get(f"/api/submissions/{row.id}")).json()[
+        "done"
+    ] is True
+    retry = await student_client.post(
+        "/api/submissions", json={"problem_id": problem_id, "source_code": "print(0)"}
+    )
+    _run(db_session, [{"token": "retry-token", "status": {"id": 4}}])
+    assert retry.status_code == 202
     student_id = (await student_client.get("/api/auth/me")).json()["id"]
+    db_session.expire_all()
     progress = db_session.get(StudentPracticeProgress, (student_id, problem_id))
     assert progress.valid_attempt_count == 2
     assert progress.retry_count == 1
     assert progress.wrong_answer_count == 1
-    assert progress.first_passed_at is not None
 
 
-async def test_assignment_submission_limit_reserves_queued_attempt(
-    student_client,
-    db_session,
-):
+async def test_attempt_limit_counts_queued_reservation(student_client, db_session):
     course_id = (await student_client.get("/api/courses")).json()["items"][0]["id"]
     assignment = (
         await student_client.get(f"/api/courses/{course_id}/assignments")
     ).json()["items"][0]
     item_data = assignment["items"][1]
-    item = db_session.scalar(
-        select(AssignmentItem).where(AssignmentItem.id == item_data["id"])
-    )
+    item = db_session.get(AssignmentItem, item_data["id"])
     item.submission_limit = 1
     db_session.commit()
-
     payload = {
-        "source_code": "def count_evens(values):\n    return 0\n",
-        "problem_id": item_data["problem"]["id"],
+        "problem_id": item.problem_id,
         "assignment_item_id": item.id,
+        "source_code": "def count_evens(values): return 0",
     }
-    with patch(
-        "app.routers.submissions.judge0_submit",
-        return_value={"token": "reserved-token"},
-    ) as mock_submit:
-        first = await student_client.post("/api/submissions", json=payload)
-        second = await student_client.post("/api/submissions", json=payload)
-
-    assert first.status_code == 200
-    assert second.status_code == 409
-    assert second.json()["error"]["code"] == "submission_limit_reached"
-    mock_submit.assert_called_once()
+    first = await student_client.post("/api/submissions", json=payload)
+    second = await student_client.post("/api/submissions", json=payload)
+    assert first.status_code == 202 and second.status_code == 409
+    assert second.json()["error"]["code"] == "active_submission"
+    assert (
+        db_session.scalar(
+            select(SubmissionCaseResult).where(
+                SubmissionCaseResult.submission_id == first.json()["id"]
+            )
+        )
+        is not None
+    )

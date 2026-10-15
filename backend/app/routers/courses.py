@@ -1,8 +1,11 @@
+import secrets
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
-from ..core.authorization import get_membership
+from ..core.authorization import get_membership, require_active_course
 from ..core.dependencies import (
     CurrentUser,
     DbSession,
@@ -10,17 +13,15 @@ from ..core.dependencies import (
     StaffMembership,
 )
 from ..core.errors import ApiError
+from ..core.security import hash_token
 from ..models import (
-    Assignment,
-    AssignmentItem,
-    AssignmentRecipient,
+    AccountToken,
     Course,
+    CourseEnrollment,
     CourseMembership,
     MembershipRole,
-    StudentAssignmentProgress,
-    Submission,
-    SubmissionCaseResult,
     User,
+    UserRole,
 )
 from ..schemas.contracts import (
     CourseListResponse,
@@ -29,6 +30,12 @@ from ..schemas.contracts import (
     MemberResponse,
     MemberRoleUpdateRequest,
 )
+from ..schemas.course_management import (
+    CourseCreateRequest,
+    CourseUpdateRequest,
+    CsvEnrollmentRequest,
+)
+from ..services.enrollment import import_enrollment_csv
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -45,7 +52,6 @@ def list_courses(
         .options(selectinload(CourseMembership.course))
         .where(
             CourseMembership.user_id == user.id,
-            CourseMembership.withdrawn_at.is_(None),
         )
         .order_by(CourseMembership.joined_at.desc())
     )
@@ -65,7 +71,7 @@ def get_course(
     db: DbSession,
     user: CurrentUser,
 ):
-    membership = get_membership(db, course_id, user.id)
+    membership = get_membership(db, course_id, user.id, include_withdrawn=True)
     course = db.get(Course, course_id)
     if course is None:
         raise ApiError(404, "course_not_found", "Course not found.")
@@ -154,6 +160,7 @@ def update_member_role(
     db: DbSession,
     _membership: InstructorMembership,
 ):
+    require_active_course(db, course_id)
     target = _member_or_404(db, course_id, membership_id)
     if (
         target.role == MembershipRole.INSTRUCTOR
@@ -173,55 +180,130 @@ def remove_member(
     db: DbSession,
     _membership: InstructorMembership,
 ):
+    require_active_course(db, course_id)
     target = _member_or_404(db, course_id, membership_id, include_withdrawn=True)
     if target.withdrawn_at is None:
         _guard_last_instructor(db, course_id, target)
-    user_id = target.user_id
-    authored = db.scalar(
-        select(func.count())
-        .select_from(Assignment)
-        .where(
-            Assignment.course_id == course_id,
-            Assignment.assigned_by_membership_id == target.id,
-        )
-    )
-    if authored:
-        raise ApiError(
-            409,
-            "member_authored_assignments",
-            "Cannot remove a member who created assignments in this class.",
-        )
+        target.withdrawn_at = datetime.now(UTC).replace(tzinfo=None)
+    db.commit()
 
-    item_ids = list(
-        db.scalars(
-            select(AssignmentItem.id)
-            .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
-            .where(Assignment.course_id == course_id)
-        ).all()
-    )
-    if item_ids:
-        db.query(StudentAssignmentProgress).filter(
-            StudentAssignmentProgress.student_id == user_id,
-            StudentAssignmentProgress.assignment_item_id.in_(item_ids),
-        ).delete(synchronize_session=False)
-        submission_ids = list(
-            db.scalars(
-                select(Submission.id).where(
-                    Submission.student_id == user_id,
-                    Submission.assignment_item_id.in_(item_ids),
-                )
-            ).all()
+
+@router.post("", status_code=201)
+def create_course(body: CourseCreateRequest, db: DbSession, user: CurrentUser):
+    if user.role != UserRole.PROFESSOR:
+        raise ApiError(403, "instructor_required", "Instructor access is required.")
+    token = secrets.token_urlsafe(32)
+    course = Course(**body.model_dump(), join_code_hash=hash_token(token))
+    db.add(course)
+    db.flush()
+    db.add(
+        CourseMembership(
+            course_id=course.id, user_id=user.id, role=MembershipRole.INSTRUCTOR
         )
-        if submission_ids:
-            db.query(SubmissionCaseResult).filter(
-                SubmissionCaseResult.submission_id.in_(submission_ids)
-            ).delete(synchronize_session=False)
-            db.query(Submission).filter(Submission.id.in_(submission_ids)).delete(
-                synchronize_session=False
-            )
-    db.query(AssignmentRecipient).filter(
-        AssignmentRecipient.membership_id == target.id,
-        AssignmentRecipient.course_id == course_id,
-    ).delete(synchronize_session=False)
-    db.delete(target)
+    )
+    db.commit()
+    db.refresh(course)
+    return {
+        "course": CourseResponse.model_validate(
+            {**course.__dict__, "membership_role": MembershipRole.INSTRUCTOR}
+        ),
+        "join_token": token,
+    }
+
+
+@router.put("/{course_id}", response_model=CourseResponse)
+def update_course(
+    course_id: int,
+    body: CourseUpdateRequest,
+    db: DbSession,
+    membership: InstructorMembership,
+):
+    course = require_active_course(db, course_id)
+    for key, value in body.model_dump().items():
+        setattr(course, key, value)
+    db.commit()
+    return {**course.__dict__, "membership_role": membership.role}
+
+
+@router.post("/{course_id}/archive", response_model=CourseResponse)
+def archive_course(course_id: int, db: DbSession, membership: InstructorMembership):
+    course = db.scalar(select(Course).where(Course.id == course_id).with_for_update())
+    if course.archived_at is None:
+        course.archived_at = datetime.now(UTC).replace(tzinfo=None)
+    db.commit()
+    return {**course.__dict__, "membership_role": membership.role}
+
+
+@router.post("/{course_id}/join-link")
+def rotate_join_link(course_id: int, db: DbSession, _membership: InstructorMembership):
+    course = require_active_course(db, course_id)
+    token = secrets.token_urlsafe(32)
+    course.join_code_hash = hash_token(token)
+    db.commit()
+    return {"join_token": token}
+
+
+@router.post("/{course_id}/enrollments/import")
+def import_enrollments(
+    course_id: int,
+    body: CsvEnrollmentRequest,
+    db: DbSession,
+    _membership: InstructorMembership,
+):
+    require_active_course(db, course_id)
+    result = import_enrollment_csv(db, course_id, body.csv)
+    db.commit()
+    return result
+
+
+@router.get("/{course_id}/enrollments")
+def list_pending_enrollments(
+    course_id: int,
+    db: DbSession,
+    _membership: StaffMembership,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    query = select(CourseEnrollment).where(CourseEnrollment.course_id == course_id)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.scalars(
+        query.order_by(CourseEnrollment.id).offset(offset).limit(limit)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "email": row.email,
+                "name": row.name,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.delete("/{course_id}/enrollments/{enrollment_id}", status_code=204)
+def cancel_pending_enrollment(
+    course_id: int, enrollment_id: int, db: DbSession, _membership: InstructorMembership
+):
+    require_active_course(db, course_id)
+    enrollment = db.get(CourseEnrollment, enrollment_id)
+    if enrollment is None or enrollment.course_id != course_id:
+        raise ApiError(404, "enrollment_not_found", "Pending enrollment not found.")
+    db.execute(
+        update(AccountToken)
+        .where(
+            AccountToken.course_id == course_id,
+            AccountToken.purpose == "verify",
+            AccountToken.user_id.in_(
+                select(User.id).where(User.email == enrollment.email)
+            ),
+            AccountToken.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(UTC).replace(tzinfo=None))
+    )
+    db.delete(enrollment)
     db.commit()

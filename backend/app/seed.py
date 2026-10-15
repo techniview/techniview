@@ -76,12 +76,14 @@ def seed_demo(db: Session) -> None:
         email=DEMO_TEACHER_EMAIL,
         password_hash=hash_password("teacher-demo"),
         role=UserRole.PROFESSOR,
+        email_verified_at=datetime.now(UTC).replace(tzinfo=None),
     )
     student = User(
         name="Demo Student",
         email=DEMO_STUDENT_EMAIL,
         password_hash=hash_password("student-demo"),
         role=UserRole.STUDENT,
+        email_verified_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add_all([teacher, student])
     db.flush()
@@ -240,6 +242,10 @@ def seed_demo(db: Session) -> None:
             ),
         ]
     )
+    from .services.summaries import rebuild_course_summaries
+
+    db.flush()
+    rebuild_course_summaries(db)
     db.commit()
 
 

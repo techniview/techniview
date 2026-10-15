@@ -20,11 +20,18 @@ export type AnalyticsMetrics = {
 };
 
 export type AnalyticsFilters = {
+    scope: "all" | "practice" | "assignments";
+    course_id: number | null;
+    assignment_id: number | null;
     difficulty: "easy" | "medium" | "hard" | null;
     tag: string | null;
 };
 
 export type StudentAnalytics = {
+    items: ProblemAnalytics[];
+    total: number;
+    limit: number;
+    offset: number;
     metrics: AnalyticsMetrics;
     filters: AnalyticsFilters;
 };

@@ -182,6 +182,7 @@ def test_polling_recovers_execution_without_callback(database, client):
     from app.models import Problem, SubmissionCaseResult, User
     from app.routers.submissions import SubmissionCreate, _reserve_submission
     from app.services.execution import build_case_execution
+    from app.services.progress import utc_now
 
     user = database.scalar(select(User).where(User.email == "student@techniview.local"))
     problem = database.scalar(select(Problem).where(Problem.title == "Count Evens"))
@@ -209,6 +210,7 @@ def test_polling_recovers_execution_without_callback(database, client):
             test_case_id=case.id,
             judge0_token=token,
             judge0_status_id=1,
+            dispatch_started_at=utc_now(),
         )
     )
     database.commit()
@@ -216,11 +218,17 @@ def test_polling_recovers_execution_without_callback(database, client):
     while judge0_get(token)["status"]["id"] < 3:
         assert time.monotonic() < deadline, "Judge0 execution never completed"
         time.sleep(0.2)
+    # Student GET is read-only; the application worker completes missed callbacks.
+    while True:
+        database.rollback()
+        database.expire_all()
+        if submission.status == "passed":
+            break
+        assert time.monotonic() < deadline, "Worker did not recover missing callback"
+        time.sleep(0.2)
     response = client.get(f"/api/submissions/{submission.id}")
     response.raise_for_status()
     assert response.json()["status"] == "passed"
-    database.rollback()
-    database.expire_all()
     assert submission.case_results[0].stdout == "2\n"
 
 
@@ -236,3 +244,65 @@ def test_source_byte_overflow_is_http_422(client, source):
         },
     )
     assert response.status_code == 422
+
+
+def test_fifty_near_simultaneous_requests_finish_once(database):
+    """One class-sized burst keeps each logical attempt and result durable."""
+    from datetime import UTC, datetime
+
+    from app.core.config import settings
+    from app.core.security import create_session, hash_password
+    from app.models import Problem, Submission, SubmissionCaseResult, User, UserRole
+
+    problem = database.scalar(select(Problem).where(Problem.title == "Count Evens"))
+    batch = uuid4().hex
+    users = [
+        User(
+            name=f"Burst student {index}",
+            email=f"burst-{batch}-{index}@example.test",
+            password_hash=hash_password("burst-test-password"),
+            role=UserRole.STUDENT,
+            email_verified_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        for index in range(50)
+    ]
+    database.add_all(users)
+    database.commit()
+    credentials = [create_session(database, user)[0] for user in users]
+    source = "def count_evens(values):\n    return sum(x % 2 == 0 for x in values)"
+
+    def submit(token):
+        with httpx.Client(
+            base_url="http://backend:8000",
+            timeout=30,
+            cookies={settings.SESSION_COOKIE_NAME: token},
+        ) as api:
+            response = api.post(
+                "/api/submissions",
+                json={"problem_id": problem.id, "source_code": source},
+            )
+            return response
+
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        results = list(executor.map(submit, credentials))
+    assert all(response.status_code == 202 for response in results), [
+        (response.status_code, response.text) for response in results
+    ]
+    ids = {response.json()["id"] for response in results}
+    assert len(ids) == 50
+    deadline = time.monotonic() + 120
+    while True:
+        database.rollback()
+        submissions = database.scalars(
+            select(Submission).where(Submission.id.in_(ids))
+        ).all()
+        if len(submissions) == 50 and all(row.completed_at for row in submissions):
+            break
+        assert time.monotonic() < deadline, "Fifty submissions did not finish"
+        time.sleep(0.25)
+    assert all(row.status == "passed" for row in submissions)
+    cases = database.scalars(
+        select(SubmissionCaseResult).where(SubmissionCaseResult.submission_id.in_(ids))
+    ).all()
+    assert len(cases) == 50
+    assert len({case.judge0_token for case in cases}) == 50

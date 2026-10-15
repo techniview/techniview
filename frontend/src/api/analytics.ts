@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, apiText } from "./client";
 import type {
     ClassAnalytics,
     ProblemAnalytics,
@@ -26,6 +26,13 @@ type ProblemListResponse = {
 export function getStudentAnalytics(
     difficulty: string | null = null,
     tag: string | null = null,
+    options: {
+        scope?: "all" | "practice" | "assignments";
+        course_id?: number;
+        assignment_id?: number;
+        limit?: number;
+        offset?: number;
+    } = {},
 ) {
     const params = new URLSearchParams();
     if (difficulty) {
@@ -35,6 +42,7 @@ export function getStudentAnalytics(
         params.set("tag", tag);
     }
 
+    Object.entries(options).forEach(([key, value]) => params.set(key, String(value)));
     const query = params.toString();
     return apiRequest<StudentAnalytics>(`/api/me/analytics${query ? `?${query}` : ""}`);
 }
@@ -115,7 +123,7 @@ export type Assignment = {
     items: Array<{
         id: number;
         item_order: number;
-        points: number;
+        points: string;
         submission_limit: number | null;
         problem: {
             id: number;
@@ -124,6 +132,9 @@ export type Assignment = {
 };
 
 export type AssignmentList = {
+    total: number;
+    limit: number;
+    offset: number;
     items: Assignment[];
 };
 
@@ -150,6 +161,23 @@ export function getStudentAssignments(courseId: number) {
 
 export function getClassMembers(courseId: number) {
     return apiRequest<MemberList>(`/api/courses/${courseId}/members`);
+}
+
+export function getGradeCsv(courseId: number, assignmentId?: number) {
+    const query = assignmentId === undefined ? "" : `?assignment_id=${assignmentId}`;
+    return apiText(`/api/courses/${courseId}/exports/grades.csv${query}`);
+}
+
+export function getResearchCsv(
+    courseId: number,
+    assignmentId: number,
+    publicationKey: string,
+) {
+    const params = new URLSearchParams({
+        assignment_id: String(assignmentId),
+        publication_key: publicationKey,
+    });
+    return apiText(`/api/courses/${courseId}/exports/research.csv?${params}`);
 }
 
 export function getStudentProblemAnalytics(

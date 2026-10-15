@@ -66,7 +66,7 @@ def test_canonical_validation_checks_every_case_and_reports_failure(
 
 def test_assignment_request_normalizes_aware_timestamps_to_utc():
     timestamp = datetime(2026, 9, 29, 9, 0, tzinfo=timezone(timedelta(hours=-4)))
-    request = assignments.AssignmentFromQuestionSet(
+    request = assignments.AssignmentCreate(
         title="Timed",
         question_set_id=1,
         available_at=timestamp,
@@ -157,7 +157,7 @@ def test_assignment_items_snapshot_question_set_order(db_session):
 
     result = assignments.create_assignment_from_question_set(
         membership.course_id,
-        assignments.AssignmentFromQuestionSet(
+        assignments.AssignmentCreate(
             title="Snapshot assignment", question_set_id=set_id
         ),
         db_session,

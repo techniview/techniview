@@ -31,6 +31,7 @@ curl http://localhost:8000/api/health | jq
   - app/services - response shaping and shared analytics formulas
   - app/models - SQLAlchemy application schema
   - migrations - Alembic schema revisions
+  - app/worker - durable Judge0 dispatch, polling recovery, and email delivery
 - frontend - Vite + React + strict TypeScript, with login, student problem/statistics, and teacher class/problem/analytics routes
 - docs - research notes and tests; the design set is in [docs/design](docs/design/), with D0, D1, D2, user stories, and review notes
 - .githooks - versioned pre-commit hook
@@ -98,7 +99,7 @@ run the matching `make` command above to fix or reproduce it.
 ## Backend notes
 
 Docker Compose applies the database migration and loads idempotent demo data before
-starting the API. The local demo accounts are:
+starting the API and application worker. The local demo accounts are:
 
 - `teacher@techniview.local` / `teacher-demo`
 - `student@techniview.local` / `student-demo`
@@ -113,6 +114,22 @@ uv run python -m app.seed
 The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
 `/api/docs`. Analytics use `difficulty`, `tag`, and, for course views,
 `assignment_id` query filters.
+
+Student submission requests return `202` with a submission ID. The application
+worker dispatches cases to Judge0 and finalizes them through callbacks or polling.
+Keep `app_worker` running alongside the API. Course enrollment, email verification,
+and password recovery use an email outbox; local Compose captures messages in the
+worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
+`EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both API
+and worker. The frontend needs verification, reset, and join-link screens before
+people can complete these email flows in a browser. See
+[course and account setup](docs/course-accounts.md).
+
+Course summaries update with grading transactions. Set a stable
+`RESEARCH_EXPORT_SECRET` of at least 32 bytes before producing a research CSV.
+See [backend reporting](docs/backend-reporting.md) for export fields and the
+offline progress rebuild procedure. The [database recovery guide](docs/database-recovery.md)
+has the Compose backup and restore steps.
 
 `make integration` runs migrations against a fresh MySQL database, forces overlapping
 callbacks under REPEATABLE READ, and runs Python submissions through Judge0. It

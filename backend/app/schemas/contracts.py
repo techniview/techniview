@@ -214,10 +214,17 @@ class AnalyticsOverviewResponse(BaseModel):
 
 
 class AnalyticsFilters(BaseModel):
+    scope: str = "all"
+    course_id: int | None = None
+    assignment_id: int | None = None
     difficulty: Difficulty | None
     tag: str | None
 
 
 class StudentAnalyticsResponse(BaseModel):
+    items: list[ProblemAnalyticsResponse] = []
+    total: int = 0
+    limit: int = 50
+    offset: int = 0
     metrics: AnalyticsMetrics
     filters: AnalyticsFilters
