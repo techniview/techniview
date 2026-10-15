@@ -25,7 +25,7 @@ EMAIL_PATTERN = re.compile(r"^[^\s@,]+@[^\s@,]+\.[^\s@,]+$")
 
 def parse_enrollment_csv(content: str) -> list[dict[str, str]]:
     reader = csv.DictReader(io.StringIO(content.lstrip("\ufeff")), strict=True)
-    if reader.fieldnames is None or set(reader.fieldnames) != {"name", "email"}:
+    if reader.fieldnames != ["name", "email"]:
         raise ApiError(422, "invalid_csv", "CSV must have name,email headers.")
     entries = {}
     try:

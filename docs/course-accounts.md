@@ -10,7 +10,11 @@ and invalidates the old link. Archived courses remain readable and reject writes
 Removing a member sets `withdrawn_at`. Their submissions, recipient snapshots,
 progress, and authored assignments remain. Shared join links can reactivate a
 withdrawn member without changing their role. The last instructor cannot withdraw
-or be demoted.
+or be demoted. Course list and detail responses include the caller's membership
+role and withdrawal time. Active memberships appear before withdrawn ones in the
+course list. Course staff access follows the membership role, so TAs can open the
+teacher views for their courses even when their account role is student. A promoted
+TA keeps historical student work but cannot make new graded student submissions.
 
 ## CSV roster import
 
@@ -30,6 +34,10 @@ Importing the same pending entry again updates its name. It queues a new email
 if the previous invitation was sent or ran out of delivery retries; an email
 that is still queued or retrying is left alone. Newly enrolled existing students
 receive a course notification.
+The notification opens `/student/courses/{id}`, where the student can see the
+class and its available assignments. If the student is withdrawn before delivery,
+the worker skips the notice. Students can return to their courses from My Classes.
+
 `GET /api/courses/{id}/enrollments` lists pending entries for staff;
 `DELETE /api/courses/{id}/enrollments/{enrollment_id}` cancels one, invalidating
 its link and pending verification tokens for that course.
@@ -84,3 +92,5 @@ recovery requests that need email configuration.
 Email links use frontend routes `/verify-email?token=...`,
 `/reset-password?token=...`, and `/join/{token}`. The first two routes must submit
 the token to their API endpoints; opening a link alone never changes account state.
+The verification page asks the student to confirm, and the reset page asks for a
+new password. The join page supports both new accounts and existing accounts.

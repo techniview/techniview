@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
     getClassAnalytics,
     getProblemTypes,
-    getTeacherCourses,
+    getActiveStaffCourse,
     type Course,
     type CurriculumPool,
 } from "../../api/analytics";
@@ -73,12 +73,11 @@ export default function TeacherOverallStatsPage() {
     useEffect(() => {
         let isCurrent = true;
 
-        Promise.all([getTeacherCourses(), getProblemTypes()])
-            .then(([courses, types]) => {
+        Promise.all([getActiveStaffCourse(), getProblemTypes()])
+            .then(([teacherCourse, types]) => {
                 if (!isCurrent) {
                     return;
                 }
-                const teacherCourse = courses.items[0];
                 if (!teacherCourse) {
                     throw new Error("No course found.");
                 }

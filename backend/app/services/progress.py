@@ -15,6 +15,7 @@ from ..models import (
     AssignmentState,
     CourseMembership,
     ErrorCategory,
+    MembershipRole,
     StudentAssignmentProgress,
     StudentPracticeProgress,
     Submission,
@@ -58,6 +59,7 @@ def require_assigned_item(
             Assignment.state == AssignmentState.PUBLISHED,
             or_(Assignment.available_at.is_(None), Assignment.available_at <= now),
             CourseMembership.user_id == student_id,
+            CourseMembership.role == MembershipRole.STUDENT,
             CourseMembership.withdrawn_at.is_(None),
             AssignmentRecipient.removed_at.is_(None),
         )

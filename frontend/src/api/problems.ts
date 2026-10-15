@@ -13,6 +13,7 @@ export type ProblemSummary = {
         kind: "general" | "technique" | "problem_type";
     }>;
     source_category: string | null;
+    available_assignment_item_id: number | null;
 };
 
 export type ProblemListResponse = {
@@ -62,6 +63,6 @@ export function startProblem(problemId: number, assignmentItemId?: number) {
     });
 }
 
-export function getAvailableProblems() {
-    return apiRequest<ProblemListResponse>("/api/problems?limit=100");
+export function getAvailableProblems(offset = 0) {
+    return apiRequest<ProblemListResponse>(`/api/problems?limit=100&offset=${offset}`);
 }

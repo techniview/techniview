@@ -37,7 +37,7 @@ from ..services.progress import (
     recompute_assignment_grade,
     require_assigned_item,
 )
-from .problems import _visible_problem
+from .problems import _staffed_problem_ids, _visible_problem
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 internal_router = APIRouter(prefix="/internal/judge0", tags=["internal"])
@@ -434,6 +434,7 @@ def create_submission(body: SubmissionCreate, db: DbSession, user: CurrentUser):
         problem.owner_id is not None
         and problem.owner_id != user.id
         and body.assignment_item_id is None
+        and problem.id not in _staffed_problem_ids(db, user.id)
     ):
         raise ApiError(
             422,

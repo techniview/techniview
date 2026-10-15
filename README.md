@@ -121,8 +121,8 @@ Keep `app_worker` running alongside the API. Course enrollment, email verificati
 and password recovery use an email outbox; local Compose captures messages in the
 worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
 `EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both API
-and worker. The frontend needs verification, reset, and join-link screens before
-people can complete these email flows in a browser. See
+and worker. The frontend handles join links, email verification, and password
+recovery through its public account pages. See
 [course and account setup](docs/course-accounts.md).
 
 Course summaries update with grading transactions. Set a stable

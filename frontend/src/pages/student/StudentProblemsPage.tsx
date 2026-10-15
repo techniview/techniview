@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-    getStudentAssignments,
-    getTeacherCourses,
-    type Assignment,
-    type Course,
-} from "../../api/analytics";
 import { getAvailableProblems, type ProblemSummary } from "../../api/problems";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
@@ -14,23 +8,19 @@ function formatDifficulty(difficulty: ProblemSummary["difficulty"]): string {
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
 }
 
-async function courseAssignments(courseId: number): Promise<Assignment[]> {
-    const assignments: Assignment[] = [];
+async function allAvailableProblems(): Promise<ProblemSummary[]> {
+    const problems: ProblemSummary[] = [];
     while (true) {
-        const page = await getStudentAssignments(courseId, assignments.length);
-        assignments.push(...page.items);
-        if (assignments.length >= page.total || page.items.length === 0) {
-            return assignments;
+        const page = await getAvailableProblems(problems.length);
+        problems.push(...page.items);
+        if (page.items.length === 0 || problems.length >= page.total) {
+            return problems;
         }
     }
 }
 
 export default function StudentProblemsPage() {
     const [problems, setProblems] = useState<ProblemSummary[]>([]);
-    const [assignmentItemsByProblem, setAssignmentItemsByProblem] = useState<
-        Map<number, number>
-    >(new Map());
-    const [course, setCourse] = useState<Course | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -39,29 +29,10 @@ export default function StudentProblemsPage() {
 
         async function loadProblems() {
             try {
-                const [problemResponse, courses] = await Promise.all([
-                    getAvailableProblems(),
-                    getTeacherCourses(),
-                ]);
-                const studentCourse = courses.items[0];
-                const assignmentLists = await Promise.all(
-                    courses.items.map((item) => courseAssignments(item.id)),
-                );
-                const assignedItems = new Map<number, number>();
-                assignmentLists.forEach((list) =>
-                    list.forEach((assignment) =>
-                        assignment.items.forEach((item) => {
-                            if (!assignedItems.has(item.problem.id)) {
-                                assignedItems.set(item.problem.id, item.id);
-                            }
-                        }),
-                    ),
-                );
+                const problems = await allAvailableProblems();
 
                 if (isCurrent) {
-                    setProblems(problemResponse.items);
-                    setAssignmentItemsByProblem(assignedItems);
-                    setCourse(studentCourse ?? null);
+                    setProblems(problems);
                 }
             } catch {
                 if (isCurrent) {
@@ -92,10 +63,7 @@ export default function StudentProblemsPage() {
             <header className="page-header">
                 <p className="eyebrow">Student dashboard</p>
                 <h1>Available Problems</h1>
-                <p>
-                    Practice problems available to you
-                    {course ? ` in ${course.name}` : ""}.
-                </p>
+                <p>Practice problems available to you.</p>
             </header>
 
             <div className="table-wrapper">
@@ -120,10 +88,9 @@ export default function StudentProblemsPage() {
                                 )?.name ??
                                 problem.tags[0] ??
                                 "General";
-                            const assignmentItemId = assignmentItemsByProblem.get(
-                                problem.id,
-                            );
-                            const isAssigned = assignmentItemId !== undefined;
+                            const assignmentItemId =
+                                problem.available_assignment_item_id;
+                            const isAssigned = assignmentItemId !== null;
 
                             return (
                                 <tr key={problem.id}>

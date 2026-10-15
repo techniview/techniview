@@ -4,9 +4,15 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import LoadingState from "./components/LoadingState";
 import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import JoinPage from "./pages/JoinPage";
 import ProblemPage from "./pages/ProblemPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import StudentStatisticsPage from "./pages/student/StudentStatisticsPage";
 import StudentProblemsPage from "./pages/student/StudentProblemsPage";
+import StudentCoursePage from "./pages/student/StudentCoursePage";
+import StudentCoursesPage from "./pages/student/StudentCoursesPage";
 import TeacherClassPage from "./pages/teacher/TeacherClassPage";
 import TeacherProblemPage from "./pages/teacher/TeacherProblemPage";
 import TeacherOverallStatsPage from "./pages/teacher/TeacherOverallStatsPage";
@@ -37,6 +43,10 @@ export default function App() {
             <AuthProvider>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                    <Route path="/reset-password" element={<ResetPasswordPage />} />
+                    <Route path="/verify-email" element={<VerifyEmailPage />} />
+                    <Route path="/join/:token" element={<JoinPage />} />
 
                     <Route element={<ProtectedRoute />}>
                         <Route element={<AppLayout />}>
@@ -48,6 +58,14 @@ export default function App() {
                                 path="/student/problems"
                                 element={<StudentProblemsPage />}
                             />
+                            <Route
+                                path="/student/courses/:courseId"
+                                element={<StudentCoursePage />}
+                            />
+                            <Route
+                                path="/student/courses"
+                                element={<StudentCoursesPage />}
+                            />
 
                             <Route
                                 path="/student/problems/:problemId"
@@ -55,27 +73,21 @@ export default function App() {
                             />
 
                             <Route
-                                element={
-                                    <ProtectedRoute allowedRoles={["professor"]} />
-                                }
-                            >
-                                <Route
-                                    path="/teacher/class"
-                                    element={<TeacherClassPage />}
-                                />
-                                <Route
-                                    path="/teacher/statistics"
-                                    element={<TeacherOverallStatsPage />}
-                                />
-                                <Route
-                                    path="/teacher/problems"
-                                    element={<TeacherProblemPage />}
-                                />
-                                <Route
-                                    path="/teacher/problems/:problemId"
-                                    element={<ProblemPage />}
-                                />
-                            </Route>
+                                path="/teacher/class"
+                                element={<TeacherClassPage />}
+                            />
+                            <Route
+                                path="/teacher/statistics"
+                                element={<TeacherOverallStatsPage />}
+                            />
+                            <Route
+                                path="/teacher/problems"
+                                element={<TeacherProblemPage />}
+                            />
+                            <Route
+                                path="/teacher/problems/:problemId"
+                                element={<ProblemPage />}
+                            />
                         </Route>
                     </Route>
 

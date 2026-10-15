@@ -303,7 +303,9 @@ def list_assignments(
     offset: int = Query(0, ge=0),
 ):
     membership = get_membership(db, course_id, user.id, include_withdrawn=True)
-    query = _assignment_query(course_id).order_by(Assignment.created_at.desc())
+    query = _assignment_query(course_id).order_by(
+        Assignment.created_at.desc(), Assignment.id.desc()
+    )
     if membership.role == MembershipRole.STUDENT or membership.withdrawn_at is not None:
         query = query.where(
             Assignment.state != AssignmentState.DRAFT,

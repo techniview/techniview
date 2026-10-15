@@ -13,8 +13,8 @@ export type CurriculumPool = {
 };
 
 type ProblemListResponse = {
+    total: number;
     items: Array<{
-        tags: string[];
         typed_tags: Array<{
             name: string;
             slug: string;
@@ -54,31 +54,28 @@ export function getProblemTypes() {
                 return pools;
             }
 
-            const response = await apiRequest<ProblemListResponse>(
-                "/api/problems?limit=100",
-            );
             const tags = new Map<string, CurriculumPool>();
-            response.items.forEach((problem) => {
-                const typedTags = problem.typed_tags;
-                if (typedTags.length > 0) {
-                    typedTags.forEach((tag) => {
-                        tags.set(tag.slug, {
-                            slug: tag.slug,
-                            name: tag.name,
-                            kind: "problem_type",
+            let offset = 0;
+            while (true) {
+                const response = await apiRequest<ProblemListResponse>(
+                    `/api/problems?limit=100&offset=${offset}`,
+                );
+                response.items.forEach((problem) => {
+                    problem.typed_tags
+                        .filter((tag) => tag.kind === "problem_type")
+                        .forEach((tag) => {
+                            tags.set(tag.slug, {
+                                slug: tag.slug,
+                                name: tag.name,
+                                kind: "problem_type",
+                            });
                         });
-                    });
-                    return;
-                }
-
-                problem.tags.forEach((tag) => {
-                    tags.set(tag, {
-                        slug: tag,
-                        name: tag.replace(/-/g, " "),
-                        kind: "problem_type",
-                    });
                 });
-            });
+                offset += response.items.length;
+                if (response.items.length === 0 || offset >= response.total) {
+                    break;
+                }
+            }
 
             return [...tags.values()].sort((left, right) =>
                 left.name.localeCompare(right.name),
@@ -91,6 +88,20 @@ export function getClassAnalytics(courseId: number, query = "") {
     return apiRequest<ClassAnalytics>(
         `/api/courses/${courseId}/analytics/overview${query}`,
     );
+}
+
+export async function getAllClassAnalytics(courseId: number) {
+    const items: ProblemAnalytics[] = [];
+    while (true) {
+        const page = await getClassAnalytics(
+            courseId,
+            `?limit=100&offset=${items.length}`,
+        );
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= page.total) {
+            return items;
+        }
+    }
 }
 
 export function getProblemAnalytics(courseId: number, problemId: number) {
@@ -106,10 +117,14 @@ export type Course = {
     timezone: string;
     archived_at: string | null;
     membership_role: "student" | "instructor" | "ta";
+    withdrawn_at: string | null;
 };
 
 export type CourseList = {
     items: Course[];
+    total: number;
+    limit: number;
+    offset: number;
 };
 
 export type Assignment = {
@@ -127,6 +142,7 @@ export type Assignment = {
         submission_limit: number | null;
         problem: {
             id: number;
+            title: string;
         };
     }>;
 };
@@ -149,20 +165,44 @@ export type ClassMember = {
 
 export type MemberList = {
     items: ClassMember[];
+    total: number;
+    limit: number;
+    offset: number;
 };
 
-export function getTeacherCourses() {
-    return apiRequest<CourseList>("/api/courses");
+export async function getActiveStaffCourse(): Promise<Course | null> {
+    let offset = 0;
+    let archivedCourse: Course | null = null;
+    while (true) {
+        const page = await apiRequest<CourseList>(
+            `/api/courses?limit=100&offset=${offset}`,
+        );
+        for (const course of page.items) {
+            if (course.withdrawn_at === null && course.membership_role !== "student") {
+                if (course.archived_at === null) {
+                    return course;
+                }
+                archivedCourse ??= course;
+            }
+        }
+        offset += page.items.length;
+        if (page.items.length === 0 || offset >= page.total) {
+            return archivedCourse;
+        }
+    }
 }
 
-export function getStudentAssignments(courseId: number, offset = 0) {
-    return apiRequest<AssignmentList>(
-        `/api/courses/${courseId}/assignments?limit=100&offset=${offset}`,
-    );
-}
-
-export function getClassMembers(courseId: number) {
-    return apiRequest<MemberList>(`/api/courses/${courseId}/members`);
+export async function getAllClassMembers(courseId: number) {
+    const items: ClassMember[] = [];
+    while (true) {
+        const page = await apiRequest<MemberList>(
+            `/api/courses/${courseId}/members?limit=200&offset=${items.length}`,
+        );
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= page.total) {
+            return items;
+        }
+    }
 }
 
 export function getGradeCsv(courseId: number, assignmentId?: number) {

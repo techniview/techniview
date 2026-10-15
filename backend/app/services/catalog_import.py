@@ -184,6 +184,7 @@ def import_catalog(db: Session, path: Path) -> dict[str, int]:
                 )
             problem = existing
             existing_count += 1
+            problem.state = ProblemState.PUBLISHED
             problem.difficulty = Difficulty(item["difficulty"])
             problem.source_category = item["source_category"]
             problem.attribution = catalog["attribution"]

@@ -50,6 +50,7 @@ def _assignment_contexts(db: Session, user_id: int, problem_id: int | None = Non
         )
         .where(
             CourseMembership.user_id == user_id,
+            CourseMembership.role == MembershipRole.STUDENT,
             CourseMembership.withdrawn_at.is_(None),
             AssignmentRecipient.removed_at.is_(None),
             Course.archived_at.is_(None),
@@ -121,7 +122,10 @@ def list_problems(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    assigned_ids = _assigned_problem_ids(db, user.id)
+    assignment_items = {}
+    for item_id, problem_id, *_rest in _assignment_contexts(db, user.id):
+        assignment_items.setdefault(problem_id, item_id)
+    assigned_ids = set(assignment_items)
     staffed_ids = _staffed_problem_ids(db, user.id)
     visibility = [
         Problem.owner_id.is_(None) & (Problem.state == ProblemState.PUBLISHED),
@@ -148,7 +152,13 @@ def list_problems(
         )
     problems = list(db.scalars(query).unique().all())
     return {
-        "items": [problem_summary(item) for item in problems[offset : offset + limit]],
+        "items": [
+            {
+                **problem_summary(item),
+                "available_assignment_item_id": assignment_items.get(item.id),
+            }
+            for item in problems[offset : offset + limit]
+        ],
         "total": len(problems),
         "limit": limit,
         "offset": offset,

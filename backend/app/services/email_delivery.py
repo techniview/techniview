@@ -9,7 +9,14 @@ import httpx
 from sqlalchemy import or_, select
 
 from ..core.config import settings
-from ..models import AccountToken, Course, CourseEnrollment, EmailJob
+from ..models import (
+    AccountToken,
+    Course,
+    CourseEnrollment,
+    CourseMembership,
+    EmailJob,
+    MembershipRole,
+)
 from .account_recovery import account_token_value, now_utc, signed_secret
 
 
@@ -20,9 +27,17 @@ def enrollment_token_value(enrollment: CourseEnrollment) -> str:
 def _message(db, job: EmailJob) -> dict[str, object] | None:
     if job.kind == "enrolled":
         course = db.get(Course, job.course_id)
-        if course is None or course.archived_at is not None:
+        membership = db.scalar(
+            select(CourseMembership).where(
+                CourseMembership.course_id == job.course_id,
+                CourseMembership.user_id == job.user_id,
+                CourseMembership.role == MembershipRole.STUDENT,
+                CourseMembership.withdrawn_at.is_(None),
+            )
+        )
+        if course is None or course.archived_at is not None or membership is None:
             return None
-        url = settings.PUBLIC_APP_URL.rstrip("/") + f"/courses/{course.id}"
+        url = settings.PUBLIC_APP_URL.rstrip("/") + f"/student/courses/{course.id}"
         subject = f"You joined {course.name} on TechniView"
         content = f"Your instructor added you to {course.name}. Open the class: {url}"
     elif job.kind == "enrollment":

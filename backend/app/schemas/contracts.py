@@ -38,6 +38,7 @@ class CourseResponse(BaseModel):
     timezone: str
     archived_at: datetime | None
     membership_role: MembershipRole
+    withdrawn_at: datetime | None
 
 
 class MemberResponse(BaseModel):
@@ -109,6 +110,7 @@ class ProblemSummaryResponse(BaseModel):
     tags: list[str]
     typed_tags: list[ProblemTagResponse] = Field(default_factory=list)
     source_category: str | None = None
+    available_assignment_item_id: int | None = None
 
 
 class ProblemAssignmentContextResponse(BaseModel):

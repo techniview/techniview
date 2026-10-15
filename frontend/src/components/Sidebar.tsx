@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { getActiveStaffCourse } from "../api/analytics";
 import { useAuth } from "../auth/useAuth";
 
 type NavigationItem = {
@@ -7,6 +9,7 @@ type NavigationItem = {
 };
 
 const studentNavigation: NavigationItem[] = [
+    { label: "My Classes", to: "/student/courses" },
     { label: "My Statistics", to: "/student/statistics" },
     { label: "Available Problems", to: "/student/problems" },
 ];
@@ -24,12 +27,37 @@ function navigationForRole(role: "student" | "professor"): NavigationItem[] {
 export default function Sidebar() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const [hasStaffCourse, setHasStaffCourse] = useState(false);
+
+    useEffect(() => {
+        if (user?.role !== "student") {
+            return;
+        }
+        let isCurrent = true;
+        void getActiveStaffCourse()
+            .then((course) => {
+                if (isCurrent) {
+                    setHasStaffCourse(course !== null);
+                }
+            })
+            .catch(() => {
+                if (isCurrent) {
+                    setHasStaffCourse(false);
+                }
+            });
+        return () => {
+            isCurrent = false;
+        };
+    }, [user?.id, user?.role]);
 
     if (user === null) {
         return null;
     }
 
-    const navigation = navigationForRole(user.role);
+    const navigation =
+        user.role === "student" && hasStaffCourse
+            ? [...studentNavigation, ...professorNavigation]
+            : navigationForRole(user.role);
 
     async function handleLogout() {
         try {

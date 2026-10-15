@@ -53,12 +53,20 @@ def list_courses(
         .where(
             CourseMembership.user_id == user.id,
         )
-        .order_by(CourseMembership.joined_at.desc())
+        .order_by(
+            CourseMembership.withdrawn_at.is_not(None),
+            CourseMembership.joined_at.desc(),
+            CourseMembership.id.desc(),
+        )
     )
     memberships = list(db.scalars(base).all())
     items = [
         CourseResponse.model_validate(
-            {**membership.course.__dict__, "membership_role": membership.role}
+            {
+                **membership.course.__dict__,
+                "membership_role": membership.role,
+                "withdrawn_at": membership.withdrawn_at,
+            }
         )
         for membership in memberships[offset : offset + limit]
     ]
@@ -75,7 +83,11 @@ def get_course(
     course = db.get(Course, course_id)
     if course is None:
         raise ApiError(404, "course_not_found", "Course not found.")
-    return {**course.__dict__, "membership_role": membership.role}
+    return {
+        **course.__dict__,
+        "membership_role": membership.role,
+        "withdrawn_at": membership.withdrawn_at,
+    }
 
 
 @router.get("/{course_id}/members", response_model=MemberListResponse)
@@ -205,7 +217,11 @@ def create_course(body: CourseCreateRequest, db: DbSession, user: CurrentUser):
     db.refresh(course)
     return {
         "course": CourseResponse.model_validate(
-            {**course.__dict__, "membership_role": MembershipRole.INSTRUCTOR}
+            {
+                **course.__dict__,
+                "membership_role": MembershipRole.INSTRUCTOR,
+                "withdrawn_at": None,
+            }
         ),
         "join_token": token,
     }
@@ -222,7 +238,11 @@ def update_course(
     for key, value in body.model_dump().items():
         setattr(course, key, value)
     db.commit()
-    return {**course.__dict__, "membership_role": membership.role}
+    return {
+        **course.__dict__,
+        "membership_role": membership.role,
+        "withdrawn_at": membership.withdrawn_at,
+    }
 
 
 @router.post("/{course_id}/archive", response_model=CourseResponse)
@@ -231,7 +251,11 @@ def archive_course(course_id: int, db: DbSession, membership: InstructorMembersh
     if course.archived_at is None:
         course.archived_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
-    return {**course.__dict__, "membership_role": membership.role}
+    return {
+        **course.__dict__,
+        "membership_role": membership.role,
+        "withdrawn_at": membership.withdrawn_at,
+    }
 
 
 @router.post("/{course_id}/join-link")
