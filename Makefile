@@ -1,4 +1,8 @@
-.PHONY: install hooks fmt lint test check verify integration build up down clean
+.PHONY: install hooks fmt lint test check verify integration load-test build up down clean
+
+LOAD_STUDENTS ?= 50
+LOAD_CONCURRENCY ?= $(LOAD_STUDENTS)
+LOAD_COMPLETION_TIMEOUT_SECONDS ?= 180
 
 install: hooks
 	@uv sync --locked
@@ -36,6 +40,16 @@ verify: check build integration
 integration:
 	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \
 	docker compose --env-file /dev/null -f compose.integration.yml up --build --attach tests --abort-on-container-exit --exit-code-from tests
+
+load-test:
+	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \
+	docker compose --env-file /dev/null -f compose.integration.yml up -d --build backend judge workers app_worker; \
+	docker compose --env-file /dev/null -f compose.integration.yml build tests; \
+	docker compose --env-file /dev/null -f compose.integration.yml run --rm \
+	  -e LOAD_STUDENTS=$(LOAD_STUDENTS) \
+	  -e LOAD_CONCURRENCY=$(LOAD_CONCURRENCY) \
+	  -e LOAD_COMPLETION_TIMEOUT_SECONDS=$(LOAD_COMPLETION_TIMEOUT_SECONDS) \
+	  tests python -m performance.load_test
 
 up:
 	docker compose up -d --build

@@ -100,6 +100,24 @@ Judge0 uses privileged cgroup access in this disposable stack because the runner
 needs the same sandbox controls as local development. Do not point it at a
 personal database or production service.
 
+## Load test
+
+Run `make load-test` to drive the disposable MySQL/Judge0 stack with independent
+student accounts submitting at the same time. The default profile submits 50
+jobs at concurrency 50 and reports API acceptance latency, submission-to-result
+latency, maximum observed application queue depth, and maximum queue age. No
+performance threshold is enforced because results depend on the host running
+Docker. Increase or reduce the profile when useful:
+
+```sh
+make load-test LOAD_STUDENTS=100 LOAD_CONCURRENCY=50
+```
+
+This measures one Python workload on the local test stack. It does not establish
+campus capacity. Before using the results for VM sizing, repeat the profile on
+the campus VM sizes with a pilot estimate for simultaneous students and job
+mix. Never point the load test at a production service.
+
 ## GitHub checks
 
 Every pull request runs five parallel jobs:
@@ -108,7 +126,7 @@ Every pull request runs five parallel jobs:
 - Backend checks run Ruff, pytest with branch coverage output, and pip-audit.
 - Frontend checks run npm audit, TypeScript, ESLint, Prettier, Vitest, and the
   production build.
-- Integration runs `make integration` on a clean Ubuntu runner.
+- Integration runs `make integration` and `make load-test` on a clean Ubuntu runner.
 - Production images builds the API, frontend, and runner images used on campus.
 
 The final `CI` check fails if any job fails, is cancelled, or is skipped. That is

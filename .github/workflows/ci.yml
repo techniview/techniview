@@ -74,6 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make integration
+      - run: make load-test
       - run: sudo apt-get update && sudo apt-get install --yes restic
       - run: python3 scripts/tests/test_backup_mysql.py
 
