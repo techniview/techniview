@@ -31,6 +31,7 @@ def rebuild_progress(db: Session) -> int:
     submissions = db.scalars(
         select(Submission)
         .options(noload(Submission.case_results))
+        .where(Submission.is_practice_run.is_(False))
         .order_by(Submission.completed_at, Submission.submitted_at, Submission.id)
     ).all()
     for submission in submissions:

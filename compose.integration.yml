@@ -1,13 +1,6 @@
 name: techniview-integration
 
 x-judge: &judge
-  build: ./internal-judge0-fork
-  image: internal-judge0-fork:integration
-  privileged: true
-  cgroup: host
-  security_opt: [seccomp=unconfined]
-  volumes:
-    - /sys/fs/cgroup:/sys/fs/cgroup:rw
   environment:
     POSTGRES_HOST: postgres
     POSTGRES_USER: postgres
@@ -68,9 +61,20 @@ services:
       retries: 30
   judge:
     <<: *judge
+    build:
+      context: ./internal-judge0-fork
+      target: api
+    image: internal-judge0-fork-api:integration
     command: /api/scripts/server
   workers:
     <<: *judge
+    build:
+      context: ./internal-judge0-fork
+      target: worker
+    image: internal-judge0-fork-worker:integration
+    privileged: true
+    cgroup: private
+    init: true
     command: /api/scripts/workers
   backend:
     <<: *app

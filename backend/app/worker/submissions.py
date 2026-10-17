@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import timedelta
 
@@ -6,11 +7,13 @@ from sqlalchemy import or_, select
 
 from ..core.config import settings
 from ..core.judge0 import judge0_get, judge0_submit
+from ..core.observability import log_event
 from ..core.security import hash_token
 from ..models import Submission, SubmissionStatus
 from ..routers import submissions as results
-from ..services.execution import build_case_execution
 from ..services.progress import utc_now
+
+logger = logging.getLogger("techniview.worker")
 
 
 def claim_submission(db, owner: str, submission_id: int | None = None):
@@ -58,6 +61,7 @@ def process_submission(db, submission_id: int, owner: str) -> None:
     if row is None or row.claim_owner != owner:
         db.rollback()
         return
+    log_event(logger, logging.INFO, "submission_claimed", submission_id=submission_id)
     case_ids = [r.test_case_id for r in row.case_results]
     db.commit()
     for case_id in case_ids:
@@ -79,28 +83,24 @@ def process_submission(db, submission_id: int, owner: str) -> None:
         start = case.dispatch_started_at
         dispatch = start is None and token is None
         callback = None
-        execution = None
         if dispatch:
             callback = secrets.token_urlsafe(32)
             case.callback_token_hash = hash_token(callback)
             case.dispatch_started_at = now
-            execution = build_case_execution(
-                case.test_case.problem, case.test_case, row.source_code
-            )
         expired = start is not None and now - start >= timedelta(
             seconds=settings.WORKER_RECOVERY_SECONDS
         )
-        cpu = float(case.test_case.problem.cpu_time_limit_seconds)
-        memory = case.test_case.problem.memory_limit_kb
+        cpu = float(case.cpu_time_limit_seconds)
+        memory = case.memory_limit_kb
         db.commit()
         report = None
         failed = False
         try:
             if dispatch:
                 report = judge0_submit(
-                    execution.source_code,
-                    stdin=execution.stdin,
-                    expected_output=execution.expected_output,
+                    case.execution_source,
+                    stdin=case.execution_stdin,
+                    expected_output=case.execution_expected_output,
                     wait=False,
                     timeout=5,
                     callback_url=f"{settings.JUDGE0_CALLBACK_BASE_URL}/{callback}",
@@ -110,11 +110,23 @@ def process_submission(db, submission_id: int, owner: str) -> None:
                 token = report["token"]
                 if not isinstance(token, str) or not token or len(token) > 36:
                     raise ValueError("invalid Judge0 token")
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "case_dispatched_to_judge0",
+                    submission_id=submission_id,
+                )
             elif token is not None:
                 report = judge0_get(token)
         except (httpx.HTTPError, KeyError, TypeError, ValueError, ArithmeticError):
             # No resend after an ambiguous network error. Callback may still recover it.
             failed = True
+            log_event(
+                logger,
+                logging.WARNING,
+                "judge0_request_failed",
+                submission_id=submission_id,
+            )
         row = results._load_submission(db, submission_id)
         if (
             row is None
@@ -144,6 +156,14 @@ def process_submission(db, submission_id: int, owner: str) -> None:
         row.claimed_at = None
         row.next_check_at = utc_now() + timedelta(seconds=settings.WORKER_POLL_SECONDS)
         db.commit()
+        if row.status in results.TERMINAL_SUBMISSION_STATUSES:
+            log_event(
+                logger,
+                logging.INFO,
+                "submission_completed",
+                submission_id=submission_id,
+                status=row.status.value,
+            )
     else:
         db.rollback()
 

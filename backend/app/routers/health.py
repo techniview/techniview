@@ -1,124 +1,57 @@
-import time
-
+import httpx
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
-from ..core.db import mysql_conn, postgres_conn
-from ..core.judge0 import judge0_about, judge0_submit
-from ..core.redis_client import redis_conn
+from ..core.config import settings
+from ..core.db import mysql_conn
 
 router = APIRouter(prefix="/health", tags=["health"])
+HEALTH_CHECK_TIMEOUT_SECONDS = 3
 
 
-def check_mysql():
+def mysql_is_available() -> bool:
     try:
-        t0 = time.time()
-        with mysql_conn() as c:
-            cur = c.cursor()
-            cur.execute("SELECT 1")
-            cur.fetchone()
-            cur.execute("SELECT VERSION()")
-            ver = cur.fetchone()[0]
-        return {
-            "ok": True,
-            "version": ver,
-            "latency_ms": round((time.time() - t0) * 1000, 1),
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        with mysql_conn() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                return cursor.fetchone() == (1,)
+    except Exception:
+        return False
 
 
-def check_postgres():
+def judge0_is_available() -> bool:
     try:
-        t0 = time.time()
-        with postgres_conn() as c:
-            cur = c.cursor()
-            cur.execute("SELECT 1")
-            cur.fetchone()
-            cur.execute("SELECT version()")
-            ver = cur.fetchone()[0]
-        return {
-            "ok": True,
-            "version": ver[:80],
-            "latency_ms": round((time.time() - t0) * 1000, 1),
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        with httpx.Client(timeout=HEALTH_CHECK_TIMEOUT_SECONDS) as client:
+            response = client.get(f"{settings.JUDGE0_URL}/about")
+            response.raise_for_status()
+        return True
+    except httpx.HTTPError:
+        return False
 
 
-def check_redis():
-    try:
-        t0 = time.time()
-        r = redis_conn()
-        try:
-            pong = r.ping()
-            r.set("health:check", "ok", ex=10)
-            val = r.get("health:check")
-        finally:
-            try:
-                r.close()
-            except Exception:
-                pass
-        return {
-            "ok": bool(pong and val == "ok"),
-            "ping": bool(pong),
-            "latency_ms": round((time.time() - t0) * 1000, 1),
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-def check_judge0(deep: bool = False):
-    # deep=False is fast (just /about). deep=True also runs a real submit.
-    # TODO: /health should stay fast, keep deep checks on /health/judge0 only.
-    try:
-        t0 = time.time()
-        data = judge0_about()
-        if not deep:
-            return {
-                "ok": True,
-                "version": data.get("version"),
-                "submit_ok": None,
-                "latency_ms": round((time.time() - t0) * 1000, 1),
-            }
-        sub = judge0_submit("print(42)", wait=True)
-        ok = sub.get("status", {}).get("id") == 3 and sub.get("stdout") == "42\n"
-        return {
-            "ok": ok,
-            "version": data.get("version"),
-            "submit_ok": ok,
-            "latency_ms": round((time.time() - t0) * 1000, 1),
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+def _response(ok: bool):
+    return JSONResponse(
+        {"ok": ok},
+        status_code=200 if ok else 503,
+    )
 
 
 @router.get("")
 @router.get("/")
-def health(deep: bool = False):
-    results = {
-        "mysql": check_mysql(),
-        "postgres": check_postgres(),
-        "redis": check_redis(),
-        "judge0": check_judge0(deep=deep),
-    }
-    return {"ok": all(v.get("ok") for v in results.values()), "services": results}
+def health():
+    return _response(mysql_is_available() and judge0_is_available())
+
+
+@router.get("/ready")
+def readiness():
+    return _response(mysql_is_available())
 
 
 @router.get("/mysql")
 def health_mysql():
-    return check_mysql()
-
-
-@router.get("/postgres")
-def health_postgres():
-    return check_postgres()
-
-
-@router.get("/redis")
-def health_redis():
-    return check_redis()
+    return _response(mysql_is_available())
 
 
 @router.get("/judge0")
-def health_judge0(deep: bool = True):
-    return check_judge0(deep=deep)
+def health_judge0():
+    return _response(judge0_is_available())

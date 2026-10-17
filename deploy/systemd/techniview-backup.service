@@ -1,0 +1,16 @@
+[Unit]
+Description=Create and send an encrypted TechniView MySQL backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+CacheDirectory=techniview-restic
+Environment=RESTIC_CACHE_DIR=/var/cache/techniview-restic
+EnvironmentFile=/etc/techniview/backup.env
+ExecStart=/opt/techniview/current/scripts/backup-mysql.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TimeoutStartSec=30min

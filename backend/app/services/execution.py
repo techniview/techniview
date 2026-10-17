@@ -2,7 +2,7 @@ import ast
 import json
 from dataclasses import dataclass
 
-from ..models import ExecutionMode, Problem, ProblemTestCase
+from ..models import ExecutionMode, Problem, ProblemTestCase, SubmissionCaseResult
 
 
 @dataclass(frozen=True)
@@ -193,4 +193,23 @@ print(__techniview_json.dumps(
         source_code=(tree_prelude or linked_list_prelude or source_code) + harness,
         stdin=None,
         expected_output=_normalized_json(test_case.expected_output),
+    )
+
+
+def snapshot_case_result(
+    problem: Problem, case: ProblemTestCase, source_code: str, **values
+) -> SubmissionCaseResult:
+    execution = build_case_execution(problem, case, source_code)
+    return SubmissionCaseResult(
+        test_case_id=case.id,
+        case_order=case.case_order,
+        visibility=case.visibility,
+        input=case.input,
+        expected_output=case.expected_output,
+        execution_source=execution.source_code,
+        execution_stdin=execution.stdin,
+        execution_expected_output=execution.expected_output,
+        cpu_time_limit_seconds=problem.cpu_time_limit_seconds,
+        memory_limit_kb=problem.memory_limit_kb,
+        **values,
     )

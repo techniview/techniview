@@ -24,6 +24,18 @@ uv run ruff check backend
 uv run ruff format --check backend
 ```
 
+## Development database reset
+
+This pre-production branch changes the initial schema for execution snapshots.
+Existing development databases must be recreated before running this branch;
+`alembic upgrade head` alone cannot update a database that already applied the
+initial migration. Export anything you want to keep before recreating your local
+database. The integration stack creates a fresh database on every run.
+
+Each queued case stores its inputs, generated Python program, expected output,
+visibility, and resource limits. Editing a draft changes future runs only.
+Queued, running, and completed results keep the values captured when submitted.
+
 ## Local checks
 
 `make check` runs the checks used for every commit:
@@ -55,7 +67,7 @@ working tree. If it says uv or a Python tool is missing, run `make install`.
 
 ## Integration tests
 
-`make integration` builds the local Python-only Judge0 image from
+`make integration` builds the local API and Python-only worker images from
 `internal-judge0-fork/` and starts a temporary Compose project with MySQL
 8, Judge0, Judge0 workers, Redis, Postgres, the API, and the application worker. It runs migrations
 against a fresh database and then removes the containers, network, and volumes
@@ -70,6 +82,8 @@ The integration suite checks the parts SQLite and mocks cannot prove:
 - Duplicate callback delivery and progress counting
 - Real accepted, wrong-answer, and runtime-error Judge0 submissions
 - Python submissions without a caller-supplied Judge0 language ID
+- CPU, memory, output size, filesystem and network sandbox limits
+- Rejected language selection, archive uploads and network enablement
 - Completion through callbacks without API polling
 - Polling recovery when no callback arrives
 - Asynchronous submission dispatch by the application worker
@@ -88,17 +102,21 @@ personal database or production service.
 
 ## GitHub checks
 
-Every pull request runs four parallel jobs:
+Every pull request runs five parallel jobs:
 
 - Workflow checks run actionlint and ShellCheck.
 - Backend checks run Ruff, pytest with branch coverage output, and pip-audit.
 - Frontend checks run npm audit, TypeScript, ESLint, Prettier, Vitest, and the
   production build.
 - Integration runs `make integration` on a clean Ubuntu runner.
+- Production images builds the API, frontend, and runner images used on campus.
 
 The final `CI` check fails if any job fails, is cancelled, or is skipped. That is
 the check that should be required by the `main` branch ruleset. A workflow-only
 change still runs the workflow checks.
+
+A `v*` tag publishes the reviewed production images to GitHub Container Registry
+after the full CI gate passes. Each image is tagged with the source commit SHA.
 
 ## Adding tests
 

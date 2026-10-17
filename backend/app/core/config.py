@@ -1,6 +1,14 @@
 import os
+from pathlib import Path
 
 from sqlalchemy import URL
+
+
+def _setting(name: str, default: str = "") -> str:
+    secret_file = os.getenv(f"{name}_FILE")
+    if secret_file:
+        return Path(secret_file).read_text(encoding="utf-8").rstrip("\r\n")
+    return os.getenv(name, default)
 
 
 def build_database_url(
@@ -23,8 +31,8 @@ def build_database_url(
 class Settings:
     EMAIL_DELIVERY_MODE = os.getenv("EMAIL_DELIVERY_MODE", "disabled")
     EMAIL_CAPTURE_DIR = os.getenv("EMAIL_CAPTURE_DIR", "/tmp/techniview-mail")
-    EMAIL_SIGNING_KEY = os.getenv("EMAIL_SIGNING_KEY", "")
-    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    EMAIL_SIGNING_KEY = _setting("EMAIL_SIGNING_KEY")
+    RESEND_API_KEY = _setting("RESEND_API_KEY")
     EMAIL_FROM = os.getenv("EMAIL_FROM", "")
     PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:5173")
     PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
@@ -39,7 +47,7 @@ class Settings:
     MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql")
     MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
     MYSQL_USER = os.getenv("MYSQL_USER", "app_user")
-    MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "app_password")
+    MYSQL_PASSWORD = _setting("MYSQL_PASSWORD", "app_password")
     MYSQL_DB = os.getenv("MYSQL_DB", "app_db")
     DEFAULT_DATABASE_URL = build_database_url(
         MYSQL_USER,

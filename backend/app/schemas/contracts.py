@@ -134,22 +134,6 @@ class ProblemDetailResponse(ProblemSummaryResponse):
     )
 
 
-class PublicRunCaseResponse(BaseModel):
-    case_order: int
-    status_id: int
-    input: str
-    expected_output: str
-    stdout: str | None
-    stderr: str | None
-    compile_output: str | None
-
-
-class PublicRunResponse(BaseModel):
-    passed_count: int
-    test_count: int
-    public_results: list[PublicRunCaseResponse]
-
-
 class ProblemListResponse(BaseModel):
     items: list[ProblemSummaryResponse]
     total: int

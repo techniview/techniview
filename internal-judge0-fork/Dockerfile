@@ -1,81 +1,77 @@
-FROM mrkushalsm/judge0@sha256:d60605ad448453ac3754629bc7121d379cf691e0c091aabbc03ff2886b2626b2 AS judge0_source
-
-FROM judge0/compilers:1.4.0-slim@sha256:ed9bbf7b440de3c44cc043b7143f1fabb09726f37f185af5a828cc34afdaa653
-
-ARG PYTHON_VERSION=3.14.8
-ARG PYTHON_SHA256=c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73
-
-ENV PATH="/usr/local/ruby-2.7.0/bin:/opt/.gem/bin:/usr/local/python-${PYTHON_VERSION}/bin:${PATH}" \
-    GEM_HOME=/opt/.gem/ \
-    JUDGE0_HOMEPAGE=https://judge0.com \
-    JUDGE0_SOURCE_CODE=https://github.com/judge0/judge0 \
-    JUDGE0_VERSION=1.13.1
-
-RUN set -eux; \
-    sed -i \
-      -e 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' \
-      -e 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' \
-      /etc/apt/sources.list; \
-    printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid-until; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-      ca-certificates \
-      cron \
-      curl \
-      libbz2-dev \
-      libffi-dev \
-      liblzma-dev \
-      libpq-dev \
-      libreadline-dev \
-      libsqlite3-dev \
-      libssl-dev \
-      patch \
-      sudo \
-      uuid-dev \
-      zlib1g-dev; \
-    rm -rf /var/lib/apt/lists/*
-
-COPY --from=judge0_source /usr/local/ruby-2.7.0 /usr/local/ruby-2.7.0
-COPY --from=judge0_source /opt/.gem /opt/.gem
-COPY --from=judge0_source /api /api
-COPY --from=judge0_source /usr/local/bin/isolate /usr/local/bin/isolate
-COPY --from=judge0_source /usr/local/bin/isolate-check-environment /usr/local/bin/isolate-check-environment
-COPY --from=judge0_source /usr/local/sbin/isolate-cg-keeper /usr/local/sbin/isolate-cg-keeper
-COPY --from=judge0_source /usr/local/etc/isolate /usr/local/etc/isolate
-
-COPY languages/active.rb /api/db/languages/active.rb
-COPY languages/archived.rb /api/db/languages/archived.rb
-COPY patches/single-language-api.patch /tmp/single-language-api.patch
-
-RUN set -eux; \
-    cd /api; \
-    patch -p1 < /tmp/single-language-api.patch; \
-    rm /tmp/single-language-api.patch; \
-    cd /; \
-    curl -fSsL "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz" -o /tmp/python.tar.xz; \
-    echo "${PYTHON_SHA256}  /tmp/python.tar.xz" | sha256sum -c -; \
-    mkdir /tmp/python; \
-    tar -xf /tmp/python.tar.xz -C /tmp/python --strip-components=1; \
-    cd /tmp/python; \
-    ./configure --prefix="/usr/local/python-${PYTHON_VERSION}" --with-ensurepip=install; \
-    make -j"$(nproc)"; \
-    make install; \
-    cd /; \
-    rm -rf /tmp/python /tmp/python.tar.xz; \
-    chmod 4755 /usr/local/bin/isolate /usr/local/sbin/isolate-cg-keeper; \
-    echo 'gem: --no-document' > /root/.gemrc; \
-    gem install bundler:2.1.4; \
-    cd /api; \
-    RAILS_ENV=production bundle; \
-    cp cron/* /etc/cron.d/; \
-    cat /etc/cron.d/* | crontab -; \
-    useradd -u 1000 -m -r judge0; \
-    echo 'judge0 ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers; \
-    chown judge0: /api/tmp/; \
-    python3.14 --version
-
-EXPOSE 2358
+FROM ruby:3.4-slim-trixie@sha256:c12225b6a73743f943530d9e610f4ae78e0dbcffdcf797b01522a55f7d25acb3 AS runtime
+ENV RAILS_ENV=production \
+    BUNDLE_PATH=/opt/bundle \
+    BUNDLE_DEPLOYMENT=1 \
+    BUNDLE_WITHOUT=development:test \
+    JUDGE0_VERSION=techniview-python-1
+RUN apt-get update && apt-get install -y --no-install-recommends libpq5 ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 1000 --create-home judge0
 WORKDIR /api
+
+FROM runtime AS gems
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev libyaml-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+COPY api/Gemfile api/Gemfile.lock ./
+RUN bundle install --jobs 4 && rm -rf /opt/bundle/ruby/*/cache
+
+FROM runtime AS api
+COPY --from=gems /opt/bundle /opt/bundle
+COPY api/ /api/
+COPY languages/active.rb /api/db/languages/active.rb
+COPY LICENSE /api/LICENSE
+RUN mkdir -p /api/tmp/pids /api/log \
+    && chown -R judge0:judge0 /api/tmp /api/log \
+    && chmod 755 /api/docker-entrypoint.sh /api/scripts/server /api/scripts/workers
+USER judge0
+EXPOSE 2358
 ENTRYPOINT ["/api/docker-entrypoint.sh"]
 CMD ["/api/scripts/server"]
-USER judge0
+
+FROM runtime AS sandbox-build
+ARG PYTHON_VERSION=3.14.8
+ARG PYTHON_SHA256=c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73
+ARG ISOLATE_COMMIT=8f185bb37f3f23e29b33b0c7727c91c13429abe3
+ARG ISOLATE_SHA256=00ffa7006e79dac51d1bd1899224cac55c9875445f4926ee083eee938eaefbb9
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl xz-utils pkg-config libcap-dev libseccomp-dev \
+    libbz2-dev libffi-dev liblzma-dev libreadline-dev libsqlite3-dev libssl-dev \
+    libncurses-dev uuid-dev zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz" -o /tmp/python.tar.xz \
+    && echo "${PYTHON_SHA256}  /tmp/python.tar.xz" | sha256sum -c - \
+    && mkdir /tmp/python && tar -xf /tmp/python.tar.xz -C /tmp/python --strip-components=1 \
+    && cd /tmp/python \
+    && ./configure --prefix=/opt/python --without-ensurepip --disable-test-modules \
+    && make -j4 && make install \
+    && install -Dm644 LICENSE /opt/python/LICENSE \
+    && rm -rf /opt/python/include /opt/python/lib/libpython*.a /tmp/python /tmp/python.tar.xz
+RUN strip /opt/python/bin/python3.14 /opt/python/lib/python3.14/lib-dynload/*.so \
+    && find /opt/python -type d -name __pycache__ -prune -exec rm -rf '{}' + \
+    && rm -rf /opt/python/lib/pkgconfig /opt/python/lib/python3.14/config-* \
+      /opt/python/lib/python3.14/ensurepip /opt/python/lib/python3.14/idlelib \
+      /opt/python/lib/python3.14/turtledemo
+RUN curl -fsSL "https://codeload.github.com/ioi/isolate/tar.gz/${ISOLATE_COMMIT}" -o /tmp/isolate.tar.gz \
+    && echo "${ISOLATE_SHA256}  /tmp/isolate.tar.gz" | sha256sum -c - \
+    && mkdir /tmp/isolate && tar -xf /tmp/isolate.tar.gz -C /tmp/isolate --strip-components=1 \
+    && make -C /tmp/isolate isolate \
+    && install -Dm4755 /tmp/isolate/isolate /opt/isolate/bin/isolate \
+    && install -Dm644 /tmp/isolate/LICENSE /opt/isolate/LICENSE
+
+FROM api AS worker
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcap2 libseccomp2 libbz2-1.0 libffi8 liblzma5 libreadline8t64 libsqlite3-0 \
+    libssl3t64 libncursesw6 libuuid1 zlib1g util-linux procps \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=sandbox-build /opt/python /opt/python
+COPY --from=sandbox-build /opt/isolate /opt/isolate
+COPY isolate.conf /usr/local/etc/isolate
+COPY worker-entrypoint.sh /usr/local/bin/worker-entrypoint
+ENV PATH="/opt/isolate/bin:/opt/python/bin:${PATH}"
+RUN mkdir -p /var/local/lib/isolate \
+    && chmod 4755 /opt/isolate/bin/isolate \
+    && chmod 755 /usr/local/bin/worker-entrypoint
+ENTRYPOINT ["/usr/local/bin/worker-entrypoint"]
+CMD ["/api/scripts/workers"]

@@ -31,6 +31,7 @@ from ..models import (
     TestVisibility,
     User,
 )
+from ..services.execution import snapshot_case_result
 from ..services.progress import (
     finalize_progress,
     get_or_create_progress,
@@ -110,6 +111,48 @@ def _judge0_error(error: Exception) -> HTTPException:
 
 def _is_terminal(status_id: int | None) -> bool:
     return status_id is not None and status_id >= Judge0Status.ACCEPTED
+
+
+def _case_execution_phase(result: SubmissionCaseResult) -> str:
+    if _is_terminal(result.judge0_status_id):
+        return "complete"
+    if result.judge0_status_id == Judge0Status.PROCESSING:
+        return "running_on_judge0"
+    if result.judge0_token is not None:
+        return "waiting_on_judge0"
+    if result.dispatch_started_at is not None:
+        return "sending_to_judge0"
+    return "waiting_to_send"
+
+
+def _submission_execution_phase(submission: Submission) -> str:
+    if submission.status in TERMINAL_SUBMISSION_STATUSES:
+        return "complete"
+    phases = {_case_execution_phase(result) for result in submission.case_results}
+    for phase in (
+        "running_on_judge0",
+        "sending_to_judge0",
+        "waiting_on_judge0",
+        "waiting_to_send",
+    ):
+        if phase in phases:
+            return phase
+    return "waiting_to_send"
+
+
+def _case_friendly_message(result: SubmissionCaseResult) -> str:
+    phase = _case_execution_phase(result)
+    messages = {
+        "waiting_to_send": "Waiting for TechniView to send this case.",
+        "sending_to_judge0": "Sending this case to Judge0.",
+        "waiting_on_judge0": "Queued in Judge0.",
+        "running_on_judge0": "Running in Judge0.",
+    }
+    if phase in messages:
+        return messages[phase]
+    if result.judge0_status_id is None:
+        return "Execution complete."
+    return get_status_message(result.judge0_status_id)
 
 
 def _error_for_status(status_id: int) -> ErrorCategory | None:
@@ -255,29 +298,29 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
             )
             exception_names.extend(matches[-1:])
     submission.python_exception_type = exception_names[0] if exception_names else None
-    finalize_progress(db, submission)
+    if not submission.is_practice_run:
+        finalize_progress(db, submission)
 
 
 def _submission_response(submission: Submission) -> dict:
     public_results = [
         {
-            "case_order": result.test_case.case_order,
-            "input": result.test_case.input,
-            "expected_output": result.test_case.expected_output,
+            "case_order": result.case_order,
+            "input": result.input,
+            "expected_output": result.expected_output,
             "stdout": result.stdout,
             "stderr": result.stderr,
             "compile_output": result.compile_output,
             "execution_time_ms": result.execution_time_ms,
             "memory_kb": result.memory_kb,
-            "status_id": result.judge0_status_id,
-            "friendly_message": (
-                get_status_message(result.judge0_status_id)
-                if result.judge0_status_id is not None
-                else get_status_message(Judge0Status.IN_QUEUE)
+            "status_id": (
+                result.judge0_status_id if result.judge0_token is not None else None
             ),
+            "phase": _case_execution_phase(result),
+            "friendly_message": _case_friendly_message(result),
         }
         for result in submission.case_results
-        if result.test_case.visibility == TestVisibility.PUBLIC
+        if result.visibility == TestVisibility.PUBLIC
     ]
     passed_count = sum(
         result.judge0_status_id == Judge0Status.ACCEPTED
@@ -286,7 +329,9 @@ def _submission_response(submission: Submission) -> dict:
     return {
         "id": submission.id,
         "status": submission.status,
+        "phase": _submission_execution_phase(submission),
         "done": submission.status in TERMINAL_SUBMISSION_STATUSES,
+        "is_practice_run": submission.is_practice_run,
         "score": submission.score,
         "is_late": submission.is_late,
         "late_approved": submission.late_approved_at is not None,
@@ -326,6 +371,7 @@ def _reserve_submission(
         Submission.student_id == student_id,
         Submission.problem_id == body.problem_id,
         Submission.assignment_item_id == body.assignment_item_id,
+        Submission.is_practice_run.is_(False),
     ]
     # The student row serializes reservations in this context. A locking read of
     # an empty submissions range takes InnoDB gap locks across other students.
@@ -392,7 +438,6 @@ def _load_submission(db: Session, submission_id: int) -> Submission | None:
         # Locking reads see committed results even with a REPEATABLE READ snapshot.
         results = db.scalars(
             select(SubmissionCaseResult)
-            .options(selectinload(SubmissionCaseResult.test_case))
             .where(SubmissionCaseResult.submission_id == submission_id)
             .order_by(SubmissionCaseResult.test_case_id)
             .execution_options(populate_existing=True)
@@ -444,10 +489,12 @@ def create_submission(body: SubmissionCreate, db: DbSession, user: CurrentUser):
     submission = _reserve_submission(db, body, user.id)
     for test_case in problem.test_cases:
         db.add(
-            SubmissionCaseResult(
+            snapshot_case_result(
+                problem,
+                test_case,
+                body.source_code,
                 submission_id=submission.id,
-                test_case_id=test_case.id,
-                judge0_status_id=Judge0Status.IN_QUEUE,
+                judge0_status_id=None,
             )
         )
     db.commit()
@@ -465,7 +512,10 @@ def list_student_submissions(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    query = select(Submission).where(Submission.student_id == user.id)
+    query = select(Submission).where(
+        Submission.student_id == user.id,
+        Submission.is_practice_run.is_(False),
+    )
     if problem_id is not None:
         query = query.where(Submission.problem_id == problem_id)
     if assignment_item_id is not None:
@@ -571,8 +621,8 @@ def _staff_submission_response(submission: Submission) -> dict:
     for result in submission.case_results:
         case = {
             "test_case_id": result.test_case_id,
-            "case_order": result.test_case.case_order,
-            "visibility": result.test_case.visibility,
+            "case_order": result.case_order,
+            "visibility": result.visibility,
             "status_id": result.judge0_status_id,
             "friendly_message": (
                 get_status_message(result.judge0_status_id)
@@ -585,9 +635,9 @@ def _staff_submission_response(submission: Submission) -> dict:
             "stderr": result.stderr,
             "compile_output": result.compile_output,
         }
-        if result.test_case.visibility == TestVisibility.PUBLIC:
-            case["input"] = result.test_case.input
-            case["expected_output"] = result.test_case.expected_output
+        if result.visibility == TestVisibility.PUBLIC:
+            case["input"] = result.input
+            case["expected_output"] = result.expected_output
         cases.append(case)
     response.update(
         {
@@ -609,11 +659,7 @@ def _staff_submission_query(db: Session, course_id: int):
     item_ids = _course_item_ids(db, course_id)
     return (
         select(Submission)
-        .options(
-            selectinload(Submission.case_results).selectinload(
-                SubmissionCaseResult.test_case
-            )
-        )
+        .options(selectinload(Submission.case_results))
         .where(Submission.assignment_item_id.in_(item_ids) if item_ids else False)
         .order_by(Submission.id.desc())
     )
@@ -671,11 +717,7 @@ def get_course_submission(
     # Judge0 and never finalizes, so it performs no writes.
     submission = db.scalar(
         select(Submission)
-        .options(
-            selectinload(Submission.case_results).selectinload(
-                SubmissionCaseResult.test_case
-            )
-        )
+        .options(selectinload(Submission.case_results))
         .where(Submission.id == submission_id)
     )
     if (
@@ -715,11 +757,7 @@ def approve_late_submission(
     return _staff_submission_response(
         db.scalar(
             select(Submission)
-            .options(
-                selectinload(Submission.case_results).selectinload(
-                    SubmissionCaseResult.test_case
-                )
-            )
+            .options(selectinload(Submission.case_results))
             .where(Submission.id == submission_id)
         )
     )

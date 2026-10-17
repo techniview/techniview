@@ -11,10 +11,10 @@ from app.models import (
     Problem,
     ProblemTestCase,
     Submission,
-    SubmissionCaseResult,
     SubmissionStatus,
     User,
 )
+from app.services.execution import snapshot_case_result
 from sqlalchemy import select
 
 pytestmark = pytest.mark.anyio
@@ -46,9 +46,11 @@ def _seed_submission(db_session, *, student_id, problem_id, item_id, status, sou
     ).all()
     for case in cases:
         db_session.add(
-            SubmissionCaseResult(
+            snapshot_case_result(
                 submission_id=submission.id,
-                test_case_id=case.id,
+                problem=case.problem,
+                case=case,
+                source_code=submission.source_code,
                 judge0_token=f"token-{submission.id}-{case.id}"[:36],
                 judge0_status_id=4,
                 stdout="some output",

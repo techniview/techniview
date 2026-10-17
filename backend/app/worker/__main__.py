@@ -4,6 +4,7 @@ import signal
 import time
 
 from ..core.db import SessionLocal
+from ..core.observability import configure_logging, log_event
 from ..services.email_delivery import process_email_jobs
 from .submissions import process_next_submission
 
@@ -12,6 +13,7 @@ logger = logging.getLogger("techniview.worker")
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    configure_logging()
     owner = secrets.token_hex(16)
     stopping = False
 
@@ -29,7 +31,7 @@ def main():
                 process_email_jobs(db, limit=5)
         except Exception:
             # Avoid exception text: HTTP failures can include callback credentials.
-            logger.error("Worker job failed; its lease will permit recovery.")
+            log_event(logger, logging.ERROR, "worker_job_failed_recoverable")
             worked = False
         if not worked:
             time.sleep(1)

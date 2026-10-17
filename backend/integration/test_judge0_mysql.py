@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from app.services.execution import snapshot_case_result
 from sqlalchemy import select, text
 
 pytestmark = pytest.mark.skipif(
@@ -30,7 +31,7 @@ def database():
 def test_overlapping_callbacks_use_current_mysql_rows(database, monkeypatch):
     from app.core.db import SessionLocal
     from app.core.security import hash_token
-    from app.models import Problem, StudentPracticeProgress, SubmissionCaseResult, User
+    from app.models import Problem, StudentPracticeProgress, User
     from app.routers import submissions
 
     user = database.scalar(select(User).where(User.email == "student@techniview.local"))
@@ -45,9 +46,11 @@ def test_overlapping_callbacks_use_current_mysql_rows(database, monkeypatch):
     ]
     for case, (secret, token) in zip(problem.test_cases, credentials, strict=True):
         database.add(
-            SubmissionCaseResult(
+            snapshot_case_result(
                 submission_id=submission.id,
-                test_case_id=case.id,
+                problem=case.problem,
+                case=case,
+                source_code=submission.source_code,
                 callback_token_hash=hash_token(secret),
                 judge0_token=token,
                 judge0_status_id=1,
@@ -179,7 +182,7 @@ def test_real_judge0_callback_finishes_without_api_polling(
 
 def test_polling_recovers_execution_without_callback(database, client):
     from app.core.judge0 import judge0_get, judge0_submit
-    from app.models import Problem, SubmissionCaseResult, User
+    from app.models import Problem, User
     from app.routers.submissions import SubmissionCreate, _reserve_submission
     from app.services.execution import build_case_execution
     from app.services.progress import utc_now
@@ -205,9 +208,11 @@ def test_polling_recovers_execution_without_callback(database, client):
     )
     token = result["token"]
     database.add(
-        SubmissionCaseResult(
+        snapshot_case_result(
             submission_id=submission.id,
-            test_case_id=case.id,
+            problem=case.problem,
+            case=case,
+            source_code=submission.source_code,
             judge0_token=token,
             judge0_status_id=1,
             dispatch_started_at=utc_now(),

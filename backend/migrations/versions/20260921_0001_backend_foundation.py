@@ -2,6 +2,7 @@
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import mysql
 
 revision = "20260921_0001"
 down_revision = None
@@ -384,9 +385,37 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["submission_id"], ["submissions.id"], ondelete="CASCADE"
         ),
-        sa.ForeignKeyConstraint(
-            ["test_case_id"], ["problem_test_cases.id"], ondelete="RESTRICT"
+        sa.Column("case_order", sa.Integer(), nullable=False),
+        sa.Column(
+            "visibility",
+            _enum("public", "hidden", name="testvisibility"),
+            nullable=False,
         ),
+        sa.Column(
+            "input", sa.Text().with_variant(mysql.MEDIUMTEXT(), "mysql"), nullable=False
+        ),
+        sa.Column(
+            "expected_output",
+            sa.Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
+            nullable=False,
+        ),
+        sa.Column(
+            "execution_source",
+            sa.Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
+            nullable=False,
+        ),
+        sa.Column(
+            "execution_stdin",
+            sa.Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
+            nullable=True,
+        ),
+        sa.Column(
+            "execution_expected_output",
+            sa.Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
+            nullable=False,
+        ),
+        sa.Column("cpu_time_limit_seconds", sa.Numeric(6, 3), nullable=False),
+        sa.Column("memory_limit_kb", sa.Integer(), nullable=False),
     )
     op.create_index(
         "ix_submission_case_results_judge0_token",
