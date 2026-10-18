@@ -14,9 +14,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def run(*args, env=None, input=None, check=True):
-    return subprocess.run(
-        args, env=env, input=input, text=True, capture_output=True, check=check
+    result = subprocess.run(
+        args, env=env, input=input, text=True, capture_output=True, check=False
     )
+    if check and result.returncode:
+        raise RuntimeError(
+            f"Command {args[0]!r} failed with exit status {result.returncode}:\n"
+            f"{result.stderr or result.stdout}"
+        )
+    return result
 
 
 def main():
