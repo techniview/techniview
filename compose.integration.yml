@@ -19,7 +19,7 @@ x-app: &app
   build:
     context: ./backend
     dockerfile: integration/Dockerfile
-  environment:
+  environment: &app-environment
     DATABASE_URL: mysql+pymysql://integration:p%40ss%25word@mysql/integration
     JUDGE0_URL: http://judge:2358
     JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
@@ -111,6 +111,7 @@ services:
   app_worker:
     <<: *app
     environment:
+      <<: *app-environment
       DB_POOL_SIZE: "3"
       DB_MAX_OVERFLOW: "0"
     command: python -m app.worker
