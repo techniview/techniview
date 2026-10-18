@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -69,11 +69,18 @@ jobs:
 
   integration:
     name: MySQL and Judge0 integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Pin the load-test host image so the CI baseline doesn't drift with `latest`.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make integration
+      - name: Record load-test runner profile
+        run: |
+          echo "Runner: $RUNNER_NAME ($RUNNER_OS $RUNNER_ARCH)"
+          lscpu
+          free -h
+          docker version
       - run: make load-test
       - run: sudo apt-get update && sudo apt-get install --yes restic
       - run: python3 scripts/tests/test_backup_mysql.py

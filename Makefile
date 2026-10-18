@@ -1,8 +1,9 @@
 .PHONY: install hooks fmt lint test check verify integration load-test build up down clean
 
-LOAD_STUDENTS ?= 50
+LOAD_STUDENTS ?= 1000
 LOAD_CONCURRENCY ?= $(LOAD_STUDENTS)
-LOAD_COMPLETION_TIMEOUT_SECONDS ?= 180
+LOAD_COMPLETION_TIMEOUT_SECONDS ?= 1200
+LOAD_APP_WORKERS ?= 4
 
 install: hooks
 	@uv sync --locked
@@ -42,10 +43,12 @@ integration:
 	docker compose --env-file /dev/null -f compose.integration.yml up --build --attach tests --abort-on-container-exit --exit-code-from tests
 
 load-test:
-	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \
-	docker compose --env-file /dev/null -f compose.integration.yml up -d --build backend judge workers app_worker; \
+	@set -e; \
+	cleanup() { status=$$?; if [ $$status -ne 0 ]; then docker compose --env-file /dev/null -f compose.integration.yml logs --tail=100 backend app_worker || true; fi; docker compose --env-file /dev/null -f compose.integration.yml down --volumes || true; exit $$status; }; \
+	trap cleanup EXIT; \
+	docker compose --env-file /dev/null -f compose.integration.yml up -d --build --scale app_worker=$(LOAD_APP_WORKERS) backend judge workers app_worker; \
 	docker compose --env-file /dev/null -f compose.integration.yml build tests; \
-	docker compose --env-file /dev/null -f compose.integration.yml run --rm \
+	docker compose --env-file /dev/null -f compose.integration.yml run --rm --no-deps \
 	  -e LOAD_STUDENTS=$(LOAD_STUDENTS) \
 	  -e LOAD_CONCURRENCY=$(LOAD_CONCURRENCY) \
 	  -e LOAD_COMPLETION_TIMEOUT_SECONDS=$(LOAD_COMPLETION_TIMEOUT_SECONDS) \

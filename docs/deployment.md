@@ -18,8 +18,14 @@ VM executes untrusted student code and must not share a host with student data.
   validation.
 
 Request an initial 4 vCPU / 8 GiB application VM and an 8 vCPU / 16 GiB runner
-VM. The Compose files cap service CPU and memory use within those budgets. Treat
-these as starting sizes and adjust them from the assignment load test.
+VM. Set `API_WORKERS`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and
+`APP_WORKER_REPLICAS` in `.env.production` after load testing. API workers handle
+concurrent HTTP requests; the database pool settings bound each process's
+connections and must fit under MySQL's connection limit; application worker
+replicas claim and process queued submissions concurrently. Allocate enough CPU
+and memory for the selected counts. The Compose files cap service CPU and memory
+use within those budgets. Treat these as starting sizes
+and adjust them from the assignment load test.
 Use encrypted campus storage for both VMs. Judge0 keeps copies of submitted code
 and execution output in its own database, so protect and retain that volume as
 student data too.
@@ -194,5 +200,9 @@ Before enrolling participants, confirm campus DNS and firewall rules, approved
 email delivery, SSO requirements, research data handling requirements with the
 IRB advisor, the retention period for Judge0's duplicate source and output data,
 and a successful backup restore. Load test the pilot profile in a disposable
-environment. Current local integration coverage includes a 50-request
-submission burst; it does not establish campus capacity.
+environment. CI runs a 1,000-student synchronized burst with one real case per
+submission. GitHub-hosted results are useful for regressions but do not establish
+campus capacity; repeat the profile on the proposed campus VM sizes before the
+pilot. The runner queue limit defaults to 12,000 cases to hold that profile with
+headroom. Reduce it only if the planned peak load is lower and queue backpressure
+is intentional.

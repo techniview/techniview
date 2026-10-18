@@ -102,21 +102,33 @@ personal database or production service.
 
 ## Load test
 
-Run `make load-test` to drive the disposable MySQL/Judge0 stack with independent
-student accounts submitting at the same time. The default profile submits 50
-jobs at concurrency 50 and reports API acceptance latency, submission-to-result
-latency, maximum observed application queue depth, and maximum queue age. No
-performance threshold is enforced because results depend on the host running
-Docker. Increase or reduce the profile when useful:
+The CI integration job runs `make load-test` on a pinned Ubuntu 24.04 GitHub
+Actions runner. It drives the disposable MySQL/Judge0 stack with a synchronized
+burst of 1,000 students submitting one published assignment item. Each submission
+runs one real sandbox case. The test prepares the assignment and accounts before
+timing the burst, then waits for every submission and case to finish. The test
+starts four application workers so CI measures a horizontally scaled worker
+pool. It reports API acceptance and completion latency percentiles, throughput,
+failures, maximum application queue depth and age, and observed case counts in
+each dispatch phase. Metrics scrape errors fail the run. No latency or
+throughput threshold is enforced until repeatable GitHub-runner baselines have
+been collected. The integration CI job has a 60-minute budget and the load run
+has a 20-minute completion deadline.
+
+The runner profile is recorded in the CI log with each run. GitHub-hosted runners
+use standardized VM classes, but the underlying host can still vary; compare
+results alongside that profile. The test target can be run manually for debugging,
+but treat GitHub Actions runs as the comparable baseline:
 
 ```sh
-make load-test LOAD_STUDENTS=100 LOAD_CONCURRENCY=50
+make load-test LOAD_STUDENTS=100 LOAD_CONCURRENCY=100
 ```
 
-This measures one Python workload on the local test stack. It does not establish
-campus capacity. Before using the results for VM sizing, repeat the profile on
-the campus VM sizes with a pilot estimate for simultaneous students and job
-mix. Never point the load test at a production service.
+This measures the full application and runner stack on the host running Docker.
+GitHub-hosted CI results are regression baselines, not a campus capacity claim.
+Before using results for VM sizing, repeat the profile on the proposed campus VM
+sizes with the expected student count and problem mix. Never point the load test
+at a production service.
 
 ## GitHub checks
 
@@ -126,7 +138,8 @@ Every pull request runs five parallel jobs:
 - Backend checks run Ruff, pytest with branch coverage output, and pip-audit.
 - Frontend checks run npm audit, TypeScript, ESLint, Prettier, Vitest, and the
   production build.
-- Integration runs `make integration` and `make load-test` on a clean Ubuntu runner.
+- Integration runs `make integration` and the full 1,000-student, one-case
+  `make load-test` on a clean Ubuntu runner.
 - Production images builds the API, frontend, and runner images used on campus.
 
 The final `CI` check fails if any job fails, is cancelled, or is skipped. That is

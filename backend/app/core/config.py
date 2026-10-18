@@ -29,6 +29,9 @@ def build_database_url(
 
 
 class Settings:
+    DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
+    DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+    DB_POOL_TIMEOUT_SECONDS = int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "30"))
     EMAIL_DELIVERY_MODE = os.getenv("EMAIL_DELIVERY_MODE", "disabled")
     EMAIL_CAPTURE_DIR = os.getenv("EMAIL_CAPTURE_DIR", "/tmp/techniview-mail")
     EMAIL_SIGNING_KEY = _setting("EMAIL_SIGNING_KEY")

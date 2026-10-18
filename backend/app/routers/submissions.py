@@ -366,6 +366,7 @@ def _reserve_submission(
         student_id,
         body.problem_id,
         body.assignment_item_id,
+        assignment_item_validated=body.assignment_item_id is not None,
     )
     context = [
         Submission.student_id == student_id,
