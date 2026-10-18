@@ -82,7 +82,22 @@ jobs:
           free -h
           docker version
       - run: make load-test
-      - run: sudo apt-get update && sudo apt-get install --yes restic
+      - name: Install pinned restic version
+        run: |
+          set -euo pipefail
+          version=0.19.1
+          archive="restic_${version}_linux_amd64.bz2"
+          temporary_directory=$(mktemp -d)
+          trap 'rm -rf "$temporary_directory"' EXIT
+          curl --fail --silent --show-error --location \
+            "https://github.com/restic/restic/releases/download/v${version}/${archive}" \
+            --output "${temporary_directory}/${archive}"
+          echo "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c  ${temporary_directory}/${archive}" \
+            | sha256sum --check --status
+          bunzip2 --decompress --stdout "${temporary_directory}/${archive}" \
+            > "${temporary_directory}/restic"
+          sudo install -m 0755 "${temporary_directory}/restic" /usr/local/bin/restic
+          restic version
       - run: python3 scripts/tests/test_backup_mysql.py
 
   production-images:
