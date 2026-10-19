@@ -148,6 +148,12 @@ simultaneous students and one case per submission. The JSON results and per-run
 logs are saved as a 30-day Actions artifact. This workflow does not request a
 larger runner; it uses the repository's normal GitHub Actions allowance.
 
+The `Worker combination sweep` separately compares one TechniView app worker
+with 4 versus 8 Judge0 workers, three times per setting. It checks whether more
+runner workers help after reducing app-worker CPU contention on the shared CI
+host. It uses the same runner class and workload and saves results as a 30-day
+Actions artifact.
+
 Change one factor at a time and repeat each profile at least three times. Keep
 the standard GitHub runner size fixed for CI comparisons. These targets do not
 request a larger or paid runner, but Actions billing still depends on repository
