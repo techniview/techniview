@@ -1,6 +1,9 @@
 name: Worker capacity sweep
 
 on:
+  push:
+    branches: [corniedj/infrastructure-hardening-and-deployment]
+    paths: [.github/workflows/worker-sweep.yml]
   workflow_dispatch:
 
 permissions:
