@@ -142,11 +142,11 @@ To test a larger burst, increase both student count and request concurrency,
 for example `make load-test LOAD_STUDENTS=250 LOAD_CONCURRENCY=250`.
 
 Use the manually dispatched `Worker capacity sweep` workflow to compare 1, 2, 4,
-and 8 Judge0 workers. It runs each profile three times, sequentially, on one
-standard `ubuntu-24.04` host with 100 simultaneous students, one case per
-submission, and four application workers. The JSON results and per-run logs are
-saved as a 30-day Actions artifact. This workflow does not request a larger
-runner; it uses the repository's normal GitHub Actions allowance.
+and 8 Judge0 workers, then 1, 2, 4, and 8 application workers. It runs each
+profile three times, sequentially, on one standard `ubuntu-24.04` host with 100
+simultaneous students and one case per submission. The JSON results and per-run
+logs are saved as a 30-day Actions artifact. This workflow does not request a
+larger runner; it uses the repository's normal GitHub Actions allowance.
 
 Change one factor at a time and repeat each profile at least three times. Keep
 the standard GitHub runner size fixed for CI comparisons. These targets do not
