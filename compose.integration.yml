@@ -1,14 +1,16 @@
 name: techniview-integration
 
+x-judge-environment: &judge-environment
+  POSTGRES_HOST: postgres
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: integration-only
+  POSTGRES_DB: postgres
+  REDIS_HOST: redis
+  REDIS_PASSWORD: integration-only
+  MAX_QUEUE_SIZE: "12000"
+
 x-judge: &judge
-  environment:
-    POSTGRES_HOST: postgres
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: integration-only
-    POSTGRES_DB: postgres
-    REDIS_HOST: redis
-    REDIS_PASSWORD: integration-only
-    MAX_QUEUE_SIZE: "12000"
+  environment: *judge-environment
   depends_on:
     postgres:
       condition: service_healthy
@@ -71,6 +73,9 @@ services:
     command: /api/scripts/server
   workers:
     <<: *judge
+    environment:
+      <<: *judge-environment
+      COUNT: ${LOAD_JUDGE0_WORKERS:-4}
     build:
       context: ./internal-judge0-fork
       target: worker

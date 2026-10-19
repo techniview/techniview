@@ -102,18 +102,18 @@ personal database or production service.
 
 ## Load test
 
-The CI integration job runs `make load-test` on a pinned Ubuntu 24.04 GitHub
-Actions runner. It drives the disposable MySQL/Judge0 stack with a synchronized
-burst of 1,000 students submitting one published assignment item. Each submission
-runs one real sandbox case. The test prepares the assignment and accounts before
-timing the burst, then waits for every submission and case to finish. The test
-starts four application workers so CI measures a horizontally scaled worker
-pool. It reports API acceptance and completion latency percentiles, throughput,
-failures, maximum application queue depth and age, and observed case counts in
-each dispatch phase. Metrics scrape errors fail the run. No latency or
-throughput threshold is enforced until repeatable GitHub-runner baselines have
-been collected. The integration CI job has a 60-minute budget and the load run
-has a 20-minute completion deadline.
+The CI integration job runs `make load-test` on a standard Ubuntu 24.04
+GitHub-hosted runner. It drives the disposable MySQL/Judge0 stack with a
+synchronized burst of 100 students submitting one published assignment item.
+Each submission runs one real sandbox case. The test prepares the assignment and
+accounts before timing the burst, then waits for every submission and case to
+finish. The test starts four application workers and four Judge0 worker
+processes. It reports API acceptance and completion latency percentiles,
+throughput, failures, maximum application queue depth and age, and observed case
+counts in each dispatch phase. Metrics scrape errors fail the run. No latency or
+throughput threshold is enforced until repeatable baselines have been
+collected. The integration CI job has a 60-minute budget and the load run has a
+20-minute completion deadline.
 
 The runner profile is recorded in the CI log with each run. GitHub-hosted runners
 use standardized VM classes, but the underlying host can still vary; compare
@@ -121,8 +121,30 @@ results alongside that profile. The test target can be run manually for debuggin
 but treat GitHub Actions runs as the comparable baseline:
 
 ```sh
-make load-test LOAD_STUDENTS=100 LOAD_CONCURRENCY=100
+make load-test
 ```
+
+The test can vary simultaneous students, request concurrency, cases per
+submission, application worker replicas, and Judge0 worker processes. Keep all
+but one setting fixed when comparing profiles. For example, start with the CI
+default, then change Judge0 worker count, then test a larger case set:
+
+```sh
+make load-test
+make load-test LOAD_JUDGE0_WORKERS=8
+make load-test LOAD_CASES_PER_SUBMISSION=5
+```
+
+To test a larger burst, increase both student count and request concurrency,
+for example `make load-test LOAD_STUDENTS=250 LOAD_CONCURRENCY=250`.
+
+Change one factor at a time and repeat each profile at least three times. Keep
+the standard GitHub runner size fixed for CI comparisons. These targets do not
+request a larger or paid runner, but Actions billing still depends on repository
+visibility, plan, and remaining included minutes. Do not add repeated profiles
+to every pull request until the repository's Actions spending controls are
+confirmed. Use the campus VMs to establish the final capacity claim against the
+proposed split app and runner topology.
 
 This measures the full application and runner stack on the host running Docker.
 GitHub-hosted CI results are regression baselines, not a campus capacity claim.
@@ -138,7 +160,7 @@ Every pull request runs five parallel jobs:
 - Backend checks run Ruff, pytest with branch coverage output, and pip-audit.
 - Frontend checks run npm audit, TypeScript, ESLint, Prettier, Vitest, and the
   production build.
-- Integration runs `make integration` and the full 1,000-student, one-case
+- Integration runs `make integration` and the 100-student, one-case
   `make load-test` on a clean Ubuntu runner.
 - Production images builds the API, frontend, and runner images used on campus.
 

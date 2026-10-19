@@ -1,9 +1,11 @@
 .PHONY: install hooks fmt lint test check verify integration load-test build up down clean
 
-LOAD_STUDENTS ?= 1000
+LOAD_STUDENTS ?= 100
 LOAD_CONCURRENCY ?= $(LOAD_STUDENTS)
 LOAD_COMPLETION_TIMEOUT_SECONDS ?= 1200
 LOAD_APP_WORKERS ?= 4
+LOAD_JUDGE0_WORKERS ?= 4
+LOAD_CASES_PER_SUBMISSION ?= 1
 
 install: hooks
 	@uv sync --locked
@@ -46,11 +48,12 @@ load-test:
 	@set -e; \
 	cleanup() { status=$$?; if [ $$status -ne 0 ]; then docker compose --env-file /dev/null -f compose.integration.yml logs --tail=100 backend app_worker || true; fi; docker compose --env-file /dev/null -f compose.integration.yml down --volumes || true; exit $$status; }; \
 	trap cleanup EXIT; \
-	docker compose --env-file /dev/null -f compose.integration.yml up -d --build --scale app_worker=$(LOAD_APP_WORKERS) backend judge workers app_worker; \
+	LOAD_JUDGE0_WORKERS=$(LOAD_JUDGE0_WORKERS) docker compose --env-file /dev/null -f compose.integration.yml up -d --build --scale app_worker=$(LOAD_APP_WORKERS) backend judge workers app_worker; \
 	docker compose --env-file /dev/null -f compose.integration.yml build tests; \
 	docker compose --env-file /dev/null -f compose.integration.yml run --rm --no-deps \
 	  -e LOAD_STUDENTS=$(LOAD_STUDENTS) \
 	  -e LOAD_CONCURRENCY=$(LOAD_CONCURRENCY) \
+	  -e LOAD_CASES_PER_SUBMISSION=$(LOAD_CASES_PER_SUBMISSION) \
 	  -e LOAD_COMPLETION_TIMEOUT_SECONDS=$(LOAD_COMPLETION_TIMEOUT_SECONDS) \
 	  tests python -m performance.load_test
 

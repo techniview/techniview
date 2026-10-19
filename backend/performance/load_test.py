@@ -38,7 +38,6 @@ from app.models import (
 )
 from sqlalchemy import func, select, text
 
-CASE_COUNT = 1
 SOURCE_CODE = "def count_evens(values):\n    return sum(x % 2 == 0 for x in values)"
 
 
@@ -62,7 +61,9 @@ def _metric_value(payload: str, metric_name: str, labels: str = "") -> float:
     raise AssertionError(f"Missing metric: {prefix.strip()}")
 
 
-def _seed_load_scenario(students: int) -> tuple[int, int, list[str]]:
+def _seed_load_scenario(
+    students: int, cases_per_submission: int
+) -> tuple[int, int, list[str]]:
     batch = uuid4().hex
     now = datetime.now(UTC).replace(tzinfo=None)
     available_at = now - timedelta(minutes=1)
@@ -126,11 +127,14 @@ def _seed_load_scenario(students: int) -> tuple[int, int, list[str]]:
             memory_limit_kb=128000,
             test_cases=[
                 ProblemTestCase(
-                    case_order=1,
+                    case_order=case_order,
                     visibility=TestVisibility.HIDDEN,
-                    input=json.dumps([[1, 2, 3, 4]]),
+                    input=json.dumps(
+                        [[case_order, case_order + 1, case_order + 2, case_order + 3]]
+                    ),
                     expected_output=json.dumps(2),
                 )
+                for case_order in range(1, cases_per_submission + 1)
             ],
         )
         db.add(problem)
@@ -271,6 +275,7 @@ def _read_completion_rows(
 async def _run_burst(
     students: int,
     concurrency: int,
+    cases_per_submission: int,
     completion_timeout: int,
     problem_id: int,
     assignment_item_id: int,
@@ -409,7 +414,7 @@ async def _run_burst(
                 SubmissionCaseResult.judge0_status_id == 3,
             )
         )
-    expected_cases = students * CASE_COUNT
+    expected_cases = students * cases_per_submission
     if persisted_submissions != students:
         raise AssertionError(
             f"Expected {students} durable assignment submissions, "
@@ -426,7 +431,7 @@ async def _run_burst(
     return {
         "students": students,
         "submission_concurrency": concurrency,
-        "test_cases_per_submission": CASE_COUNT,
+        "test_cases_per_submission": cases_per_submission,
         "accepted_submissions": len(accepted),
         "acceptance_burst_seconds": round(acceptance_burst, 3),
         "accepted_submissions_per_second": round(students / acceptance_burst, 3),
@@ -460,12 +465,16 @@ async def _run_burst(
 def main() -> None:
     students = _integer_setting("LOAD_STUDENTS", 1000, 1000)
     concurrency = _integer_setting("LOAD_CONCURRENCY", students, students)
+    cases_per_submission = _integer_setting("LOAD_CASES_PER_SUBMISSION", 1, 20)
     completion_timeout = _integer_setting("LOAD_COMPLETION_TIMEOUT_SECONDS", 1200, 2700)
-    problem_id, assignment_item_id, tokens = _seed_load_scenario(students)
+    problem_id, assignment_item_id, tokens = _seed_load_scenario(
+        students, cases_per_submission
+    )
     report = asyncio.run(
         _run_burst(
             students,
             concurrency,
+            cases_per_submission,
             completion_timeout,
             problem_id,
             assignment_item_id,
