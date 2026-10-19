@@ -108,12 +108,15 @@ synchronized burst of 100 students submitting one published assignment item.
 Each submission runs one real sandbox case. The test prepares the assignment and
 accounts before timing the burst, then waits for every submission and case to
 finish. The test starts four application workers and four Judge0 worker
-processes. It reports API acceptance and completion latency percentiles,
-throughput, failures, maximum application queue depth and age, and observed case
-counts in each dispatch phase. Metrics scrape errors fail the run. No latency or
-throughput threshold is enforced until repeatable baselines have been
-collected. The integration CI job has a 60-minute budget and the load run has a
-20-minute completion deadline.
+processes. It reports configured worker counts, API acceptance and completion
+latency percentiles, throughput, failures, maximum application queue depth and
+age, observed case counts in each dispatch phase, and live Judge0 worker states
+and queue depth from Judge0's `/workers` endpoint. It samples that endpoint
+every 200 ms and reports peak and average busy workers. Metrics scrape errors
+fail the run, as does failure to observe the configured Judge0 worker processes.
+No latency or throughput threshold is enforced until repeatable baselines have
+been collected. The integration CI job has a 60-minute budget and the load run
+has a 20-minute completion deadline.
 
 The runner profile is recorded in the CI log with each run. GitHub-hosted runners
 use standardized VM classes, but the underlying host can still vary; compare

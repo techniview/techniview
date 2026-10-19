@@ -247,11 +247,61 @@ async def _monitor_metrics(stop: asyncio.Event, samples: dict[str, float]) -> No
                             f'{{phase="{phase}"}}',
                         ),
                     )
+                if (
+                    _metric_value(
+                        response.text,
+                        "techniview_judge0_worker_status_scrape_success",
+                    )
+                    != 1
+                ):
+                    raise AssertionError("Live Judge0 worker status scrape failed")
             except (httpx.HTTPError, AssertionError, ValueError) as error:
                 samples["metrics_scrape_errors"] += 1
                 samples["metrics_last_scrape_error"] = str(error)[:300]
             try:
                 await asyncio.wait_for(stop.wait(), timeout=1)
+            except TimeoutError:
+                pass
+
+
+async def _monitor_judge0_workers(
+    stop: asyncio.Event, samples: dict[str, float]
+) -> None:
+    async with httpx.AsyncClient(base_url=settings.JUDGE0_URL, timeout=2) as api:
+        while not stop.is_set():
+            try:
+                response = await api.get("/workers")
+                response.raise_for_status()
+                queues = response.json()
+                if not isinstance(queues, list):
+                    raise ValueError("Judge0 returned invalid worker status")
+                observed = {
+                    "available": 0,
+                    "idle": 0,
+                    "working": 0,
+                    "paused": 0,
+                    "queue_size": 0,
+                }
+                for queue in queues:
+                    if not isinstance(queue, dict):
+                        raise ValueError("Judge0 returned invalid queue status")
+                    observed["queue_size"] += int(queue["size"])
+                    for state in ("available", "idle", "working", "paused"):
+                        observed[state] += int(queue[state])
+                for name, value in observed.items():
+                    key = (
+                        "judge0_queue_size"
+                        if name == "queue_size"
+                        else f"judge0_workers_{name}"
+                    )
+                    samples[key] = max(samples[key], value)
+                samples["judge0_worker_status_samples"] += 1
+                samples["judge0_workers_working_total"] += observed["working"]
+            except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+                samples["judge0_status_scrape_errors"] += 1
+                samples["judge0_status_last_scrape_error"] = str(error)[:300]
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=0.2)
             except TimeoutError:
                 pass
 
@@ -293,10 +343,22 @@ async def _run_burst(
         "case_waiting_to_dispatch": 0.0,
         "case_waiting_on_judge0": 0.0,
         "case_running_on_judge0": 0.0,
+        "judge0_workers_available": 0.0,
+        "judge0_workers_idle": 0.0,
+        "judge0_workers_working": 0.0,
+        "judge0_workers_paused": 0.0,
+        "judge0_queue_size": 0.0,
+        "judge0_worker_status_samples": 0.0,
+        "judge0_workers_working_total": 0.0,
         "metrics_scrape_errors": 0.0,
         "metrics_last_scrape_error": "",
+        "judge0_status_scrape_errors": 0.0,
+        "judge0_status_last_scrape_error": "",
     }
     monitor_task = asyncio.create_task(_monitor_metrics(stop_metrics, samples))
+    judge0_monitor_task = asyncio.create_task(
+        _monitor_judge0_workers(stop_metrics, samples)
+    )
 
     try:
         async with httpx.AsyncClient(
@@ -373,12 +435,29 @@ async def _run_burst(
             await asyncio.sleep(0.5)
     finally:
         stop_metrics.set()
-        await monitor_task
+        await asyncio.gather(monitor_task, judge0_monitor_task)
 
     if samples["metrics_scrape_errors"]:
         raise AssertionError(
             f"Metrics scraping failed {int(samples['metrics_scrape_errors'])} times; "
             f"last error: {samples['metrics_last_scrape_error']}"
+        )
+    if samples["judge0_status_scrape_errors"]:
+        raise AssertionError(
+            "Judge0 worker status scraping failed "
+            f"{int(samples['judge0_status_scrape_errors'])} times; last error: "
+            f"{samples['judge0_status_last_scrape_error']}"
+        )
+    if not samples["judge0_worker_status_samples"]:
+        raise AssertionError("No live Judge0 worker status samples were collected")
+
+    configured_judge0_workers = _integer_setting("LOAD_JUDGE0_WORKERS", 4, 100)
+    configured_app_workers = _integer_setting("LOAD_APP_WORKERS", 4, 100)
+    if samples["judge0_workers_available"] < configured_judge0_workers:
+        raise AssertionError(
+            "Judge0 registered "
+            f"{int(samples['judge0_workers_available'])} worker processes; expected "
+            f"at least {configured_judge0_workers}"
         )
 
     completion_batch = time.perf_counter() - burst_started
@@ -431,6 +510,8 @@ async def _run_burst(
     return {
         "students": students,
         "submission_concurrency": concurrency,
+        "application_worker_replicas_configured": configured_app_workers,
+        "judge0_worker_processes_configured": configured_judge0_workers,
         "test_cases_per_submission": cases_per_submission,
         "accepted_submissions": len(accepted),
         "acceptance_burst_seconds": round(acceptance_burst, 3),
@@ -456,6 +537,20 @@ async def _run_burst(
         ),
         "max_observed_waiting_on_judge0_cases": int(samples["case_waiting_on_judge0"]),
         "max_observed_running_on_judge0_cases": int(samples["case_running_on_judge0"]),
+        "max_observed_judge0_workers_available": int(
+            samples["judge0_workers_available"]
+        ),
+        "max_observed_judge0_workers_idle": int(samples["judge0_workers_idle"]),
+        "max_observed_judge0_workers_working": int(samples["judge0_workers_working"]),
+        "avg_observed_judge0_workers_working": round(
+            samples["judge0_workers_working_total"]
+            / samples["judge0_worker_status_samples"],
+            3,
+        ),
+        "judge0_worker_status_samples": int(samples["judge0_worker_status_samples"]),
+        "judge0_worker_sample_interval_seconds": 0.2,
+        "max_observed_judge0_workers_paused": int(samples["judge0_workers_paused"]),
+        "max_observed_judge0_queue_size": int(samples["judge0_queue_size"]),
         "metrics_scrape_errors": int(samples["metrics_scrape_errors"]),
         "metrics_last_scrape_error": samples["metrics_last_scrape_error"],
         "execution_cases": actual_cases,
@@ -463,7 +558,7 @@ async def _run_burst(
 
 
 def main() -> None:
-    students = _integer_setting("LOAD_STUDENTS", 1000, 1000)
+    students = _integer_setting("LOAD_STUDENTS", 100, 1000)
     concurrency = _integer_setting("LOAD_CONCURRENCY", students, students)
     cases_per_submission = _integer_setting("LOAD_CASES_PER_SUBMISSION", 1, 20)
     completion_timeout = _integer_setting("LOAD_COMPLETION_TIMEOUT_SECONDS", 1200, 2700)

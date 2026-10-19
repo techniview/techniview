@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 from app.core.observability import HttpMetrics
 from app.models import (
@@ -29,6 +30,20 @@ def metrics_database(db_session, monkeypatch):
         metrics, "SessionLocal", sessionmaker(bind=db_session.get_bind())
     )
     monkeypatch.setattr(metrics, "http_metrics", HttpMetrics())
+    monkeypatch.setattr(
+        metrics,
+        "judge0_workers",
+        lambda: [
+            {
+                "queue": "python",
+                "size": 7,
+                "available": 4,
+                "idle": 2,
+                "working": 2,
+                "paused": 0,
+            }
+        ],
+    )
     return db_session
 
 
@@ -105,6 +120,13 @@ def test_execution_metrics_classify_persisted_cases_without_sensitive_data(
     assert values['techniview_submissions{status="passed",practice_run="false"}'] == 1
     assert values["techniview_submission_queue_depth"] == 1
     assert 120 <= values["techniview_submission_queue_oldest_seconds"] < 150
+    assert values["techniview_judge0_worker_status_scrape_success"] == 1
+    assert values['techniview_judge0_queue_size{queue="python"}'] == 7
+    for state, count in {"available": 4, "idle": 2, "working": 2, "paused": 0}.items():
+        assert (
+            values[f'techniview_judge0_workers{{queue="python",state="{state}"}}']
+            == count
+        )
     for private_value in (
         "private-",
         student.email,
@@ -128,6 +150,18 @@ def test_empty_execution_queue_exports_numeric_zeroes(metrics_database):
     assert execution_values == [0] * 6
     assert values["techniview_submission_queue_depth"] == 0
     assert values["techniview_submission_queue_oldest_seconds"] == 0
+
+
+def test_metrics_remain_available_when_live_judge0_worker_scrape_fails(
+    metrics_database, monkeypatch
+):
+    def fail_scrape():
+        raise httpx.ConnectError("runner unavailable")
+
+    monkeypatch.setattr(metrics, "judge0_workers", fail_scrape)
+    values = samples(metrics.metrics().body.decode())
+    assert values["techniview_judge0_worker_status_scrape_success"] == 0
+    assert values["techniview_submission_queue_depth"] == 0
 
 
 def test_http_histogram_is_cumulative_includes_overflow_and_escapes_labels():

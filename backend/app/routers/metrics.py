@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import Integer, cast, func, select
 
 from ..core.db import SessionLocal
+from ..core.judge0 import judge0_workers
 from ..core.observability import http_metrics
 from ..models import Submission, SubmissionCaseResult, SubmissionStatus
 
@@ -15,9 +17,54 @@ def _count_matching(condition):
     return func.sum(cast(condition, Integer))
 
 
+def _metric_labels(**values: str) -> str:
+    labels = []
+    for name, value in values.items():
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        labels.append(f'{name}="{escaped}"')
+    return "{" + ",".join(labels) + "}"
+
+
+def _judge0_worker_metrics() -> list[str]:
+    try:
+        queues = judge0_workers()
+        samples = [
+            "# HELP techniview_judge0_worker_status_scrape_success "
+            "Whether the live Judge0 worker status was fetched.",
+            "# TYPE techniview_judge0_worker_status_scrape_success gauge",
+            "techniview_judge0_worker_status_scrape_success 1",
+            "# HELP techniview_judge0_workers "
+            "Live Judge0 Resque workers by queue and state.",
+            "# TYPE techniview_judge0_workers gauge",
+            "# HELP techniview_judge0_queue_size "
+            "Jobs currently waiting in each Judge0 queue.",
+            "# TYPE techniview_judge0_queue_size gauge",
+        ]
+        for row in queues:
+            queue = str(row["queue"])
+            samples.append(
+                f"techniview_judge0_queue_size{_metric_labels(queue=queue)} "
+                f"{int(row['size'])}"
+            )
+            for state in ("available", "idle", "working", "paused"):
+                samples.append(
+                    f"techniview_judge0_workers"
+                    f"{_metric_labels(queue=queue, state=state)} "
+                    f"{int(row[state])}"
+                )
+        return samples
+    except (httpx.HTTPError, KeyError, TypeError, ValueError):
+        return [
+            "# HELP techniview_judge0_worker_status_scrape_success "
+            "Whether the live Judge0 worker status was fetched.",
+            "# TYPE techniview_judge0_worker_status_scrape_success gauge",
+            "techniview_judge0_worker_status_scrape_success 0",
+        ]
+
+
 @router.get("/metrics", include_in_schema=False)
 def metrics():
-    lines = [http_metrics.render().rstrip()]
+    lines = [http_metrics.render().rstrip(), *_judge0_worker_metrics()]
     with SessionLocal() as db:
         submission_counts = db.execute(
             select(

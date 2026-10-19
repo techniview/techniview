@@ -170,10 +170,18 @@ minutes old.
 The backend exposes Prometheus text metrics at `/api/metrics`. It includes
 request totals and latency histograms by method, route template, and status;
 submission counts by status and practice-run type; queued submission depth and
-age; and active execution case counts split across the app queue, Judge0 queue,
-and Judge0 execution. A future Prometheus-compatible scraper should scrape the
-backend container directly on the app Docker network. Caddy returns 404 for
-this path on the public hostname.
+age; case counts by dispatch phase; and live Judge0 Resque worker counts by
+queue and state (`available`, `idle`, `working`, and `paused`), plus each queue's
+depth. `techniview_judge0_worker_status_scrape_success` indicates whether the
+backend could fetch the live runner status. Scrape this endpoint from a
+Prometheus-compatible collector on the app Docker network. Caddy returns 404
+for this path on the public hostname.
+
+The persisted `techniview_execution_cases{phase="running_on_judge0"}` gauge is
+the number of cases whose latest recorded Judge0 status is `Processing`; it can
+miss short executions between application polls. Use the live
+`techniview_judge0_workers{state="working"}` gauge to track actual runner worker
+utilization.
 
 The Compose projects use Docker's rotating `local` log driver and retain the
 latest three 10 MiB files per service. The API and app worker write JSON events
