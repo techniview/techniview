@@ -78,3 +78,70 @@ async def test_student_cannot_use_authoring_and_professor_can_manage_private_set
 async def test_published_builtin_problem_cannot_be_edited_in_place(teacher_client):
     response = await teacher_client.patch("/api/problems/1", json=problem_payload())
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("dispatch_before_edit", [False, True])
+async def test_draft_edits_preserve_queued_and_running_case_snapshots(
+    teacher_client, db_session, monkeypatch, dispatch_before_edit
+):
+    from app.models import Submission
+    from app.worker.submissions import process_next_submission
+    from sqlalchemy import text
+
+    # SQLite leaves foreign keys off unless explicitly enabled.
+    db_session.commit()
+    db_session.execute(text("PRAGMA foreign_keys=ON"))
+    assert db_session.scalar(text("PRAGMA foreign_keys")) == 1
+    original = problem_payload()
+    original.update(cpu_time_limit_seconds=2, memory_limit_kb=64000)
+    created = await teacher_client.post("/api/problems", json=original)
+    problem_id = created.json()["id"]
+    response = await teacher_client.post(
+        f"/api/problems/{problem_id}/run",
+        json={"source_code": "def solve(value): return value"},
+    )
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    calls = []
+
+    def submit(source, **kwargs):
+        calls.append((source, kwargs))
+        return {"token": "snapshot-token", "status": {"id": 1}}
+
+    monkeypatch.setattr("app.worker.submissions.judge0_submit", submit)
+    monkeypatch.setattr(
+        "app.worker.submissions.judge0_get",
+        lambda token: {"token": token, "status": {"id": 3}, "stdout": "1\n"},
+    )
+    if dispatch_before_edit:
+        assert process_next_submission(db_session, "snapshot-test")
+    replacement = problem_payload()
+    replacement.update(
+        function_name="new_function",
+        starter_code="def new_function(value): pass",
+        cpu_time_limit_seconds=10,
+        memory_limit_kb=128000,
+        test_cases=[{"input": "[99]", "expected_output": "99", "visibility": "public"}],
+    )
+    edited = await teacher_client.patch(f"/api/problems/{problem_id}", json=replacement)
+    assert edited.status_code == 200, edited.text
+    if not dispatch_before_edit:
+        assert process_next_submission(db_session, "snapshot-test")
+    assert len(calls) == 1
+    source, options = calls[0]
+    assert "__techniview_name = 'solve'" in source
+    assert "__techniview_json.loads('[1]')" in source
+    assert options["expected_output"] == "1"
+    assert options["cpu_time_limit"] == 2
+    assert options["memory_limit"] == 64000
+    run = db_session.get(Submission, run_id)
+    run.next_check_at = None
+    db_session.commit()
+    assert process_next_submission(db_session, "snapshot-test")
+    result = await teacher_client.get(f"/api/submissions/{run_id}")
+    assert result.status_code == 200, result.text
+    assert result.json()["status"] == "passed"
+    assert result.json()["public_results"][0]["input"] == "[1]"
+    edited = await teacher_client.patch(f"/api/problems/{problem_id}", json=original)
+    assert edited.status_code == 200, edited.text

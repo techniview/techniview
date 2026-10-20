@@ -1,0 +1,11 @@
+[Unit]
+Description=Run TechniView database backup hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=techniview-backup.service
+
+[Install]
+WantedBy=timers.target

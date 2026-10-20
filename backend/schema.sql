@@ -200,6 +200,7 @@ CREATE TABLE submissions (
     score DECIMAL(9,8),
     submitted_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     completed_at DATETIME(6),
+    is_practice_run BOOLEAN NOT NULL DEFAULT FALSE,
     late_accepted_by BIGINT UNSIGNED,
     feedback TEXT,
     UNIQUE KEY uq_submissions_id_problem (id, problem_id),
@@ -236,6 +237,15 @@ CREATE TABLE submissions (
 CREATE TABLE submission_case_results (
     submission_id BIGINT UNSIGNED NOT NULL,
     test_case_id BIGINT UNSIGNED NOT NULL,
+    case_order INT NOT NULL,
+    visibility ENUM('public', 'hidden') NOT NULL,
+    input MEDIUMTEXT NOT NULL,
+    expected_output MEDIUMTEXT NOT NULL,
+    execution_source MEDIUMTEXT NOT NULL,
+    execution_stdin MEDIUMTEXT,
+    execution_expected_output MEDIUMTEXT NOT NULL,
+    cpu_time_limit_seconds DECIMAL(6,3) NOT NULL,
+    memory_limit_kb INT NOT NULL,
     problem_id BIGINT UNSIGNED NOT NULL,
     judge0_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin,
     callback_token_hash BINARY(32),
@@ -251,8 +261,6 @@ CREATE TABLE submission_case_results (
     UNIQUE KEY uq_case_results_callback_token (callback_token_hash),
     KEY idx_case_results_pending (infrastructure_error, judge0_status_id),
     FOREIGN KEY (submission_id, problem_id) REFERENCES submissions(id, problem_id)
-        ON DELETE RESTRICT,
-    FOREIGN KEY (test_case_id, problem_id) REFERENCES problem_test_cases(id, problem_id)
         ON DELETE RESTRICT,
     CONSTRAINT chk_case_results_status CHECK (
         judge0_status_id IS NULL OR judge0_status_id BETWEEN 1 AND 14

@@ -53,8 +53,9 @@ uses `http://backend:8000/api/internal/judge0/callbacks` by default. Set
 `JUDGE0_CALLBACK_BASE_URL` when Judge0 needs a different route to reach the API.
 TechniView maintains an internal image derived from Judge0 in
 `internal-judge0-fork/`, with Python 3.14 as its only active language.
-This is a TechniView-owned fork, not an official Judge0 image, and it is not
-published to a registry. Build and start it with `docker compose up -d --build`.
+The fork builds separate API and Python worker images from a supported slim
+base. Release CI publishes both to GHCR. Build and start them locally with
+`docker compose up -d --build`; the worker needs Linux cgroup v2.
 TechniView submissions do not include a language selector or Judge0 language
 ID. The fork maps each request to its only active Python runtime internally;
 Judge0 still uses a language database key for its own records.
@@ -117,10 +118,11 @@ The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
 
 Student submission requests return `202` with a submission ID. The application
 worker dispatches cases to Judge0 and finalizes them through callbacks or polling.
-`POST /api/problems/{id}/run` executes public cases without storing a submission
-or consuming an assignment attempt. The problem page offers separate Run and
-Submit actions; Submit uses the durable worker pipeline and all server-owned cases.
-Keep `app_worker` running alongside the API. Course enrollment, email verification,
+`POST /api/problems/{id}/run` also returns `202` and uses the durable worker
+pipeline for public cases. Run jobs do not consume a graded attempt. Execution
+responses distinguish work waiting in TechniView from cases queued or running in
+Judge0. The problem page offers separate Run and Submit actions; Submit uses all
+server-owned cases. Keep `app_worker` running alongside the API. Course enrollment, email verification,
 and password recovery use an email outbox; local Compose captures messages in the
 worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
 `EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both API
@@ -141,9 +143,12 @@ uses separate containers, no host ports, and temporary database storage; it does
 not read your `.env`. Judge0 uses the same privileged cgroup access as the dev
 stack. Containers are removed when the command exits.
 
-For a hosted installation, use [the production deployment guide](docs/deployment.md).
-The production Compose stack serves HTTPS, keeps databases and Judge0 off host
-ports, imports the reviewed catalog, and does not create demo accounts.
+For a hosted installation, use [the campus deployment guide](docs/deployment.md).
+Production uses separate application and runner VMs. The application Compose
+stack serves HTTPS and keeps MySQL off host ports. The runner API binds only to
+its private interface; its databases stay off host ports. Production imports the
+reviewed catalog and does not create demo accounts. The current runner image must
+be refreshed before it is used with real student submissions.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 

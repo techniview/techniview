@@ -3,12 +3,13 @@ name: techniview
 services:
   server:
     container_name: internal-judge0-fork-server
-    build: ./internal-judge0-fork
-    image: internal-judge0-fork:local
+    build:
+      context: ./internal-judge0-fork
+      target: api
+    image: internal-judge0-fork-api:local
     ports:
       - "${JUDGE0_PORT:-2358}:2358"
     command: /api/scripts/server
-    cgroup: host
     environment:
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
@@ -26,21 +27,19 @@ services:
       - JUDGE0_REDIS_HOST=redis
       - JUDGE0_REDIS_PORT=6379
       - JUDGE0_REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
-    privileged: true
-    security_opt:
-      - seccomp=unconfined
     depends_on:
       - db
       - redis
 
   workers:
     container_name: internal-judge0-fork-workers
-    build: ./internal-judge0-fork
-    image: internal-judge0-fork:local
+    build:
+      context: ./internal-judge0-fork
+      target: worker
+    image: internal-judge0-fork-worker:local
     command: /api/scripts/workers
-    cgroup: host
+    cgroup: private
+    init: true
     environment:
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
@@ -58,8 +57,6 @@ services:
       - JUDGE0_REDIS_HOST=redis
       - JUDGE0_REDIS_PORT=6379
       - JUDGE0_REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     privileged: true
     security_opt:
       - seccomp=unconfined

@@ -442,6 +442,9 @@ class Submission(Base):
         DateTime(timezone=False), server_default=func.now()
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    is_practice_run: Mapped[bool] = mapped_column(
+        default=False, nullable=False, server_default="0"
+    )
     claim_owner: Mapped[str | None] = mapped_column(String(64))
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     next_check_at: Mapped[datetime | None] = mapped_column(
@@ -461,9 +464,8 @@ class SubmissionCaseResult(Base):
     submission_id: Mapped[int] = mapped_column(
         ForeignKey("submissions.id", ondelete="CASCADE"), primary_key=True
     )
-    test_case_id: Mapped[int] = mapped_column(
-        ForeignKey("problem_test_cases.id", ondelete="RESTRICT"), primary_key=True
-    )
+    # Draft cases can be replaced; this identifies the original case without a FK.
+    test_case_id: Mapped[int] = mapped_column(ID_TYPE, primary_key=True)
     judge0_token: Mapped[str | None] = mapped_column(
         String(36), unique=True, index=True
     )
@@ -482,7 +484,23 @@ class SubmissionCaseResult(Base):
     )
 
     submission: Mapped[Submission] = relationship(back_populates="case_results")
-    test_case: Mapped[ProblemTestCase] = relationship(lazy="joined")
+    case_order: Mapped[int] = mapped_column(Integer)
+    visibility: Mapped[TestVisibility] = mapped_column(db_enum(TestVisibility))
+    input: Mapped[str] = mapped_column(Text().with_variant(mysql.MEDIUMTEXT(), "mysql"))
+    expected_output: Mapped[str] = mapped_column(
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+    )
+    execution_source: Mapped[str] = mapped_column(
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+    )
+    execution_stdin: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+    )
+    execution_expected_output: Mapped[str] = mapped_column(
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+    )
+    cpu_time_limit_seconds: Mapped[Decimal] = mapped_column(Numeric(6, 3))
+    memory_limit_kb: Mapped[int] = mapped_column(Integer)
 
 
 class ProgressColumns:

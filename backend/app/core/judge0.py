@@ -22,6 +22,17 @@ def judge0_about(timeout: float = 3.0):
         return resp.json()
 
 
+def judge0_workers(timeout: float = 1.0):
+    """Return Judge0's live Resque worker and queue snapshots for operations metrics."""
+    with httpx.Client(timeout=timeout) as c:
+        resp = c.get(f"{settings.JUDGE0_URL}/workers")
+        resp.raise_for_status()
+        data = resp.json()
+    if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
+        raise ValueError("Judge0 returned an invalid worker status response")
+    return data
+
+
 def judge0_submit(
     source_code: str,
     stdin: str | None = None,

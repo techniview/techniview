@@ -41,7 +41,7 @@ def require_assigned_item(
         .where(AssignmentItem.id == assignment_item_id)
     )
     if course_id is not None:
-        require_active_course(db, course_id)
+        require_active_course(db, course_id, shared_lock=True)
     row = db.execute(
         select(AssignmentItem, AssignmentRecipient)
         .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
@@ -63,7 +63,7 @@ def require_assigned_item(
             CourseMembership.withdrawn_at.is_(None),
             AssignmentRecipient.removed_at.is_(None),
         )
-        .with_for_update()
+        .with_for_update(read=True)
     ).first()
     if row is None:
         raise ApiError(
@@ -109,12 +109,13 @@ def get_or_create_progress(
     student_id: int,
     problem_id: int,
     assignment_item_id: int | None,
+    *,
+    assignment_item_validated: bool = False,
 ):
-    from .summaries import refresh_course_problem
-
     now = utc_now()
     if assignment_item_id is not None:
-        require_assigned_item(db, student_id, problem_id, assignment_item_id)
+        if not assignment_item_validated:
+            require_assigned_item(db, student_id, problem_id, assignment_item_id)
         _open_progress(
             db,
             StudentAssignmentProgress,
@@ -127,9 +128,6 @@ def get_or_create_progress(
             assignment_item_id,
         )
         db.flush()
-        item = db.get(AssignmentItem, assignment_item_id)
-        course_id = db.get(Assignment, item.assignment_id).course_id
-        refresh_course_problem(db, course_id, problem_id)
         return progress
 
     db.scalar(select(User.id).where(User.id == student_id).with_for_update())
@@ -178,8 +176,6 @@ ERROR_COUNTER_FIELDS = {
 
 
 def finalize_progress(db: Session, submission: Submission) -> None:
-    from .summaries import refresh_course_problem
-
     if submission.status == SubmissionStatus.INFRASTRUCTURE_ERROR:
         return
     if submission.assignment_item_id is not None:
@@ -207,12 +203,7 @@ def finalize_progress(db: Session, submission: Submission) -> None:
     if submission.primary_error is not None:
         field = ERROR_COUNTER_FIELDS[submission.primary_error]
         setattr(progress, field, getattr(progress, field) + 1)
-    if submission.assignment_item_id is not None:
-        item = db.get(AssignmentItem, submission.assignment_item_id)
-        db.flush()
-        refresh_course_problem(
-            db, db.get(Assignment, item.assignment_id).course_id, submission.problem_id
-        )
+    # Analytics read from per-student progress to keep submissions independent.
 
 
 def recompute_assignment_grade(

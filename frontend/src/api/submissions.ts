@@ -3,6 +3,7 @@ import { apiRequest } from "./client";
 export type SubmissionResult = {
     case_order: number;
     status_id: number | null;
+    phase: ExecutionPhase;
     friendly_message: string;
     input: string;
     expected_output: string;
@@ -13,12 +14,21 @@ export type SubmissionResult = {
     memory_kb: number | null;
 };
 
+export type ExecutionPhase =
+    | "waiting_to_send"
+    | "sending_to_judge0"
+    | "waiting_on_judge0"
+    | "running_on_judge0"
+    | "complete";
+
 export type Submission = {
     id: number;
     problem_id: number;
     assignment_item_id: number | null;
     status: string;
+    phase: ExecutionPhase;
     done: boolean;
+    is_practice_run: boolean;
     score: number | null;
     is_late: boolean;
     late_approved: boolean;

@@ -1,0 +1,14 @@
+[Unit]
+Description=Prune old TechniView database backups
+
+[Service]
+Type=oneshot
+CacheDirectory=techniview-restic
+Environment=RESTIC_CACHE_DIR=/var/cache/techniview-restic
+EnvironmentFile=/etc/techniview/backup.env
+ExecStart=/usr/bin/restic forget --keep-hourly 24 --keep-daily 30 --keep-weekly 12 --keep-monthly 12 --prune
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TimeoutStartSec=2h
