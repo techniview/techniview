@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -30,6 +30,14 @@ from ..schemas.contracts import (
     ProblemListResponse,
 )
 from ..services.execution import snapshot_case_result
+from ..services.idempotency import (
+    attach_idempotency_key,
+    find_existing_submission,
+    request_fingerprint,
+)
+from ..services.idempotency import (
+    key_hash as hash_idempotency_key,
+)
 from ..services.presentation import problem_detail, problem_summary
 from ..services.progress import get_or_create_progress
 
@@ -223,9 +231,29 @@ def start_problem(
 
 @router.post("/{problem_id}/run", status_code=202)
 def run_public_cases(
-    problem_id: int, body: RunRequest, db: DbSession, user: CurrentUser
+    problem_id: int,
+    body: RunRequest,
+    db: DbSession,
+    user: CurrentUser,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
 ):
     db.scalar(select(User.id).where(User.id == user.id).with_for_update())
+    key_digest = hash_idempotency_key(idempotency_key)
+    fingerprint = request_fingerprint(
+        "public_run", {"problem_id": problem_id, "source_code": body.source_code}
+    )
+    existing = find_existing_submission(
+        db,
+        user_id=user.id,
+        operation="public_run",
+        key_digest=key_digest,
+        fingerprint=fingerprint,
+    )
+    if existing is not None:
+        db.commit()
+        from .submissions import _submission_response
+
+        return _submission_response(existing)
     problem = _visible_problem(db, problem_id, user)
     cases = [
         case for case in problem.test_cases if case.visibility == TestVisibility.PUBLIC
@@ -263,6 +291,14 @@ def run_public_cases(
     ]
     submission.case_results = case_results
     db.add_all(case_results)
+    attach_idempotency_key(
+        db,
+        user_id=user.id,
+        operation="public_run",
+        key_digest=key_digest,
+        fingerprint=fingerprint,
+        submission_id=submission.id,
+    )
     db.commit()
     from .submissions import _submission_response
 

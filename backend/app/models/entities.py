@@ -433,6 +433,7 @@ class Submission(Base):
     score: Mapped[Decimal | None] = mapped_column(Numeric(9, 8))
     primary_error: Mapped[ErrorCategory | None] = mapped_column(db_enum(ErrorCategory))
     python_exception_type: Mapped[str | None] = mapped_column(String(255))
+    failure_code: Mapped[str | None] = mapped_column(String(32))
     is_late: Mapped[bool] = mapped_column(default=False)
     late_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     # Plain id, deliberately no FK: the approver's own membership may later be
@@ -482,6 +483,9 @@ class SubmissionCaseResult(Base):
     dispatch_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=False)
     )
+    dispatch_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    poll_failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
 
     submission: Mapped[Submission] = relationship(back_populates="case_results")
     case_order: Mapped[int] = mapped_column(Integer)
@@ -501,6 +505,26 @@ class SubmissionCaseResult(Base):
     )
     cpu_time_limit_seconds: Mapped[Decimal] = mapped_column(Numeric(6, 3))
     memory_limit_kb: Mapped[int] = mapped_column(Integer)
+
+
+class SubmissionIdempotencyKey(Base):
+    __tablename__ = "submission_idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint("submission_id", name="uq_idempotency_submission"),
+        Index("ix_submission_idempotency_expires_at", "expires_at"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    operation: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key_hash: Mapped[bytes] = mapped_column(BINARY(32), primary_key=True)
+    request_fingerprint: Mapped[bytes] = mapped_column(BINARY(32), nullable=False)
+    submission_id: Mapped[int] = mapped_column(
+        ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
 
 
 class ProgressColumns:

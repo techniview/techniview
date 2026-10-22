@@ -44,7 +44,8 @@ async def client(db_session):
 async def student_client(client):
     transport = ASGITransport(app=app)
     async with AsyncClient(
-        transport=transport, base_url="http://testserver"
+        transport=transport,
+        base_url="http://testserver",
     ) as logged_in:
         response = await logged_in.post(
             "/api/auth/login",
@@ -58,7 +59,8 @@ async def student_client(client):
 async def teacher_client(client):
     transport = ASGITransport(app=app)
     async with AsyncClient(
-        transport=transport, base_url="http://testserver"
+        transport=transport,
+        base_url="http://testserver",
     ) as logged_in:
         response = await logged_in.post(
             "/api/auth/login",

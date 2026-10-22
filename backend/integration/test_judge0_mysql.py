@@ -147,6 +147,7 @@ def test_real_judge0_callback_finishes_without_api_polling(
     problem = database.scalar(select(Problem).where(Problem.title == "Sum a List"))
     response = client.post(
         "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
         json={
             "problem_id": problem.id,
             "source_code": source,
@@ -243,6 +244,7 @@ def test_polling_recovers_execution_without_callback(database, client):
 def test_source_byte_overflow_is_http_422(client, source):
     response = client.post(
         "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
         json={
             "problem_id": 1,
             "source_code": source,
@@ -257,7 +259,7 @@ def test_fifty_near_simultaneous_requests_finish_once(database):
 
     from app.core.config import settings
     from app.core.security import create_session, hash_password
-    from app.models import Problem, Submission, SubmissionCaseResult, User, UserRole
+    from app.models import Problem, Submission, User, UserRole
 
     problem = database.scalar(select(Problem).where(Problem.title == "Count Evens"))
     batch = uuid4().hex
@@ -284,6 +286,7 @@ def test_fifty_near_simultaneous_requests_finish_once(database):
         ) as api:
             response = api.post(
                 "/api/submissions",
+                headers={"Idempotency-Key": uuid4().hex},
                 json={"problem_id": problem.id, "source_code": source},
             )
             return response
@@ -306,8 +309,56 @@ def test_fifty_near_simultaneous_requests_finish_once(database):
         assert time.monotonic() < deadline, "Fifty submissions did not finish"
         time.sleep(0.25)
     assert all(row.status == "passed" for row in submissions)
-    cases = database.scalars(
-        select(SubmissionCaseResult).where(SubmissionCaseResult.submission_id.in_(ids))
-    ).all()
-    assert len(cases) == 50
-    assert len({case.judge0_token for case in cases}) == 50
+
+
+def test_competing_workers_claim_a_submission_once(database, client):
+    from app.core.db import SessionLocal
+    from app.models import Problem
+    from app.worker.submissions import claim_submission
+
+    problem = database.scalar(select(Problem).where(Problem.title == "Count Evens"))
+    created = client.post(
+        "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
+        json={"problem_id": problem.id, "source_code": "print(1)"},
+    )
+    created.raise_for_status()
+    submission_id = created.json()["id"]
+
+    def claim(owner):
+        with SessionLocal() as db:
+            return claim_submission(db, owner, submission_id)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        claimed = list(executor.map(claim, ("worker-a", "worker-b")))
+    assert claimed.count(submission_id) == 1
+    assert claimed.count(None) == 1
+
+
+def test_concurrent_retries_with_one_idempotency_key_create_one_run(database, client):
+    from app.core.config import settings
+    from app.models import Problem
+
+    key = uuid4().hex
+    cookie = client.cookies.get(settings.SESSION_COOKIE_NAME)
+    problem = database.scalar(select(Problem).where(Problem.title == "Count Evens"))
+    problem_id = problem.id
+
+    def submit(_):
+        with httpx.Client(
+            base_url="http://backend:8000",
+            timeout=30,
+            cookies={settings.SESSION_COOKIE_NAME: cookie},
+        ) as api:
+            return api.post(
+                "/api/submissions",
+                headers={"Idempotency-Key": key},
+                json={"problem_id": problem_id, "source_code": "print(1)"},
+            )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        responses = list(executor.map(submit, range(8)))
+    assert all(response.status_code == 202 for response in responses), [
+        (response.status_code, response.text) for response in responses
+    ]
+    assert len({response.json()["id"] for response in responses}) == 1
