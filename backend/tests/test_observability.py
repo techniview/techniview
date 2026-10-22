@@ -74,20 +74,22 @@ def test_execution_metrics_classify_persisted_cases_without_sensitive_data(
         )
         db.add(submission)
         db.flush()
-        db.add(
-            snapshot_case_result(
-                submission_id=submission.id,
-                problem=case.problem,
-                case=case,
-                source_code=submission.source_code,
-                judge0_token=token,
-                judge0_status_id=status_id,
-                dispatch_started_at=dispatch,
-                infrastructure_error=infra_error,
-                stdout="private-stdout",
-                stderr="private-stderr",
-            )
+        case_result = snapshot_case_result(
+            submission_id=submission.id,
+            problem=case.problem,
+            case=case,
+            source_code=submission.source_code,
+            judge0_token=token,
+            judge0_status_id=status_id,
+            dispatch_started_at=dispatch,
+            infrastructure_error=infra_error,
+            stdout="private-stdout",
+            stderr="private-stderr",
         )
+        if index == 2:
+            case_result.dispatch_attempt_count = 3
+            case_result.poll_failure_count = 2
+        db.add(case_result)
     completed = Submission(
         student_id=student.id,
         problem_id=case.problem_id,
@@ -95,6 +97,26 @@ def test_execution_metrics_classify_persisted_cases_without_sensitive_data(
         status=SubmissionStatus.PASSED,
     )
     db.add(completed)
+    db.add_all(
+        [
+            Submission(
+                student_id=student.id,
+                problem_id=case.problem_id,
+                source_code="",
+                status=SubmissionStatus.INFRASTRUCTURE_ERROR,
+                completed_at=now,
+                failure_code="runner_busy",
+            ),
+            Submission(
+                student_id=student.id,
+                problem_id=case.problem_id,
+                source_code="",
+                status=SubmissionStatus.INFRASTRUCTURE_ERROR,
+                completed_at=now,
+                failure_code="runner_outcome_unknown",
+            ),
+        ]
+    )
     db.flush()
     # A stale case under a finalized submission must not inflate active work.
     db.add(
@@ -120,6 +142,10 @@ def test_execution_metrics_classify_persisted_cases_without_sensitive_data(
     assert values['techniview_submissions{status="passed",practice_run="false"}'] == 1
     assert values["techniview_submission_queue_depth"] == 1
     assert 120 <= values["techniview_submission_queue_oldest_seconds"] < 150
+    assert values["techniview_runner_dispatch_retries"] == 2
+    assert values["techniview_runner_poll_failures"] == 2
+    assert values["techniview_runner_busy_submissions"] == 1
+    assert values["techniview_runner_unknown_outcomes"] == 1
     assert values["techniview_judge0_worker_status_scrape_success"] == 1
     assert values['techniview_judge0_queue_size{queue="python"}'] == 7
     for state, count in {"available": 4, "idle": 2, "working": 2, "paused": 0}.items():

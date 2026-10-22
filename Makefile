@@ -41,7 +41,8 @@ build:
 verify: check build integration
 
 integration:
-	@trap 'docker compose --env-file /dev/null -f compose.integration.yml down --volumes' EXIT; \
+	@cleanup() { status=$$?; if [ $$status -ne 0 ]; then docker compose --env-file /dev/null -f compose.integration.yml logs --tail=100 backend app_worker || true; fi; docker compose --env-file /dev/null -f compose.integration.yml down --volumes || true; exit $$status; }; \
+	trap cleanup EXIT; \
 	docker compose --env-file /dev/null -f compose.integration.yml up --build --attach tests --abort-on-container-exit --exit-code-from tests
 
 load-test:

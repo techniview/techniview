@@ -26,6 +26,9 @@ export type Submission = {
     problem_id: number;
     assignment_item_id: number | null;
     status: string;
+    failure_code: string | null;
+    failure_message: string | null;
+    retryable: boolean;
     phase: ExecutionPhase;
     done: boolean;
     is_practice_run: boolean;
@@ -46,10 +49,12 @@ export type Submission = {
 export function createSubmission(
     problemId: number,
     sourceCode: string,
+    idempotencyKey: string,
     assignmentItemId?: number,
 ) {
     return apiRequest<Submission>("/api/submissions", {
         method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({
             problem_id: problemId,
             source_code: sourceCode,
