@@ -122,7 +122,14 @@ worker dispatches cases to Judge0 and finalizes them through callbacks or pollin
 pipeline for public cases. Run jobs do not consume a graded attempt. Execution
 responses distinguish work waiting in TechniView from cases queued or running in
 Judge0. The problem page offers separate Run and Submit actions; Submit uses all
-server-owned cases. Keep `app_worker` running alongside the API. Course enrollment, email verification,
+server-owned cases. Both POST routes require an `Idempotency-Key`. The browser
+reuses the key after a network failure and clears it after a successful response.
+Keys expire after 24 hours. A new key starts a new run, even when the source code
+is unchanged. The worker retries clear Judge0 `429` rejections with backoff. It
+does not resend a request after an ambiguous network failure because Judge0 may
+have accepted it. Repeated `429` responses finish with a retryable busy result;
+the student can start a new run later. Keep `app_worker` running alongside the
+API. Course enrollment, email verification,
 and password recovery use an email outbox; local Compose captures messages in the
 worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
 `EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both API

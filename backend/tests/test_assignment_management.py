@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from app.models import (
@@ -153,6 +154,7 @@ async def test_removed_recipient_loses_access_but_keeps_progress(
     ).status_code == 404
     submission = await student_client.post(
         "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
         json={
             "problem_id": problem_id,
             "assignment_item_id": item_id,

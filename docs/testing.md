@@ -87,6 +87,8 @@ The integration suite checks the parts SQLite and mocks cannot prove:
 - Completion through callbacks without API polling
 - Polling recovery when no callback arrives
 - Asynchronous submission dispatch by the application worker
+- Submission idempotency for retried requests and intentional repeat runs
+- Judge0 overload retries, poll backoff, ambiguous dispatch recovery, and busy results
 - UTF-8 source-size validation through the HTTP API
 - Fifty concurrent students submitting the same problem, with one durable result
   and one Judge0 case per request

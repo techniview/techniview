@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import Integer, cast, func, select
+from sqlalchemy import Integer, case, cast, func, select
 
 from ..core.db import SessionLocal
 from ..core.judge0 import judge0_workers
@@ -161,6 +161,55 @@ def metrics():
                 "# HELP techniview_submission_queue_oldest_seconds Oldest queue age.",
                 "# TYPE techniview_submission_queue_oldest_seconds gauge",
                 f"techniview_submission_queue_oldest_seconds {oldest_age:.3f}",
+            ]
+        )
+
+        runner_counts = db.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                SubmissionCaseResult.dispatch_attempt_count > 0,
+                                SubmissionCaseResult.dispatch_attempt_count - 1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("dispatch_retries"),
+                func.coalesce(
+                    func.sum(SubmissionCaseResult.poll_failure_count), 0
+                ).label("poll_failures"),
+            )
+        ).one()
+        busy_count = db.scalar(
+            select(func.count())
+            .select_from(Submission)
+            .where(Submission.failure_code == "runner_busy")
+        )
+        unknown_count = db.scalar(
+            select(func.count())
+            .select_from(Submission)
+            .where(Submission.failure_code == "runner_outcome_unknown")
+        )
+        lines.extend(
+            [
+                "# HELP techniview_runner_dispatch_retries Persisted dispatch retries.",
+                "# TYPE techniview_runner_dispatch_retries gauge",
+                f"techniview_runner_dispatch_retries {runner_counts.dispatch_retries}",
+                "# HELP techniview_runner_poll_failures "
+                "Consecutive poll failures in the database.",
+                "# TYPE techniview_runner_poll_failures gauge",
+                f"techniview_runner_poll_failures {runner_counts.poll_failures}",
+                "# HELP techniview_runner_busy_submissions "
+                "Runs ended after runner overload.",
+                "# TYPE techniview_runner_busy_submissions gauge",
+                f"techniview_runner_busy_submissions {busy_count or 0}",
+                "# HELP techniview_runner_unknown_outcomes "
+                "Runs with unconfirmed dispatch outcomes.",
+                "# TYPE techniview_runner_unknown_outcomes gauge",
+                f"techniview_runner_unknown_outcomes {unknown_count or 0}",
             ]
         )
     return PlainTextResponse(

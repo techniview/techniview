@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from app.models import (
@@ -78,6 +79,7 @@ def overdue_context(db_session):
 async def _submit_pass(client, db_session, problem_id, item_id):
     created = await client.post(
         "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
         json={
             "source_code": "def sum_list(values):\n    return sum(values)\n",
             "problem_id": problem_id,
@@ -195,6 +197,7 @@ async def test_approve_on_time_submission_rejected(client, db_session):
     with patch("app.worker.submissions.judge0_submit", side_effect=ALL_PASS):
         created = await client.post(
             "/api/submissions",
+            headers={"Idempotency-Key": uuid4().hex},
             json={
                 "source_code": "x",
                 "problem_id": on_time_item["problem"]["id"],

@@ -46,6 +46,12 @@ class Settings:
     WORKER_LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "60"))
     WORKER_POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "2"))
     WORKER_RECOVERY_SECONDS = int(os.getenv("WORKER_RECOVERY_SECONDS", "600"))
+    WORKER_DISPATCH_MAX_RETRIES = int(os.getenv("WORKER_DISPATCH_MAX_RETRIES", "5"))
+    WORKER_RETRY_BASE_SECONDS = float(os.getenv("WORKER_RETRY_BASE_SECONDS", "2"))
+    WORKER_RETRY_MAX_SECONDS = float(os.getenv("WORKER_RETRY_MAX_SECONDS", "30"))
+    WORKER_RETRY_AFTER_MAX_SECONDS = float(
+        os.getenv("WORKER_RETRY_AFTER_MAX_SECONDS", "60")
+    )
     # MySQL (platform DB)
     MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql")
     MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
