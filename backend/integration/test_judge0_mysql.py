@@ -312,8 +312,10 @@ def test_fifty_near_simultaneous_requests_finish_once(database):
 
 
 def test_competing_workers_claim_a_submission_once(database, client):
+    from datetime import UTC, datetime
+
     from app.core.db import SessionLocal
-    from app.models import Problem
+    from app.models import Problem, Submission, SubmissionStatus
     from app.worker.submissions import claim_submission
 
     problem = database.scalar(select(Problem).where(Problem.title == "Count Evens"))
@@ -333,6 +335,13 @@ def test_competing_workers_claim_a_submission_once(database, client):
         claimed = list(executor.map(claim, ("worker-a", "worker-b")))
     assert claimed.count(submission_id) == 1
     assert claimed.count(None) == 1
+
+    submission = database.get(Submission, submission_id)
+    submission.status = SubmissionStatus.INFRASTRUCTURE_ERROR
+    submission.completed_at = datetime.now(UTC).replace(tzinfo=None)
+    submission.claim_owner = None
+    submission.claimed_at = None
+    database.commit()
 
 
 def test_concurrent_retries_with_one_idempotency_key_create_one_run(database, client):
