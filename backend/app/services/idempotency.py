@@ -42,15 +42,19 @@ def find_existing_submission(
     key_digest: bytes,
     fingerprint: bytes,
 ) -> Submission | None:
-    record = db.scalar(
-        select(SubmissionIdempotencyKey)
-        .where(
-            SubmissionIdempotencyKey.user_id == user_id,
-            SubmissionIdempotencyKey.operation == operation,
-            SubmissionIdempotencyKey.key_hash == key_digest,
-        )
-        .with_for_update()
+    lookup = select(SubmissionIdempotencyKey).where(
+        SubmissionIdempotencyKey.user_id == user_id,
+        SubmissionIdempotencyKey.operation == operation,
+        SubmissionIdempotencyKey.key_hash == key_digest,
     )
+    record = db.scalar(lookup)
+    if record is None:
+        return None
+
+    # Only lock an existing row. InnoDB can gap-lock an absent-key lookup under
+    # REPEATABLE READ; concurrent misses then deadlock when they insert distinct
+    # keys. The endpoint already locks the user row to serialize same-user keys.
+    record = db.scalar(lookup.with_for_update())
     if record is None:
         return None
     if record.expires_at <= utc_now():

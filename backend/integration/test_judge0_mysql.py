@@ -336,6 +336,7 @@ def test_competing_workers_claim_a_submission_once(database, client):
     assert claimed.count(submission_id) == 1
     assert claimed.count(None) == 1
 
+    database.rollback()
     submission = database.get(Submission, submission_id)
     submission.status = SubmissionStatus.INFRASTRUCTURE_ERROR
     submission.completed_at = datetime.now(UTC).replace(tzinfo=None)
