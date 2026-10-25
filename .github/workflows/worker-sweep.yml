@@ -1,0 +1,40 @@
+name: Worker capacity sweep
+
+on:
+  push:
+    branches: [corniedj/infrastructure-hardening-and-deployment]
+    paths:
+      - .github/workflows/worker-sweep.yml
+      - scripts/ci/run-worker-sweep.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-capacity-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Judge0 worker comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Record runner profile
+        run: |
+          echo "Runner: $RUNNER_NAME ($RUNNER_OS $RUNNER_ARCH)"
+          lscpu
+          free -h
+          docker version
+      - name: Run repeated 100-student worker profiles
+        run: ./scripts/ci/run-worker-sweep.sh worker-sweep-results
+      - name: Upload worker-sweep results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: worker-capacity-sweep-${{ github.run_id }}
+          path: worker-sweep-results/
+          if-no-files-found: ignore
+          retention-days: 30

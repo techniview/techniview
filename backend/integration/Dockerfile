@@ -1,5 +1,6 @@
 FROM python:3.14-slim
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt pytest==9.1.1
+COPY requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
+    && pip install --no-cache-dir pytest==9.1.1
 COPY . .

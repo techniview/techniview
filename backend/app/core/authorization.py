@@ -47,13 +47,12 @@ def require_staff(
     return membership
 
 
-def require_active_course(db: Session, course_id: int) -> Course:
-    course = db.scalar(
-        select(Course)
-        .where(Course.id == course_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
+def require_active_course(
+    db: Session, course_id: int, *, shared_lock: bool = False
+) -> Course:
+    query = select(Course).where(Course.id == course_id)
+    query = query.with_for_update(read=True) if shared_lock else query.with_for_update()
+    course = db.scalar(query.execution_options(populate_existing=True))
     if course is None:
         raise ApiError(404, "course_not_found", "Course not found.")
     if course.archived_at is not None:

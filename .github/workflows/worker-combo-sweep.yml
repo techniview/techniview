@@ -1,0 +1,38 @@
+name: Worker combination sweep
+
+on:
+  push:
+    branches: [corniedj/infrastructure-hardening-and-deployment]
+    paths: [.github/workflows/worker-combo-sweep.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-combination-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: App and Judge0 worker comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Record runner profile
+        run: |
+          echo "Runner: $RUNNER_NAME ($RUNNER_OS $RUNNER_ARCH)"
+          lscpu
+          free -h
+          docker version
+      - name: Compare 4 and 8 Judge0 workers with one app worker
+        run: ./scripts/ci/run-worker-combo-sweep.sh worker-combo-results
+      - name: Upload worker-combination results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: worker-combination-sweep-${{ github.run_id }}
+          path: worker-combo-results/
+          if-no-files-found: ignore
+          retention-days: 30

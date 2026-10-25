@@ -1,0 +1,32 @@
+name: ${TEST_COMPOSE_PROJECT_NAME:?Set TEST_COMPOSE_PROJECT_NAME}
+
+services:
+  mysql:
+    image: ${TEST_MYSQL_IMAGE:?Set TEST_MYSQL_IMAGE}
+    network_mode: none
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE: ${MYSQL_DB:?Set MYSQL_DB}
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+    secrets:
+      - mysql_root_password
+      - mysql_password
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD=$$(cat "$${MYSQL_PASSWORD_FILE:?}") && export MYSQL_PWD &&
+          mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER"
+          "$$MYSQL_DATABASE" --batch --skip-column-names -e 'SELECT 1' >/dev/null
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+secrets:
+  mysql_root_password:
+    file: ${TEST_MYSQL_ROOT_PASSWORD_FILE:?Set TEST_MYSQL_ROOT_PASSWORD_FILE}
+  mysql_password:
+    file: ${TEST_MYSQL_PASSWORD_FILE:?Set TEST_MYSQL_PASSWORD_FILE}

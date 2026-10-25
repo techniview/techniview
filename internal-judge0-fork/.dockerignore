@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!api/
+!api/**
+!languages/
+!languages/active.rb
+!worker-entrypoint.sh
+!isolate.conf
+!LICENSE

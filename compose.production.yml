@@ -1,149 +1,195 @@
 name: techniview
 
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
 services:
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+    logging: *default-logging
+    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/frontend:${IMAGE_TAG:?Set IMAGE_TAG}
     ports:
       - "80:80"
       - "443:443"
     environment:
-      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST to the public DNS name}
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST}
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - web
+    read_only: true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   backend:
-    build: ./backend
+    logging: *default-logging
+    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
     environment: &application_environment
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
       MYSQL_DB: ${MYSQL_DB:?Set MYSQL_DB}
-      JUDGE0_URL: http://server:2358
-      JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
+      JUDGE0_URL: http://${RUNNER_PRIVATE_HOST:?Set RUNNER_PRIVATE_HOST}:2358
+      JUDGE0_CALLBACK_BASE_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}/api/internal/judge0/callbacks
       COOKIE_SECURE: "true"
-      CORS_ORIGINS: https://${PUBLIC_HOST:?Set PUBLIC_HOST}
-      PUBLIC_APP_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}
+      CORS_ORIGINS: https://${PUBLIC_HOST}
+      PUBLIC_APP_URL: https://${PUBLIC_HOST}
       EMAIL_DELIVERY_MODE: resend
-      EMAIL_SIGNING_KEY: ${EMAIL_SIGNING_KEY:?Set EMAIL_SIGNING_KEY}
+      EMAIL_SIGNING_KEY_FILE: /run/secrets/email_signing_key
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
-      RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
+      RESEND_API_KEY_FILE: /run/secrets/resend_api_key
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
+    secrets:
+      - mysql_password
+      - email_signing_key
+      - resend_api_key
+    networks:
+      - web
+      - data
+      - outbound
+    read_only: true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       mysql:
         condition: service_healthy
-      server:
-        condition: service_started
     command: >-
       sh -c "alembic upgrade head &&
       python -m scripts.import_problem_catalog data/problem_catalog.json &&
       exec uvicorn main:app --host 0.0.0.0 --port 8000
-      --proxy-headers --forwarded-allow-ips='*'"
+      --workers ${API_WORKERS:-2}
+      --no-access-log --proxy-headers --forwarded-allow-ips='*'"
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ping', timeout=2)"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/ready', timeout=2)"
       interval: 10s
       timeout: 3s
-      retries: 30
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
 
   app_worker:
-    build: ./backend
+    logging: *default-logging
+    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
     environment: *application_environment
+    secrets:
+      - mysql_password
+      - email_signing_key
+      - resend_api_key
+    networks:
+      - data
+      - outbound
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       backend:
         condition: service_healthy
-      server:
-        condition: service_started
     command: python -m app.worker
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    deploy:
+      replicas: ${APP_WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
 
   mysql:
+    logging: *default-logging
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
       MYSQL_DATABASE: ${MYSQL_DB:?Set MYSQL_DB}
       MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+    secrets:
+      - mysql_root_password
+      - mysql_password
+    networks:
+      - data
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u $$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD=$$(cat "$${MYSQL_PASSWORD_FILE:?}") && export MYSQL_PWD &&
+          mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER"
+          "$$MYSQL_DATABASE" --batch --skip-column-names -e 'SELECT 1' >/dev/null
       interval: 5s
       timeout: 3s
       retries: 20
-
-  server:
-    build: ./internal-judge0-fork
-    cgroup: host
-    privileged: true
-    security_opt:
-      - seccomp=unconfined
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
-    environment: &judge_environment
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
-      JUDGE0_POSTGRES_HOST: db
-      JUDGE0_POSTGRES_PORT: 5432
-      JUDGE0_POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
-      JUDGE0_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      JUDGE0_POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
-      JUDGE0_REDIS_HOST: redis
-      JUDGE0_REDIS_PORT: 6379
-      JUDGE0_REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
-    depends_on:
-      - db
-      - redis
-    command: /api/scripts/server
-
-  workers:
-    build: ./internal-judge0-fork
-    cgroup: host
-    privileged: true
-    security_opt:
-      - seccomp=unconfined
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
-    environment: *judge_environment
-    depends_on:
-      - db
-      - redis
-      - server
-    command: /api/scripts/workers
-
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
-    volumes:
-      - redis_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3G
 
 volumes:
   caddy_data:
   caddy_config:
   mysql_data:
-  postgres_data:
-  redis_data:
+
+secrets:
+  mysql_root_password:
+    file: ${SECRET_DIR:?Set SECRET_DIR}/mysql_root_password
+  mysql_password:
+    file: ${SECRET_DIR:?Set SECRET_DIR}/mysql_password
+  email_signing_key:
+    file: ${SECRET_DIR:?Set SECRET_DIR}/email_signing_key
+  resend_api_key:
+    file: ${SECRET_DIR:?Set SECRET_DIR}/resend_api_key
+
+networks:
+  web:
+  data:
+    internal: true
+  outbound:

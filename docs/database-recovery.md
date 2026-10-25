@@ -1,35 +1,70 @@
 # Application database backup and restore
 
-The application database is MySQL. It holds accounts, course rosters, assignments,
-submissions, worker claims, and derived progress. Keep backups outside the server
-and protect them as student records. Keep the email signing key and research export
-secret separately; restoring the database without the original keys invalidates
-pending email links and changes research pseudonyms.
+The application VM's MySQL database holds accounts, rosters, assignments,
+submissions, worker claims, and derived progress. Treat backups as student
+records. Encrypt them and store them outside the application VM. Keep
+`EMAIL_SIGNING_KEY` and any research export secret in a separate protected
+backup. Restoring without the original keys invalidates pending email links and
+changes research pseudonyms.
 
-For a consistent maintenance backup on a single-host Compose installation, stop
-application writes, then stream a dump to a protected file on the host:
+## Create a backup
+
+Run this on the application VM. `--single-transaction` creates a consistent dump
+for the InnoDB tables without stopping application writes. Use a unique,
+permission-restricted output directory, then encrypt and copy the dump to the
+campus backup destination.
 
 ```sh
-docker compose stop backend app_worker
 umask 077
-docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --routines --triggers -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > techniview-backup.sql
-docker compose start backend app_worker
+backup_file="techniview-$(date -u +%Y%m%dT%H%M%SZ).sql"
+docker compose --env-file .env.production -f compose.production.yml \
+  exec -T mysql sh -c \
+  'set -eu
+  MYSQL_PWD=$(cat "${MYSQL_PASSWORD_FILE:?}"); export MYSQL_PWD
+  exec mysqldump --single-transaction --no-tablespaces --set-gtid-purged=OFF \
+  --routines --triggers -u "$MYSQL_USER" "$MYSQL_DATABASE"' \
+  > "$backup_file.partial" && mv "$backup_file.partial" "$backup_file"
 ```
 
-To restore, use a new or stopped deployment with the same application secrets.
-Take a separate backup of the target database first. The restore replaces its
-contents, so do not run it against a database you intend to keep:
+A failed dump stays marked `.partial`; do not transfer or restore it. Remove it
+after investigating the failure.
+
+The campus backup system should run this hourly, encrypt before transfer, retain
+the agreed history, and alert if the latest successful copy is more than 90
+minutes old. Never place an unencrypted dump in a shared or web accessible path.
+
+For backups stored with the included restic timer, list the snapshot contents and
+write the chosen SQL dump to a permission-restricted file before restoring:
 
 ```sh
-docker compose stop backend app_worker
-docker compose exec -T mysql sh -c 'exec mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' < techniview-backup.sql
-docker compose start backend app_worker
+sudo bash -c 'set -a; . /etc/techniview/backup.env; set +a; restic ls latest'
+umask 077
+sudo bash -c 'set -a; . /etc/techniview/backup.env; set +a; restic dump latest /techniview.sql' \
+  > techniview-backup.sql
 ```
 
-The backend startup runs Alembic migrations and the idempotent demo seed. Check
-`/api/health` after restart and inspect worker logs for any submissions that
-were in flight when the backup was taken. A backup taken with both application
-processes stopped avoids new TechniView writes, but Judge0 may still finish an
-already dispatched case while the API is down. The worker polls Judge0 after
-restart and marks cases it cannot recover as infrastructure errors after its
-recovery deadline.
+Replace the filename with one shown by `restic ls`. Keep the extracted dump
+protected and remove it after recovery.
+
+## Restore a backup
+
+Restore to a new or stopped deployment with the same application secrets. Take a
+separate backup of the target database first. The restore replaces its contents.
+
+```sh
+docker compose --env-file .env.production -f compose.production.yml \
+  stop backend app_worker
+docker compose --env-file .env.production -f compose.production.yml \
+  exec -T mysql sh -c \
+  'set -eu
+  MYSQL_PWD=$(cat "${MYSQL_PASSWORD_FILE:?}"); export MYSQL_PWD
+  exec mysql -u "$MYSQL_USER" "$MYSQL_DATABASE"' \
+  < techniview-backup.sql
+docker compose --env-file .env.production -f compose.production.yml \
+  start backend app_worker
+```
+
+Check `/api/health` after restart and inspect worker logs for submissions that
+were in flight during the restore. Runner state lives on a separate VM. The app
+worker polls Judge0 after restart, and marks unrecoverable cases as infrastructure
+errors after the configured recovery deadline.

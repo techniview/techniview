@@ -19,7 +19,6 @@ from ..models import (
     AssignmentRecipient,
     AssignmentState,
     CourseMembership,
-    CourseProblemAnalytics,
     Difficulty,
     Problem,
     StudentAssignmentProgress,
@@ -34,7 +33,6 @@ from ..schemas.contracts import (
 )
 from ..services.analytics import MetricRecord, calculate_metrics, record_from_progress
 from ..services.presentation import problem_summary
-from ..services.summaries import summary_metrics
 
 router = APIRouter(tags=["analytics"])
 
@@ -191,22 +189,6 @@ def course_overview(
         record for _problem, records in grouped.values() for record in records
     ]
     totals = calculate_metrics(all_records)
-    if assignment_id is None:
-        summaries = list(
-            db.scalars(
-                select(CourseProblemAnalytics).where(
-                    CourseProblemAnalytics.course_id == course_id,
-                    CourseProblemAnalytics.problem_id.in_(grouped),
-                )
-            )
-        )
-        by_problem = {row.problem_id: row for row in summaries}
-        for item in items:
-            cached = by_problem.get(item["problem"]["id"])
-            item["metrics"] = summary_metrics(
-                [cached] if cached else [], item["metrics"].median_completion_seconds
-            )
-        totals = summary_metrics(summaries, totals.median_completion_seconds)
     return {
         "summary": totals,
         "items": items[offset : offset + limit],
@@ -241,11 +223,6 @@ def course_problem_analytics(
             "Problem is not assigned in this course.",
         )
     metrics = calculate_metrics([record for _problem, record in rows])
-    if assignment_id is None:
-        cached = db.get(CourseProblemAnalytics, (course_id, problem_id))
-        metrics = summary_metrics(
-            [cached] if cached else [], metrics.median_completion_seconds
-        )
     return {"problem": problem_summary(rows[0][0]), "metrics": metrics}
 
 

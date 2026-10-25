@@ -1,0 +1,139 @@
+name: techniview-runner
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  server:
+    logging: *default-logging
+    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/runner-api:${IMAGE_TAG:?Set IMAGE_TAG}
+    ports:
+      - "${RUNNER_PRIVATE_BIND_IP:?Set RUNNER_PRIVATE_BIND_IP}:2358:2358"
+    environment: &judge_environment
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JUDGE0_POSTGRES_HOST: db
+      JUDGE0_POSTGRES_PORT: 5432
+      JUDGE0_POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      JUDGE0_POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      JUDGE0_REDIS_HOST: redis
+      JUDGE0_REDIS_PORT: 6379
+      ALLOW_ENABLE_NETWORK: "false"
+      ENABLE_NETWORK: "false"
+      COUNT: ${JUDGE0_WORKER_COUNT:-4}
+      MAX_QUEUE_SIZE: ${JUDGE0_MAX_QUEUE_SIZE:-12000}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: /api/scripts/server
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    secrets:
+      - postgres_password
+      - redis_password
+    healthcheck:
+      test: ["CMD", "ruby", "-rnet/http", "-e", "exit(Net::HTTP.get_response(URI('http://localhost:2358/about')).code == '200' ? 0 : 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  workers:
+    logging: *default-logging
+    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/runner-worker:${IMAGE_TAG:?Set IMAGE_TAG}
+    environment: *judge_environment
+    depends_on:
+      server:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: /api/scripts/workers
+    cgroup: private
+    init: true
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+    secrets:
+      - postgres_password
+      - redis_password
+    deploy:
+      resources:
+        limits:
+          cpus: "6.0"
+          memory: ${JUDGE_WORKER_MEMORY_LIMIT:-8G}
+    restart: unless-stopped
+
+  db:
+    logging: *default-logging
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+
+  redis:
+    logging: *default-logging
+    image: redis:7-alpine
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$(cat /run/secrets/redis_password)"
+    volumes:
+      - redis_data:/data
+    secrets:
+      - redis_password
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+volumes:
+  postgres_data:
+  redis_data:
+
+secrets:
+  postgres_password:
+    file: ${SECRET_DIR:?Set SECRET_DIR}/postgres_password
+  redis_password:
+    file: ${SECRET_DIR:?Set SECRET_DIR}/redis_password

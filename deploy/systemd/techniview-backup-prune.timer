@@ -1,0 +1,11 @@
+[Unit]
+Description=Prune TechniView database backups daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=techniview-backup-prune.service
+
+[Install]
+WantedBy=timers.target
