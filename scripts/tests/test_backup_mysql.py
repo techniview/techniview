@@ -72,6 +72,8 @@ def main():
         )
         healthcheck = production["services"]["mysql"]["healthcheck"]
         compose_file = ROOT / "scripts/tests/backup-mysql-compose.yml"
+        project_name = f"techniview-backup-test-{uuid.uuid4().hex[:12]}"
+        env["TEST_COMPOSE_PROJECT_NAME"] = project_name
         env["TEST_MYSQL_IMAGE"] = production["services"]["mysql"]["image"]
         env["TEST_MYSQL_ROOT_PASSWORD_FILE"] = str(root_secret)
         env["TEST_MYSQL_PASSWORD_FILE"] = str(secret)
@@ -80,7 +82,7 @@ def main():
             "docker",
             "compose",
             "-p",
-            f"techniview-backup-test-{uuid.uuid4().hex[:12]}",
+            project_name,
             "--env-file",
             "/dev/null",
             "-f",
@@ -89,6 +91,8 @@ def main():
         test_configuration = json.loads(
             run(*compose, "config", "--format", "json", env=env).stdout
         )
+        if test_configuration["name"] != project_name:
+            raise AssertionError("Backup test Compose project name was not applied")
         if test_configuration["services"]["mysql"]["healthcheck"] != healthcheck:
             raise AssertionError(
                 "Backup test must use the production MySQL healthcheck"

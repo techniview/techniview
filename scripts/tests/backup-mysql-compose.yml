@@ -1,3 +1,5 @@
+name: ${TEST_COMPOSE_PROJECT_NAME:?Set TEST_COMPOSE_PROJECT_NAME}
+
 services:
   mysql:
     image: ${TEST_MYSQL_IMAGE:?Set TEST_MYSQL_IMAGE}
