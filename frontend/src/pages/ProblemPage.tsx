@@ -1,5 +1,5 @@
 import Editor from "@monaco-editor/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import {
     getProblem,
@@ -37,6 +37,9 @@ function initialAssignmentItemId(
 }
 
 function submissionMessage(submission: Submission): string {
+    if (submission.failure_message) {
+        return submission.failure_message;
+    }
     if (!submission.done) {
         const messages = {
             waiting_to_send: "Waiting for TechniView to send your code...",
@@ -67,6 +70,23 @@ export default function ProblemPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isRunning, setIsRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const pendingAction = useRef<{ signature: string; key: string } | null>(null);
+
+    function requestKey(operation: string, payload: Record<string, unknown>) {
+        const signature = JSON.stringify({ operation, payload });
+        if (pendingAction.current?.signature === signature) {
+            return pendingAction.current;
+        }
+        const action = { signature, key: crypto.randomUUID() };
+        pendingAction.current = action;
+        return action;
+    }
+
+    function completeRequest(action: { signature: string; key: string }) {
+        if (pendingAction.current?.signature === action.signature) {
+            pendingAction.current = null;
+        }
+    }
 
     useEffect(() => {
         if (!Number.isInteger(parsedProblemId) || parsedProblemId <= 0) {
@@ -144,8 +164,13 @@ export default function ProblemPage() {
         setError(null);
         setSubmission(null);
         setIsRunning(true);
+        const action = requestKey("public_run", {
+            problem_id: problem.id,
+            source_code: sourceCode,
+        });
         try {
-            setSubmission(await runPublicCases(problem.id, sourceCode));
+            setSubmission(await runPublicCases(problem.id, sourceCode, action.key));
+            completeRequest(action);
         } catch {
             setError("We could not run the public cases. Please try again.");
         } finally {
@@ -160,12 +185,20 @@ export default function ProblemPage() {
         setError(null);
         setSubmission(null);
         setIsRunning(true);
+        const payload = {
+            problem_id: problem.id,
+            assignment_item_id: assignmentItemId,
+            source_code: sourceCode,
+        };
+        const action = requestKey("graded_submission", payload);
         try {
             const createdSubmission = await createSubmission(
                 problem.id,
                 sourceCode,
+                action.key,
                 assignmentItemId ?? undefined,
             );
+            completeRequest(action);
             setSubmission(createdSubmission);
             if (createdSubmission.done) {
                 setIsRunning(false);

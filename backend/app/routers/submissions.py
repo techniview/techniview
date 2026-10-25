@@ -5,7 +5,7 @@ from decimal import ROUND_CEILING, Decimal
 from enum import IntEnum
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, lazyload, selectinload
@@ -32,6 +32,14 @@ from ..models import (
     User,
 )
 from ..services.execution import snapshot_case_result
+from ..services.idempotency import (
+    attach_idempotency_key,
+    find_existing_submission,
+    request_fingerprint,
+)
+from ..services.idempotency import (
+    key_hash as hash_idempotency_key,
+)
 from ..services.progress import (
     finalize_progress,
     get_or_create_progress,
@@ -254,6 +262,19 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
     if not results:
         return
     if any(result.infrastructure_error for result in results):
+        if any(not _is_terminal(result.judge0_status_id) for result in results):
+            submission.status = (
+                SubmissionStatus.RUNNING
+                if any(
+                    result.judge0_status_id == Judge0Status.PROCESSING
+                    for result in results
+                )
+                or submission.status == SubmissionStatus.RUNNING
+                else SubmissionStatus.QUEUED
+            )
+            return
+        if submission.failure_code is None:
+            submission.failure_code = "runner_internal_error"
         submission.status = SubmissionStatus.INFRASTRUCTURE_ERROR
         submission.completed_at = datetime.now(UTC).replace(tzinfo=None)
         submission.score = None
@@ -303,6 +324,7 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
 
 
 def _submission_response(submission: Submission) -> dict:
+    done = submission.status in TERMINAL_SUBMISSION_STATUSES
     public_results = [
         {
             "case_order": result.case_order,
@@ -329,8 +351,12 @@ def _submission_response(submission: Submission) -> dict:
     return {
         "id": submission.id,
         "status": submission.status,
+        "failure_code": submission.failure_code if done else None,
+        "failure_message": _failure_message(submission.failure_code) if done else None,
+        "retryable": done
+        and submission.failure_code in {"runner_busy", "runner_outcome_unknown"},
         "phase": _submission_execution_phase(submission),
-        "done": submission.status in TERMINAL_SUBMISSION_STATUSES,
+        "done": done,
         "is_practice_run": submission.is_practice_run,
         "score": submission.score,
         "is_late": submission.is_late,
@@ -346,6 +372,19 @@ def _submission_response(submission: Submission) -> dict:
         "completed_at": submission.completed_at,
         "poll_url": f"/api/submissions/{submission.id}",
     }
+
+
+def _failure_message(failure_code: str | None) -> str | None:
+    messages = {
+        "runner_busy": "The system is busy. Please try again later.",
+        "runner_outcome_unknown": (
+            "We could not confirm whether the runner received this request. "
+            "Please try again later."
+        ),
+        "runner_internal_error": "The runner encountered an internal error.",
+        "runner_rejected": "The runner rejected this request. Please contact support.",
+    }
+    return messages.get(failure_code)
 
 
 def _reserve_submission(
@@ -469,10 +508,34 @@ def _mark_case_infrastructure_error(
 
 @router.post("", status_code=202)
 @router.post("/", status_code=202)
-def create_submission(body: SubmissionCreate, db: DbSession, user: CurrentUser):
+def create_submission(
+    body: SubmissionCreate,
+    db: DbSession,
+    user: CurrentUser,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+):
     # Lock before the first consistent read so a second request for this student
     # sees the prior reservation after it waits for the first transaction.
     db.scalar(select(User.id).where(User.id == user.id).with_for_update())
+    key_digest = hash_idempotency_key(idempotency_key)
+    fingerprint = request_fingerprint(
+        "graded_submission",
+        {
+            "problem_id": body.problem_id,
+            "assignment_item_id": body.assignment_item_id,
+            "source_code": body.source_code,
+        },
+    )
+    existing = find_existing_submission(
+        db,
+        user_id=user.id,
+        operation="graded_submission",
+        key_digest=key_digest,
+        fingerprint=fingerprint,
+    )
+    if existing is not None:
+        db.commit()
+        return _submission_response(existing)
     problem = _visible_problem(db, body.problem_id, user)
     if not problem.test_cases:
         raise ApiError(409, "problem_has_no_tests", "The problem has no test cases.")
@@ -498,6 +561,14 @@ def create_submission(body: SubmissionCreate, db: DbSession, user: CurrentUser):
                 judge0_status_id=None,
             )
         )
+    attach_idempotency_key(
+        db,
+        user_id=user.id,
+        operation="graded_submission",
+        key_digest=key_digest,
+        fingerprint=fingerprint,
+        submission_id=submission.id,
+    )
     db.commit()
     db.refresh(submission)
     return _submission_response(submission)

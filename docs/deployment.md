@@ -26,6 +26,17 @@ replicas claim and process queued submissions concurrently. Allocate enough CPU
 and memory for the selected counts. The Compose files cap service CPU and memory
 use within those budgets. Treat these as starting sizes
 and adjust them from the assignment load test.
+
+The application worker retries Judge0 `429` dispatch rejections up to five
+times, with exponential backoff and jitter. `WORKER_DISPATCH_MAX_RETRIES`,
+`WORKER_RETRY_BASE_SECONDS`, `WORKER_RETRY_MAX_SECONDS`, and
+`WORKER_RETRY_AFTER_MAX_SECONDS` set the retry policy. A run that still receives
+`429` after those retries completes with `failure_code=runner_busy`; the API
+marks it retryable and tells the student to try again later. The worker does not
+resend a dispatch after a timeout or lost response. Judge0 may have accepted
+that request, so TechniView waits for the callback and then reports an unknown
+outcome if the recovery window expires.
+
 Use encrypted campus storage for both VMs. Judge0 keeps copies of submitted code
 and execution output in its own database, so protect and retain that volume as
 student data too.
@@ -175,7 +186,9 @@ queue and state (`available`, `idle`, `working`, and `paused`), plus each queue'
 depth. `techniview_judge0_worker_status_scrape_success` indicates whether the
 backend could fetch the live runner status. Scrape this endpoint from a
 Prometheus-compatible collector on the app Docker network. Caddy returns 404
-for this path on the public hostname.
+for this path on the public hostname. Runner retry gauges include persisted
+dispatch retries, current poll failures, submissions that ended busy, and
+submissions whose dispatch outcome could not be confirmed.
 
 The persisted `techniview_execution_cases{phase="running_on_judge0"}` gauge is
 the number of cases whose latest recorded Judge0 status is `Processing`; it can

@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 
 
@@ -99,6 +101,7 @@ async def test_draft_edits_preserve_queued_and_running_case_snapshots(
     problem_id = created.json()["id"]
     response = await teacher_client.post(
         f"/api/problems/{problem_id}/run",
+        headers={"Idempotency-Key": uuid4().hex},
         json={"source_code": "def solve(value): return value"},
     )
     assert response.status_code == 202, response.text
@@ -137,6 +140,8 @@ async def test_draft_edits_preserve_queued_and_running_case_snapshots(
     assert options["memory_limit"] == 64000
     run = db_session.get(Submission, run_id)
     run.next_check_at = None
+    for case_result in run.case_results:
+        case_result.next_attempt_at = None
     db_session.commit()
     assert process_next_submission(db_session, "snapshot-test")
     result = await teacher_client.get(f"/api/submissions/{run_id}")

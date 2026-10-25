@@ -64,9 +64,14 @@ export function startProblem(problemId: number, assignmentItemId?: number) {
     });
 }
 
-export function runPublicCases(problemId: number, sourceCode: string) {
+export function runPublicCases(
+    problemId: number,
+    sourceCode: string,
+    idempotencyKey: string,
+) {
     return apiRequest<Submission>(`/api/problems/${problemId}/run`, {
         method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({ source_code: sourceCode }),
     });
 }
