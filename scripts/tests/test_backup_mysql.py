@@ -33,11 +33,10 @@ def main():
         temporary = Path(directory)
         secret = temporary / "mysql_password"
         secret.write_text("test-only-password\n")
+        secret.chmod(0o600)
         root_secret = temporary / "mysql_root_password"
         root_secret.write_text(f"{uuid.uuid4().hex}\n")
         root_secret.chmod(0o600)
-        root_secret_mount = "/run/secrets/mysql_root_password"
-        mysql_secret_mount = "/run/secrets/mysql_password"
         env = {
             **{
                 key: value
@@ -72,41 +71,28 @@ def main():
             ).stdout
         )
         healthcheck = production["services"]["mysql"]["healthcheck"]
-        compose_file = temporary / "compose.json"
-        compose_file.write_text(
-            json.dumps(
-                {
-                    "name": f"techniview-backup-test-{uuid.uuid4().hex[:12]}",
-                    "services": {
-                        "mysql": {
-                            "image": production["services"]["mysql"]["image"],
-                            "network_mode": "none",
-                            "environment": {
-                                "MYSQL_ROOT_PASSWORD_FILE": root_secret_mount,
-                                "MYSQL_DATABASE": "backup_test",
-                                "MYSQL_USER": "backup_test",
-                                "MYSQL_PASSWORD_FILE": mysql_secret_mount,
-                            },
-                            "volumes": [
-                                f"{root_secret}:{root_secret_mount}:ro",
-                                f"{secret}:{mysql_secret_mount}:ro",
-                            ],
-                            "tmpfs": ["/var/lib/mysql"],
-                            "healthcheck": healthcheck,
-                        }
-                    },
-                }
-            )
-        )
+        compose_file = ROOT / "scripts/tests/backup-mysql-compose.yml"
+        env["TEST_MYSQL_IMAGE"] = production["services"]["mysql"]["image"]
+        env["TEST_MYSQL_ROOT_PASSWORD_FILE"] = str(root_secret)
+        env["TEST_MYSQL_PASSWORD_FILE"] = str(secret)
         env["TECHNIVIEW_COMPOSE_FILE"] = str(compose_file)
         compose = [
             "docker",
             "compose",
+            "-p",
+            f"techniview-backup-test-{uuid.uuid4().hex[:12]}",
             "--env-file",
             "/dev/null",
             "-f",
             str(compose_file),
         ]
+        test_configuration = json.loads(
+            run(*compose, "config", "--format", "json", env=env).stdout
+        )
+        if test_configuration["services"]["mysql"]["healthcheck"] != healthcheck:
+            raise AssertionError(
+                "Backup test must use the production MySQL healthcheck"
+            )
 
         def sql(statement):
             return run(
