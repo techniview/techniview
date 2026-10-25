@@ -199,6 +199,7 @@ async def _submit_once(
     try:
         response = await api.post(
             "/api/submissions",
+            headers={"Idempotency-Key": str(uuid4())},
             json={
                 "problem_id": problem_id,
                 "assignment_item_id": assignment_item_id,
