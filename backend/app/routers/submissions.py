@@ -149,6 +149,8 @@ def _submission_execution_phase(submission: Submission) -> str:
 
 
 def _case_friendly_message(result: SubmissionCaseResult) -> str:
+    if result.execution_unrun:
+        return "This case was not run because the shared execution stopped."
     phase = _case_execution_phase(result)
     messages = {
         "waiting_to_send": "Waiting for TechniView to send this case.",
@@ -222,7 +224,7 @@ def _report_text(value: object) -> str | None:
     )
 
 
-def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
+def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> str | None:
     if _is_terminal(case_result.judge0_status_id):
         return
     if not isinstance(data, dict):
@@ -240,6 +242,28 @@ def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
             raise ValueError(f"Judge0 returned an unknown status: {status_id}")
         case_result.judge0_status_id = status_id
         case_result.infrastructure_error = status_id == Judge0Status.INTERNAL_ERROR
+    shared_code = data.get("infrastructure_error_code")
+    if shared_code is not None and (
+        not isinstance(shared_code, str)
+        or re.fullmatch(
+            r"runner_shared_(timeout|memory|output|fatal|unknown)(?:_unrun)?",
+            shared_code,
+        )
+        is None
+    ):
+        if shared_code != "runner_outcome_unknown":
+            raise ValueError("Judge0 returned an invalid execution failure code")
+    unrun = data.get("execution_unrun", False)
+    if not isinstance(unrun, bool) or unrun != bool(
+        shared_code and shared_code.endswith("_unrun")
+    ):
+        raise ValueError("Judge0 returned an invalid unrun marker")
+    case_result.execution_unrun = unrun
+    if isinstance(shared_code, str) and shared_code.startswith("runner_shared_"):
+        case_result.infrastructure_error = shared_code in {
+            "runner_shared_unknown",
+            "runner_shared_unknown_unrun",
+        }
     if data.get("time") is not None:
         execution_time_ms = Decimal(str(data["time"])) * Decimal("1000")
         if not execution_time_ms.is_finite() or execution_time_ms < 0:
@@ -253,6 +277,13 @@ def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
     for field in ("stdout", "stderr", "compile_output"):
         if field in data:
             setattr(case_result, field, _report_text(data[field]))
+    if case_result.infrastructure_error and shared_code == "runner_outcome_unknown":
+        return "runner_outcome_unknown"
+    if shared_code and shared_code.startswith("runner_shared_"):
+        if shared_code.startswith("runner_shared_unknown"):
+            return "runner_outcome_unknown"
+        return shared_code.removesuffix("_unrun")
+    return None
 
 
 def _finalize_submission(db: Session, submission: Submission) -> None:
@@ -288,6 +319,25 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
             or submission.status == SubmissionStatus.RUNNING
             else SubmissionStatus.QUEUED
         )
+        return
+
+    shared_termination = (
+        submission.failure_code
+        if submission.failure_code
+        and submission.failure_code.startswith("runner_shared_")
+        else None
+    )
+    if shared_termination is not None:
+        category = shared_termination.removeprefix("runner_shared_")
+        submission.status = {
+            "timeout": SubmissionStatus.TIMEOUT,
+            "memory": SubmissionStatus.RESOURCE_LIMIT,
+            "output": SubmissionStatus.RESOURCE_LIMIT,
+            "fatal": SubmissionStatus.RUNTIME_ERROR,
+            "unknown": SubmissionStatus.INFRASTRUCTURE_ERROR,
+        }[category]
+        submission.completed_at = datetime.now(UTC).replace(tzinfo=None)
+        submission.score = None
         return
 
     passed_count = sum(
@@ -336,8 +386,11 @@ def _submission_response(submission: Submission) -> dict:
             "execution_time_ms": result.execution_time_ms,
             "memory_kb": result.memory_kb,
             "status_id": (
-                result.judge0_status_id if result.judge0_token is not None else None
+                result.judge0_status_id
+                if result.judge0_token is not None and not result.execution_unrun
+                else None
             ),
+            "execution_unrun": result.execution_unrun,
             "phase": _case_execution_phase(result),
             "friendly_message": _case_friendly_message(result),
         }
@@ -668,7 +721,9 @@ def receive_judge0_callback(
                 report[field] = base64.b64decode(
                     "".join(report[field].split()), validate=True
                 ).decode("utf-8", errors="replace")
-        _update_case_result(result, report)
+        failure_code = _update_case_result(result, report)
+        if failure_code is not None:
+            submission.failure_code = failure_code
     except (TypeError, ValueError, ArithmeticError) as error:
         db.rollback()
         raise HTTPException(status_code=400, detail="invalid Judge0 report") from error

@@ -10,7 +10,7 @@ class HealthController < ApplicationController
     end
 
     json = []
-    Resque.queues.each do |queue|
+    (Resque.queues + queues.keys).uniq.each do |queue|
       workers = queues[queue]
       json << {
         queue: queue,

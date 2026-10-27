@@ -39,6 +39,53 @@ async def test_status_messages_cover_all_known_ids():
     assert "Unknown" in get_status_message(999)
 
 
+async def test_shared_fatal_keeps_completed_case_and_marks_later_case_unrun(
+    student_client, db_session
+):
+    problem_id = await _problem_id(student_client, "Sum a List")
+    created = await student_client.post(
+        "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
+        json={
+            "problem_id": problem_id,
+            "source_code": "def sum_list(xs): return sum(xs)",
+        },
+    )
+    assert created.status_code == 202
+    submission_id = created.json()["id"]
+    cases = db_session.scalars(
+        select(SubmissionCaseResult)
+        .where(SubmissionCaseResult.submission_id == submission_id)
+        .order_by(SubmissionCaseResult.case_order)
+    ).all()
+    assert len(cases) == 2
+    reports = [
+        {
+            "token": "shared-first",
+            "status": {"id": 11},
+            "infrastructure_error_code": "runner_shared_fatal",
+        },
+        {
+            "token": "shared-second",
+            "status": {"id": 13},
+            "infrastructure_error_code": "runner_shared_fatal_unrun",
+            "execution_unrun": True,
+        },
+    ]
+    _run(db_session, reports)
+    db_session.expire_all()
+    results = db_session.scalars(
+        select(SubmissionCaseResult)
+        .where(SubmissionCaseResult.submission_id == submission_id)
+        .order_by(SubmissionCaseResult.case_order)
+    ).all()
+    assert [result.execution_unrun for result in results] == [False, True]
+    response = (await student_client.get(f"/api/submissions/{submission_id}")).json()
+    assert response["status"] == "runtime_error"
+    assert response["failure_code"] == "runner_shared_fatal"
+    assert response["score"] is None
+
+
 @pytest.mark.parametrize(
     "extra",
     [
@@ -291,3 +338,46 @@ async def test_graded_submission_idempotency_precedes_active_attempt_conflict(
     )
     assert changed.status_code == 409
     assert changed.json()["error"]["code"] == "idempotency_key_reused"
+
+
+@pytest.mark.parametrize("delivery", ["response", "callback"])
+async def test_runner_reported_unknown_outcome_is_retryable(
+    student_client, db_session, delivery
+):
+    problem_id = await _problem_id(student_client, "Sum a List")
+    response = await student_client.post(
+        "/api/submissions",
+        headers={"Idempotency-Key": uuid4().hex},
+        json={"problem_id": problem_id, "source_code": "def solve(values): return 0"},
+    )
+    assert response.status_code == 202
+    submission_id = response.json()["id"]
+    count = len(
+        db_session.scalars(
+            select(SubmissionCaseResult).where(
+                SubmissionCaseResult.submission_id == submission_id
+            )
+        ).all()
+    )
+    reports = [
+        {
+            "token": f"unknown-outcome-{index}",
+            "status": {"id": 13},
+            "infrastructure_error_code": "runner_outcome_unknown",
+        }
+        for index in range(count)
+    ]
+    if delivery == "response":
+        _run(db_session, reports)
+    else:
+        submitted, _ = _run(
+            db_session, [{"token": report["token"]} for report in reports]
+        )
+        for call, report in zip(submitted.call_args_list, reports, strict=True):
+            path = urlsplit(call.kwargs["callback_url"]).path
+            callback = await student_client.put(path, json=report)
+            assert callback.status_code == 200
+    result = (await student_client.get(f"/api/submissions/{submission_id}")).json()
+    assert result["failure_code"] == "runner_outcome_unknown"
+    assert result["retryable"] is True
+    assert result["score"] is None

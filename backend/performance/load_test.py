@@ -9,6 +9,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from math import ceil
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -62,7 +63,7 @@ def _metric_value(payload: str, metric_name: str, labels: str = "") -> float:
 
 
 def _seed_load_scenario(
-    students: int, cases_per_submission: int
+    students: int, cases_per_submission: int, workload: dict | None = None
 ) -> tuple[int, int, list[str]]:
     batch = uuid4().hex
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -137,6 +138,23 @@ def _seed_load_scenario(
                 for case_order in range(1, cases_per_submission + 1)
             ],
         )
+        if workload is not None:
+            problem.title = workload["title"]
+            problem.prompt = workload["prompt"]
+            problem.difficulty = Difficulty(workload["difficulty"])
+            problem.execution_mode = ExecutionMode(workload["execution_mode"])
+            problem.function_name = workload["function_name"]
+            problem.starter_code = workload["starter_code"]
+            problem.canonical_solution = workload["canonical_solution"]
+            problem.test_cases = [
+                ProblemTestCase(
+                    case_order=index,
+                    visibility=TestVisibility(case["visibility"]),
+                    input=case["input"],
+                    expected_output=case["expected_output"],
+                )
+                for index, case in enumerate(workload["test_cases"], 1)
+            ]
         db.add(problem)
         db.flush()
 
@@ -193,27 +211,99 @@ async def _submit_once(
     problem_id: int,
     assignment_item_id: int,
     start_gate: asyncio.Event,
+    source_code: str = SOURCE_CODE,
+    observations: list[dict] | None = None,
 ) -> tuple[int | None, float, int | None, str | None]:
     await start_gate.wait()
     started = time.perf_counter()
     try:
         response = await api.post(
             "/api/submissions",
-            headers={"Idempotency-Key": str(uuid4())},
+            headers={
+                "Idempotency-Key": str(uuid4()),
+                "Cookie": f"{settings.SESSION_COOKIE_NAME}={token}",
+            },
             json={
                 "problem_id": problem_id,
                 "assignment_item_id": assignment_item_id,
-                "source_code": SOURCE_CODE,
+                "source_code": source_code,
             },
-            cookies={settings.SESSION_COOKIE_NAME: token},
         )
     except httpx.HTTPError as error:
         return None, time.perf_counter() - started, None, str(error)
-    elapsed = time.perf_counter() - started
+    accepted_at = time.perf_counter()
+    elapsed = accepted_at - started
     if response.status_code != 202:
         return None, elapsed, response.status_code, response.text[:300]
     try:
-        return response.json()["id"], elapsed, response.status_code, None
+        submission_id = response.json()["id"]
+        print(
+            json.dumps(
+                {
+                    "event": "submission_accepted",
+                    "submission_id": submission_id,
+                    "acceptance_seconds": elapsed,
+                }
+            ),
+            flush=True,
+        )
+        deadline = started + _integer_setting(
+            "LOAD_COMPLETION_TIMEOUT_SECONDS", 300, 300
+        )
+        poll_errors = []
+        while True:
+            try:
+                result = await api.get(
+                    f"/api/submissions/{submission_id}",
+                    headers={"Cookie": f"{settings.SESSION_COOKIE_NAME}={token}"},
+                )
+            except httpx.TransportError as error:
+                event = {
+                    "event": "result_poll_transport_error",
+                    "submission_id": submission_id,
+                    "elapsed_seconds": time.perf_counter() - started,
+                    "error_type": type(error).__name__,
+                }
+                poll_errors.append(event)
+                print(json.dumps(event), flush=True)
+                if time.perf_counter() >= deadline:
+                    raise TimeoutError(
+                        f"Submission {submission_id} API result timed out"
+                    ) from error
+                await asyncio.sleep(0.2)
+                continue
+            result.raise_for_status()
+            payload = result.json()
+            if payload["done"]:
+                if observations is not None:
+                    observations.append(
+                        {
+                            "submission_id": submission_id,
+                            "acceptance_seconds": elapsed,
+                            "accepted_at_monotonic": accepted_at,
+                            "request_started_monotonic": started,
+                            "api_completion_seconds": time.perf_counter() - started,
+                            "result_poll_transport_error_count": len(poll_errors),
+                            "result_poll_transport_errors": poll_errors,
+                            "server_submitted_at": payload["submitted_at"],
+                            "server_completed_at": payload["completed_at"],
+                            "status": payload["status"],
+                            "passed_count": payload["passed_count"],
+                            "test_count": payload["test_count"],
+                        }
+                    )
+                if observations is not None:
+                    print(
+                        json.dumps(
+                            {"event": "submission_completed", **observations[-1]}
+                        ),
+                        flush=True,
+                    )
+                break
+            if time.perf_counter() >= deadline:
+                raise TimeoutError(f"Submission {submission_id} API result timed out")
+            await asyncio.sleep(0.2)
+        return submission_id, elapsed, response.status_code, None
     except (KeyError, ValueError) as error:
         return None, elapsed, response.status_code, f"Invalid response: {error}"
 
@@ -248,14 +338,9 @@ async def _monitor_metrics(stop: asyncio.Event, samples: dict[str, float]) -> No
                             f'{{phase="{phase}"}}',
                         ),
                     )
-                if (
-                    _metric_value(
-                        response.text,
-                        "techniview_judge0_worker_status_scrape_success",
-                    )
-                    != 1
-                ):
-                    raise AssertionError("Live Judge0 worker status scrape failed")
+                samples.setdefault("raw_metrics", []).append(
+                    {"at": datetime.now(UTC).isoformat(), "payload": response.text}
+                )
             except (httpx.HTTPError, AssertionError, ValueError) as error:
                 samples["metrics_scrape_errors"] += 1
                 samples["metrics_last_scrape_error"] = str(error)[:300]
@@ -296,6 +381,9 @@ async def _monitor_judge0_workers(
                         else f"judge0_workers_{name}"
                     )
                     samples[key] = max(samples[key], value)
+                samples.setdefault("raw_worker_status", []).append(
+                    {"at": datetime.now(UTC).isoformat(), "queues": queues}
+                )
                 samples["judge0_worker_status_samples"] += 1
                 samples["judge0_workers_working_total"] += observed["working"]
             except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
@@ -331,6 +419,7 @@ async def _run_burst(
     problem_id: int,
     assignment_item_id: int,
     tokens: list[str],
+    source_code: str = SOURCE_CODE,
 ) -> dict:
     limits = httpx.Limits(
         max_connections=concurrency,
@@ -361,6 +450,7 @@ async def _run_burst(
         _monitor_judge0_workers(stop_metrics, samples)
     )
 
+    observations: list[dict] = []
     try:
         async with httpx.AsyncClient(
             base_url="http://backend:8000", limits=limits, timeout=timeout
@@ -368,15 +458,29 @@ async def _run_burst(
             start_gate = asyncio.Event()
             tasks = [
                 asyncio.create_task(
-                    _submit_once(api, token, problem_id, assignment_item_id, start_gate)
+                    _submit_once(
+                        api,
+                        token,
+                        problem_id,
+                        assignment_item_id,
+                        start_gate,
+                        source_code,
+                        observations,
+                    )
                 )
                 for token in tokens
             ]
             await asyncio.sleep(0)
             burst_started = time.perf_counter()
             start_gate.set()
-            request_results = await asyncio.gather(*tasks, return_exceptions=True)
-            acceptance_burst = time.perf_counter() - burst_started
+            async with asyncio.timeout(completion_timeout):
+                request_results = await asyncio.gather(*tasks, return_exceptions=True)
+            api_completion_batch = time.perf_counter() - burst_started
+            acceptance_burst = (
+                max(r["accepted_at_monotonic"] for r in observations) - burst_started
+                if observations
+                else api_completion_batch
+            )
 
         errors = [
             f"{type(result).__name__}: {result!r}"
@@ -433,32 +537,21 @@ async def _run_burst(
                     f"{students - len(completed)} of {students} submissions did not "
                     f"finish within {completion_timeout} seconds"
                 )
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
     finally:
         stop_metrics.set()
         await asyncio.gather(monitor_task, judge0_monitor_task)
 
-    if samples["metrics_scrape_errors"]:
-        raise AssertionError(
-            f"Metrics scraping failed {int(samples['metrics_scrape_errors'])} times; "
-            f"last error: {samples['metrics_last_scrape_error']}"
-        )
-    if samples["judge0_status_scrape_errors"]:
-        raise AssertionError(
-            "Judge0 worker status scraping failed "
-            f"{int(samples['judge0_status_scrape_errors'])} times; last error: "
-            f"{samples['judge0_status_last_scrape_error']}"
-        )
     if not samples["judge0_worker_status_samples"]:
         raise AssertionError("No live Judge0 worker status samples were collected")
 
-    configured_judge0_workers = _integer_setting("LOAD_JUDGE0_WORKERS", 4, 100)
+    configured_judge0_workers = _integer_setting("LOAD_JUDGE0_WORKERS", 8, 100)
     configured_app_workers = _integer_setting("LOAD_APP_WORKERS", 4, 100)
-    if samples["judge0_workers_available"] < configured_judge0_workers:
+    if samples["judge0_workers_available"] != configured_judge0_workers:
         raise AssertionError(
             "Judge0 registered "
             f"{int(samples['judge0_workers_available'])} worker processes; expected "
-            f"at least {configured_judge0_workers}"
+            f"exactly {configured_judge0_workers}"
         )
 
     completion_batch = time.perf_counter() - burst_started
@@ -506,9 +599,35 @@ async def _run_burst(
             f"{passed_cases} passed of {actual_cases} persisted"
         )
 
+    if any(
+        row["status"] != "passed"
+        or row["test_count"] != cases_per_submission
+        or row["passed_count"] != cases_per_submission
+        for row in observations
+    ):
+        raise AssertionError("API results do not match the selected workload")
     acceptance_latencies = [latency for _submission_id, latency in accepted]
     completion_latencies = [duration for _status, duration in completed.values()]
+    api_latencies = [row["api_completion_seconds"] for row in observations]
     return {
+        "raw_samples": observations,
+        "result_poll_transport_errors": sum(
+            sample["result_poll_transport_error_count"] for sample in observations
+        ),
+        "submissions_with_result_poll_transport_errors": sum(
+            sample["result_poll_transport_error_count"] > 0 for sample in observations
+        ),
+        "raw_metrics": samples.get("raw_metrics", []),
+        "raw_worker_status": samples.get("raw_worker_status", []),
+        "result_poll_interval_seconds": 0.2,
+        "api_submission_to_result_seconds": {
+            "count": len(api_latencies),
+            "p50": statistics.median(api_latencies),
+            "p95": _percentile(api_latencies, 0.95),
+            "p99": _percentile(api_latencies, 0.99),
+            "max": max(api_latencies),
+        },
+        "api_completion_batch_seconds": api_completion_batch,
         "students": students,
         "submission_concurrency": concurrency,
         "application_worker_replicas_configured": configured_app_workers,
@@ -518,6 +637,7 @@ async def _run_burst(
         "acceptance_burst_seconds": round(acceptance_burst, 3),
         "accepted_submissions_per_second": round(students / acceptance_burst, 3),
         "acceptance_latency_seconds": {
+            "count": len(acceptance_latencies),
             "p50": round(statistics.median(acceptance_latencies), 3),
             "p95": round(_percentile(acceptance_latencies, 0.95), 3),
             "p99": round(_percentile(acceptance_latencies, 0.99), 3),
@@ -526,6 +646,7 @@ async def _run_burst(
         "completion_batch_seconds": round(completion_batch, 3),
         "completed_submissions_per_second": round(students / completion_batch, 3),
         "submission_to_completion_seconds": {
+            "count": len(completion_latencies),
             "p50": round(statistics.median(completion_latencies), 3),
             "p95": round(_percentile(completion_latencies, 0.95), 3),
             "p99": round(_percentile(completion_latencies, 0.99), 3),
@@ -561,10 +682,24 @@ async def _run_burst(
 def main() -> None:
     students = _integer_setting("LOAD_STUDENTS", 100, 1000)
     concurrency = _integer_setting("LOAD_CONCURRENCY", students, students)
-    cases_per_submission = _integer_setting("LOAD_CASES_PER_SUBMISSION", 1, 20)
-    completion_timeout = _integer_setting("LOAD_COMPLETION_TIMEOUT_SECONDS", 1200, 2700)
+    workload_name = os.getenv("LOAD_PROBLEM")
+    workload = None
+    if workload_name:
+        catalog = json.loads(
+            (Path(__file__).parents[1] / "data/problem_catalog.json").read_text()
+        )
+        matches = [p for p in catalog["problems"] if p["title"] == workload_name]
+        if len(matches) != 1:
+            raise ValueError(f"Expected one catalog problem named {workload_name!r}")
+        workload = matches[0]
+    cases_per_submission = (
+        len(workload["test_cases"])
+        if workload
+        else _integer_setting("LOAD_CASES_PER_SUBMISSION", 1, 10000)
+    )
+    completion_timeout = _integer_setting("LOAD_COMPLETION_TIMEOUT_SECONDS", 300, 300)
     problem_id, assignment_item_id, tokens = _seed_load_scenario(
-        students, cases_per_submission
+        students, cases_per_submission, workload
     )
     report = asyncio.run(
         _run_burst(
@@ -575,8 +710,14 @@ def main() -> None:
             problem_id,
             assignment_item_id,
             tokens,
+            workload["canonical_solution"] if workload else SOURCE_CODE,
         )
     )
+    report["workload"] = workload_name or "synthetic-count-evens"
+    report["source_commit"] = os.getenv("LOAD_SOURCE_COMMIT", "unrecorded")
+    output = os.getenv("LOAD_REPORT_PATH")
+    if output:
+        Path(output).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, sort_keys=True))
 
 

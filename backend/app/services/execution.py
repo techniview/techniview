@@ -196,6 +196,145 @@ print(__techniview_json.dumps(
     )
 
 
+_SHARED_SCRIPT_HEAD = """
+import contextlib as __tv_contextlib
+import io as __tv_io
+import json as __tv_json
+import os as __tv_os
+import sys as __tv_sys
+import traceback as __tv_traceback
+
+class __tv_LimitedWriter(__tv_io.StringIO):
+    def __init__(self, byte_limit):
+        super().__init__()
+        self.byte_limit = byte_limit
+        self.byte_count = 0
+
+    def write(self, value):
+        size = len(value.encode("utf-8", errors="replace"))
+        if self.byte_count + size > self.byte_limit:
+            raise OSError("case output limit exceeded")
+        self.byte_count += size
+        return super().write(value)
+
+__tv_protocol = __tv_os.fdopen(__tv_os.dup(1), "w", encoding="utf-8", buffering=1)
+__tv_module = {"__name__": "__main__"}
+__tv_start_stdout = __tv_LimitedWriter(1048576)
+__tv_start_stderr = __tv_LimitedWriter(1048576)
+__tv_start_error = None
+try:
+    with (
+        __tv_contextlib.redirect_stdout(__tv_start_stdout),
+        __tv_contextlib.redirect_stderr(__tv_start_stderr),
+    ):
+        exec(compile(__tv_source, "<student-submission>", "exec"),
+             __tv_module, __tv_module)
+except Exception as __tv_error:
+    __tv_start_error = type(__tv_error).__name__
+    __tv_start_stderr.write(__tv_traceback.format_exc()[-8192:])
+"""
+
+_SHARED_SCRIPT_TAIL = """
+for __tv_index in range(__tv_case_count):
+    __tv_line = __tv_sys.stdin.readline()
+    if not __tv_line:
+        break
+    __tv_request = __tv_json.loads(__tv_line)
+    if __tv_request.get("index") != __tv_index:
+        break
+    __tv_limit = __tv_request["output_limit_bytes"]
+    __tv_out = __tv_LimitedWriter(__tv_limit)
+    __tv_err = __tv_LimitedWriter(__tv_limit)
+    __tv_exception = None
+    __tv_output_exceeded = False
+    if __tv_index == 0:
+        __tv_out.write(__tv_start_stdout.getvalue())
+        __tv_err.write(__tv_start_stderr.getvalue())
+    if __tv_start_error is not None:
+        __tv_exception = __tv_start_error
+    else:
+        try:
+            __tv_input = __tv_request["input"]
+            with (
+                __tv_contextlib.redirect_stdout(__tv_out),
+                __tv_contextlib.redirect_stderr(__tv_err),
+            ):
+                if __tv_mode == "call":
+                    __tv_namespace = __tv_module.copy()
+                    __tv_namespace["__tv_input"] = __tv_input
+                    exec(compile(__tv_harnesses[__tv_index], "<case-harness>", "exec"),
+                         __tv_namespace, __tv_namespace)
+                else:
+                    __tv_previous_stdin = __tv_sys.stdin
+                    try:
+                        __tv_sys.stdin = __tv_io.StringIO(__tv_input)
+                        __tv_module[__tv_entry]()
+                    finally:
+                        __tv_sys.stdin = __tv_previous_stdin
+        except Exception as __tv_error:
+            __tv_exception = type(__tv_error).__name__
+            __tv_output_exceeded = (
+                isinstance(__tv_error, OSError)
+                and str(__tv_error) == "case output limit exceeded"
+            )
+            try:
+                __tv_err.write(__tv_traceback.format_exc()[-8192:])
+            except OSError:
+                __tv_output_exceeded = True
+    __tv_protocol.write(__tv_json.dumps({
+        "index": __tv_index,
+        "stdout": __tv_out.getvalue(),
+        "stderr": __tv_err.getvalue(),
+        "exception": __tv_exception,
+        "output_exceeded": __tv_output_exceeded,
+    }, separators=(",", ":")) + "\\n")
+    __tv_protocol.flush()
+    if __tv_start_error is not None:
+        break
+"""
+
+
+def build_shared_execution(
+    problem: Problem, cases: list[SubmissionCaseResult], source_code: str
+) -> str:
+    """Build one interpreter with externally supplied case inputs and no answers."""
+    if not cases:
+        raise ValueError("shared execution requires cases")
+    if problem.execution_mode == ExecutionMode.STDIN_STDOUT:
+        prefix = source_code
+        harnesses: list[str] = []
+        mode = "stdin"
+    else:
+        marker = "\n\nimport json as __techniview_json\n"
+        harnesses = []
+        prefix = ""
+        for index, case in enumerate(cases):
+            execution = build_case_execution(problem, case, source_code)
+            prepared_prefix, separator, harness = execution.source_code.partition(
+                marker
+            )
+            if not separator or (index and prepared_prefix != prefix):
+                raise ValueError("inconsistent prepared function harness")
+            prefix = prepared_prefix
+            old = f"__techniview_json.loads({case.input!r})"
+            if harness.count(old) != 1:
+                raise ValueError("case input placeholder not found")
+            harnesses.append(
+                (marker + harness).replace(
+                    old, "__techniview_json.loads(__tv_input)", 1
+                )
+            )
+        mode = "call"
+    bindings = (
+        f"__tv_source = {prefix!r}\n"
+        f"__tv_harnesses = {harnesses!r}\n"
+        f"__tv_case_count = {len(cases)}\n"
+        f"__tv_mode = {mode!r}\n"
+        f"__tv_entry = {problem.function_name!r}\n"
+    )
+    return bindings + _SHARED_SCRIPT_HEAD + _SHARED_SCRIPT_TAIL
+
+
 def snapshot_case_result(
     problem: Problem, case: ProblemTestCase, source_code: str, **values
 ) -> SubmissionCaseResult:

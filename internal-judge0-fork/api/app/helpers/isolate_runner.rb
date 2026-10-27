@@ -34,6 +34,12 @@ module IsolateRunner
 
   def self.perform_later(submission)
     submission.update(status: Status.queue, queued_at: DateTime.now, queue_host: ENV["HOSTNAME"])
-    IsolateJob.perform_later(submission.id)
+    if ENV["RUNNER_BENCHMARK_TIMINGS"] == "1"
+      clock = {"boot_id" => File.read("/proc/sys/kernel/random/boot_id").strip,
+               "enqueued" => Process.clock_gettime(Process::CLOCK_MONOTONIC)}
+      IsolateJob.perform_later(submission.id, clock)
+    else
+      IsolateJob.perform_later(submission.id)
+    end
   end
 end

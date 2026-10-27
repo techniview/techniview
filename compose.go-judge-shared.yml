@@ -1,0 +1,17 @@
+# Engine and compatibility workers share one work-conserving 6 CPU / 8 GiB budget.
+services:
+  workers:
+    build:
+      context: ./internal-judge0-fork
+      dockerfile: experiments/Dockerfile.go-judge
+      target: go-judge
+    image: techniview-go-judge:1.13.3-experiment
+    entrypoint: /usr/local/bin/go-judge-workers
+    environment:
+      RUNNER_ENGINE: go-judge
+      GO_JUDGE_URL: http://127.0.0.1:5050
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version")']
+      interval: 2s
+      timeout: 3s
+      retries: 30

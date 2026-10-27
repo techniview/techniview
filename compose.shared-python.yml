@@ -1,0 +1,7 @@
+services:
+  app_worker:
+    environment:
+      RUNNER_EXECUTION_MODEL: ${RUNNER_EXECUTION_MODEL:-shared_python}
+  tests:
+    environment:
+      RUNNER_EXECUTION_MODEL: ${RUNNER_EXECUTION_MODEL:-shared_python}

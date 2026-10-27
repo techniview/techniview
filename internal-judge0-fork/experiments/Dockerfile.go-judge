@@ -1,0 +1,15 @@
+FROM debian:trixie-slim AS binary
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://github.com/criyle/go-judge/releases/download/v1.13.3/go-judge_1.13.3_linux_amd64 -o /go-judge \
+    && echo '509782f8959987256d99ac6dc8062ec593d776f291401c8e0c28bdc48dcd1880  /go-judge' | sha256sum -c - \
+    && chmod 755 /go-judge
+FROM internal-judge0-fork-worker:integration AS go-judge
+USER root
+COPY --from=binary /go-judge /usr/local/bin/go-judge
+COPY api/ /api/
+RUN chown -R judge0:judge0 /api/tmp /api/log
+COPY experiments/go-judge-mount.yaml /etc/go-judge-mount.yaml
+COPY experiments/go-judge-workers.sh /usr/local/bin/go-judge-workers
+ENV ES_OUTPUT_LIMIT=4m ES_COPY_OUT_LIMIT=4m
+ENTRYPOINT ["/usr/local/bin/go-judge"]
+CMD ["-http-addr", "0.0.0.0:5050", "-no-fallback", "-mount-conf", "/etc/go-judge-mount.yaml", "-parallelism", "8", "-src-prefix", "/opt/python"]

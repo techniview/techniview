@@ -43,6 +43,18 @@ class Settings:
     EMAIL_TOKEN_COOLDOWN_SECONDS = int(os.getenv("EMAIL_TOKEN_COOLDOWN_SECONDS", "60"))
     EMAIL_MAX_ATTEMPTS = int(os.getenv("EMAIL_MAX_ATTEMPTS", "5"))
     EMAIL_LEASE_SECONDS = int(os.getenv("EMAIL_LEASE_SECONDS", "60"))
+    WORKER_DISPATCH_CONCURRENCY = int(os.getenv("WORKER_DISPATCH_CONCURRENCY", "1"))
+    if not 1 <= WORKER_DISPATCH_CONCURRENCY <= 32:
+        raise ValueError("WORKER_DISPATCH_CONCURRENCY must be between 1 and 32")
+    RUNNER_GROUP_PROFILE = os.getenv("RUNNER_GROUP_PROFILE", "0") == "1"
+    RUNNER_GROUP_SECRET = _setting("RUNNER_GROUP_SECRET")
+    if RUNNER_GROUP_PROFILE and len(RUNNER_GROUP_SECRET) < 32:
+        raise ValueError("RUNNER_GROUP_SECRET must contain at least 32 characters")
+    RUNNER_EXECUTION_MODEL = os.getenv("RUNNER_EXECUTION_MODEL", "fresh")
+    if RUNNER_EXECUTION_MODEL not in {"fresh", "shared_python"}:
+        raise ValueError("RUNNER_EXECUTION_MODEL must be fresh or shared_python")
+    if RUNNER_EXECUTION_MODEL == "shared_python" and not RUNNER_GROUP_PROFILE:
+        raise ValueError("shared_python requires RUNNER_GROUP_PROFILE=1")
     WORKER_LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "60"))
     WORKER_POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "2"))
     WORKER_RECOVERY_SECONDS = int(os.getenv("WORKER_RECOVERY_SECONDS", "600"))

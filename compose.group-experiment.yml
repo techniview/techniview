@@ -1,0 +1,15 @@
+services:
+  judge:
+    environment:
+      RUNNER_GROUP_PROFILE: "1"
+  workers:
+    environment:
+      RUNNER_GROUP_PROFILE: "1"
+  app_worker:
+    environment:
+      RUNNER_GROUP_PROFILE: "1"
+      RUNNER_GROUP_SECRET: integration-only-group-secret-2026-10-27
+  tests:
+    environment:
+      RUNNER_GROUP_PROFILE: "1"
+      RUNNER_GROUP_SECRET: integration-only-group-secret-2026-10-27

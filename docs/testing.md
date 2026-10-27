@@ -118,7 +118,9 @@ every 200 ms and reports peak and average busy workers. Metrics scrape errors
 fail the run, as does failure to observe the configured Judge0 worker processes.
 No latency or throughput threshold is enforced until repeatable baselines have
 been collected. The integration CI job has a 60-minute budget and the load run
-has a 20-minute completion deadline.
+has a five-minute API burst deadline. Completion is observed through the
+submission API with a fixed 200 ms delay between polls; persisted server event
+intervals are reported separately.
 
 The runner profile is recorded in the CI log with each run. GitHub-hosted runners
 use standardized VM classes, but the underlying host can still vary; compare
@@ -220,3 +222,6 @@ with a new database and new Judge0 queue.
 The authoring API is available to professor accounts. Create/edit custom draft problems with nested `tags` and ordered `test_cases`; use the validate endpoint to run the canonical solution against every case before publishing. Copy a visible problem to start a separate custom draft. Hidden cases and canonical source are intentionally excluded from ordinary problem detail responses.
 
 Question sets are private to their owner. Replace their ordered contents with `PUT /api/question-sets/{id}/items`, then publish them. Creating an assignment from a published question set snapshots its ordered problem IDs into assignment items, so later edits to the source set do not affect the assignment.
+
+See [local runner experiments](local-runner-experiments.md) for the catalog-based
+API turnaround harness, resource limits, safety stop, and experimental profiles.

@@ -1,0 +1,68 @@
+# Only use with compose.integration.yml and an explicit disposable project name.
+services:
+  workers:
+    hostname: benchmark-workers
+    cpus: 6
+    mem_limit: 8g
+    memswap_limit: 8g
+    environment:
+      COUNT: ${LOAD_JUDGE0_WORKERS:-8}
+      RUNNER_BENCHMARK_TIMINGS: "1"
+      RUNNER_CALLBACK_OUTBOX: ${RUNNER_CALLBACK_OUTBOX:-0}
+  judge:
+    environment:
+      RUNNER_BENCHMARK_TIMINGS: "1"
+    cpus: 1
+    mem_limit: 1g
+    memswap_limit: 1g
+  mysql:
+    # Retained result rows must not consume unreclaimable RAM inside this limit.
+    tmpfs: !reset []
+    volumes:
+      - benchmark_mysql:/var/lib/mysql
+    cpus: 1
+    mem_limit: 1g
+    memswap_limit: 1g
+  postgres:
+    cpus: 1
+    mem_limit: 1g
+    memswap_limit: 1g
+  redis:
+    cpus: 0.5
+    mem_limit: 256m
+    memswap_limit: 256m
+  backend:
+    cpus: 2
+    mem_limit: 2g
+    memswap_limit: 2g
+  app_worker:
+    environment:
+      JUDGE0_REUSE_CONNECTIONS: ${JUDGE0_REUSE_CONNECTIONS:-0}
+      WORKER_DISPATCH_CONCURRENCY: ${WORKER_DISPATCH_CONCURRENCY:-1}
+    cpus: 0.5
+    mem_limit: 512m
+    memswap_limit: 512m
+  tests:
+    cpus: 1
+    mem_limit: 1g
+    memswap_limit: 1g
+  callbacks:
+    profiles: [callback-outbox]
+    image: internal-judge0-fork-api:integration
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: integration-only
+      POSTGRES_DB: postgres
+      REDIS_HOST: redis
+      REDIS_PASSWORD: integration-only
+    cpus: 0.5
+    mem_limit: 512m
+    memswap_limit: 512m
+    command: bundle exec ruby -r ./config/environment scripts/callbacks.rb
+    depends_on:
+      judge:
+        condition: service_started
+
+volumes:
+  benchmark_mysql:

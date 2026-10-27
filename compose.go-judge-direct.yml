@@ -1,0 +1,6 @@
+# Direct engine comparison: the Ruby execution service is stopped for go-judge.
+services:
+  go-judge:
+    cpus: 6
+    mem_limit: 8g
+    memswap_limit: 8g

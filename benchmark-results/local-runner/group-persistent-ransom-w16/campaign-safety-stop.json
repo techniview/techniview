@@ -1,0 +1,15 @@
+{
+  "campaign_status": "stopped_incomplete",
+  "reason": "Campaign-wide swap use exceeded the 512 MiB safety limit from campaign start; no further load tests were started.",
+  "detected_at_utc": "2026-10-27T21:29:55Z",
+  "source_commit": "2c2e5aebb8c17a62b2b2c36274b8b02078a46a45",
+  "campaign_initial_swap_used_bytes": 2053115904,
+  "campaign_current_swap_used_bytes": 2994876416,
+  "campaign_swap_growth_bytes": 941760512,
+  "swap_growth_limit_bytes": 536870912,
+  "current_mem_available_bytes": 10782130176,
+  "last_burst": "c25-r1-baseline",
+  "last_burst_summary": "c25-r1-baseline/summary.json records exit code 137 after manual stop; those partial samples are excluded.",
+  "compose_project": "techniview-runner-bench",
+  "compose_project_cleaned": true
+}

@@ -1,0 +1,31 @@
+# Test-only engine swap. Total execution-service budget stays at 6 CPUs / 8 GiB.
+services:
+  workers:
+    cpus: 3
+    mem_limit: 2g
+    memswap_limit: 2g
+    environment:
+      RUNNER_ENGINE: go-judge
+      GO_JUDGE_URL: http://go-judge:5050
+    depends_on:
+      go-judge:
+        condition: service_healthy
+  go-judge:
+    build:
+      context: ./internal-judge0-fork
+      dockerfile: experiments/Dockerfile.go-judge
+    image: techniview-go-judge:1.13.3-experiment
+    environment:
+      ES_OUTPUT_LIMIT: ${MAX_MAX_FILE_SIZE:-4096}k
+      ES_COPY_OUT_LIMIT: ${MAX_MAX_FILE_SIZE:-4096}k
+    privileged: true
+    cgroup: private
+    cpus: 3
+    mem_limit: 6g
+    memswap_limit: 6g
+    shm_size: 256m
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version")']
+      interval: 2s
+      timeout: 3s
+      retries: 30
