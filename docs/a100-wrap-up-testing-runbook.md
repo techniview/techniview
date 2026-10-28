@@ -38,10 +38,10 @@ Start it detached so it survives an SSH disconnect:
 ```bash
 cd ~/techniview-deploy
 nohup python3 -u scripts/run-engine-comparison-matrix.py \
-  --profile group-persistent --label a100-final-group-persistent \
-  > benchmark-results/local-runner/a100-final-group-persistent-console.log 2>&1 \
+  --profile group-persistent --label a100-final-group-persistent-v2 \
+  > benchmark-results/local-runner/a100-final-group-persistent-v2-console.log 2>&1 \
   < /dev/null &
-echo $! > benchmark-results/local-runner/a100-final-group-persistent.pid
+echo $! > benchmark-results/local-runner/a100-final-group-persistent-v2.pid
 ```
 
 The script builds images outside the timed bursts, uses one workload at a time,
@@ -56,13 +56,13 @@ resume on the same boot.
 Read the campaign manifest:
 
 ```bash
-cat benchmark-results/local-runner/a100-final-group-persistent-campaign/campaign.json
+cat benchmark-results/local-runner/a100-final-group-persistent-v2-campaign/campaign.json
 ```
 
 Follow the log if you want live output:
 
 ```bash
-tail -f benchmark-results/local-runner/a100-final-group-persistent-console.log
+tail -f benchmark-results/local-runner/a100-final-group-persistent-v2-console.log
 ```
 
 The manifest records the profile verification result, image build, and the
@@ -73,7 +73,7 @@ For an ordinary interruption, resume with:
 
 ```bash
 python3 -u scripts/run-engine-comparison-matrix.py \
-  --profile group-persistent --label a100-final-group-persistent --resume
+  --profile group-persistent --label a100-final-group-persistent-v2 --resume
 ```
 
 After a safety stop, wait for host recovery and reboot before resuming. The
@@ -85,22 +85,22 @@ Once the campaign is complete, run this in the GPU SSH session:
 
 ```bash
 cd ~/techniview-deploy/benchmark-results/local-runner
-tar -czf ~/a100-final-group-persistent-results.tar.gz \
-  a100-final-group-persistent-campaign/REPORT.md \
-  a100-final-group-persistent-campaign/campaign.json \
-  a100-final-group-persistent-ransom-note-try*/comparison.md \
-  a100-final-group-persistent-ransom-note-try*/comparison.json \
-  a100-final-group-persistent-number-of-islands-try*/comparison.md \
-  a100-final-group-persistent-number-of-islands-try*/comparison.json \
-  a100-final-group-persistent-minimum-cost-for-tickets-try*/comparison.md \
-  a100-final-group-persistent-minimum-cost-for-tickets-try*/comparison.json
+tar -czf ~/a100-final-group-persistent-v2-results.tar.gz \
+  a100-final-group-persistent-v2-campaign/REPORT.md \
+  a100-final-group-persistent-v2-campaign/campaign.json \
+  a100-final-group-persistent-v2-ransom-note-try*/comparison.md \
+  a100-final-group-persistent-v2-ransom-note-try*/comparison.json \
+  a100-final-group-persistent-v2-number-of-islands-try*/comparison.md \
+  a100-final-group-persistent-v2-number-of-islands-try*/comparison.json \
+  a100-final-group-persistent-v2-minimum-cost-for-tickets-try*/comparison.md \
+  a100-final-group-persistent-v2-minimum-cost-for-tickets-try*/comparison.json
 ```
 
 Then, in a local terminal on the development PC:
 
 ```bash
-scp corniedj@cs-gpu-00:~/a100-final-group-persistent-results.tar.gz \
-  ~/a100-final-group-persistent-results.tar.gz
+scp corniedj@cs-gpu-00:~/a100-final-group-persistent-v2-results.tar.gz \
+  ~/a100-final-group-persistent-v2-results.tar.gz
 ```
 
 The campaign report contains the source commit and workload links. Comparison

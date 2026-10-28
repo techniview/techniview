@@ -38,6 +38,6 @@ trap cleanup EXIT
 "${base_compose[@]}" build workers
 "${compose[@]}" build backend tests app_worker judge workers
 "${compose[@]}" up -d --wait --wait-timeout 180 --scale app_worker=4 backend judge workers app_worker
-"${compose[@]}" run --rm --no-deps --volume "$PWD/backend/integration/test_runner_isolation.py:/app/integration/test_runner_isolation.py:ro" tests python -m pytest -v integration -k "${VERIFY_TEST_SELECTOR:-not fifty_near_simultaneous}" --override-ini=pythonpath=.
+"${compose[@]}" run --rm --no-deps tests python -m pytest -v integration -k "${VERIFY_TEST_SELECTOR:-not fifty_near_simultaneous}" --override-ini=pythonpath=.
 "${compose[@]}" run --rm --no-deps -e RUNNER_ADAPTER_TESTS=1 judge \
   bundle exec ruby -r ./config/environment scripts/test_go_judge_adapter.rb
