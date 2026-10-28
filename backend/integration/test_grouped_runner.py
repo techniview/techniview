@@ -2,6 +2,7 @@
 
 import os
 import time
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -86,3 +87,74 @@ def test_group_is_idempotent_and_keeps_fresh_case_state():
         pytest.fail(
             f"group did not complete: state={final.get('state')}, reports={reports}"
         )
+
+
+@pytest.mark.skipif(
+    os.getenv("RUNNER_RESTART_TEST") != "1",
+    reason="requires the host-controlled go-judge restart verifier",
+)
+def test_worker_restart_does_not_retry_ambiguous_group_case():
+    key = uuid4().hex
+    cases = [
+        {
+            "case_id": 21,
+            "source_code": (
+                "import time\ntime.sleep(25)\nprint('finished-after-restart')\n"
+            ),
+            "expected_output": "finished-after-restart\n",
+            "wall_time_limit": 40,
+        }
+    ]
+    control_path = Path(os.environ["RUNNER_RESTART_SIGNAL_PATH"])
+    control_path.parent.mkdir(parents=True, exist_ok=True)
+    control_path.unlink(missing_ok=True)
+
+    with httpx.Client(base_url="http://judge:2358", timeout=10) as runner:
+        created = runner.post(
+            "/internal/submission-groups",
+            json={"idempotency_key": key, "cases": cases},
+        )
+        assert created.status_code == 201, created.text
+        group = created.json()
+
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            state = runner.get(f"/internal/submission-groups/{group['token']}").json()
+            if state["state"] == "running" and state["cases"][0]["state"] == "running":
+                # Allow the Go Judge request to reach the executing worker before the
+                # host verifier interrupts that worker container.
+                time.sleep(1.5)
+                control_path.touch()
+                break
+            time.sleep(0.1)
+        else:
+            pytest.fail(f"group never entered execution: {state}")
+
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            final = runner.get(f"/internal/submission-groups/{group['token']}").json()
+            report = runner.get(
+                f"/submissions/{group['cases'][0]['token']}?base64_encoded=false"
+            ).json()
+            if final["state"] == "complete":
+                break
+            time.sleep(0.2)
+        else:
+            pytest.fail(f"group did not recover after engine restart: {final}")
+
+        assert report["status"]["description"] == "Internal Error", report
+        assert report["message"] == "runner_outcome_unknown", report
+
+        repeated = runner.post(
+            "/internal/submission-groups",
+            json={"idempotency_key": key, "cases": cases},
+        )
+        assert repeated.status_code == 200, repeated.text
+        assert repeated.json()["token"] == group["token"]
+        assert repeated.json()["state"] == "complete"
+        time.sleep(2)
+        final_report = runner.get(
+            f"/submissions/{group['cases'][0]['token']}?base64_encoded=false"
+        ).json()
+        assert final_report["status"]["description"] == "Internal Error"
+        assert final_report["message"] == "runner_outcome_unknown"

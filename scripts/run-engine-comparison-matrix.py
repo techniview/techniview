@@ -65,9 +65,10 @@ def write_state(path, state):
     temporary.replace(path)
 
 
-def cell_label(prefix, problem):
+def cell_label(prefix, problem, workers=None):
     slug = problem.lower().replace(" ", "-")
-    return f"{prefix}-{slug}"
+    suffix = f"-w{workers}" if workers is not None else ""
+    return f"{prefix}-{slug}{suffix}"
 
 
 def report(campaign_dir, state):
@@ -81,6 +82,9 @@ def report(campaign_dir, state):
         if profile == "group-persistent"
         else "Grouping, persistent workers, and HTTP reuse are disabled."
     )
+    worker_description = ", ".join(
+        str(count) for count in state.get("worker_counts", [8])
+    )
     lines = [
         f"# Judge0 versus go-judge campaign: {state['label']}",
         "",
@@ -88,7 +92,8 @@ def report(campaign_dir, state):
         "",
         f"Source commit: `{state['source_commit']}`",
         "",
-        "Fixed profile: 8 runner workers, 4 app workers, 6 runner CPUs, 8 GiB.",
+        f"Fixed profile: {worker_description} runner workers, 4 app workers, "
+        "6 runner CPUs, 8 GiB.",
         "Both profiles use fresh Python state per case.",
         profile_description,
         "",
@@ -99,15 +104,22 @@ def report(campaign_dir, state):
         "| Workload | Status | Comparison |",
         "| --- | --- | --- |",
     ]
-    for problem in PROBLEMS:
-        name = cell_label(state["label"], problem)
-        cell = state["cells"].get(name, {})
-        link = (
-            f"[comparison](../{cell['result_label']}/comparison.md)"
-            if cell.get("status") == "complete"
-            else "—"
-        )
-        lines.append(f"| {problem} | {cell.get('status', 'pending')} | {link} |")
+    worker_counts = state.get("worker_counts", [8])
+    for workers in worker_counts:
+        for problem in PROBLEMS:
+            name = cell_label(
+                state["label"], problem, workers if len(worker_counts) > 1 else None
+            )
+            cell = state["cells"].get(name, {})
+            link = (
+                f"[comparison](../{cell['result_label']}/comparison.md)"
+                if cell.get("status") == "complete"
+                else "—"
+            )
+            workload = (
+                f"{problem} ({workers} workers)" if len(worker_counts) > 1 else problem
+            )
+            lines.append(f"| {workload} | {cell.get('status', 'pending')} | {link} |")
     if state.get("safety_stopped"):
         lines.extend(["", "The campaign stopped at a host safety limit."])
     (campaign_dir / "REPORT.md").write_text("\n".join(lines) + "\n")
@@ -171,12 +183,22 @@ def main():
         default="engine-only",
         help="Compare the engine alone or the complete grouped-worker candidate",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        choices=[8, 16],
+        nargs="+",
+        default=[8],
+        help="Runner worker counts to compare under the same CPU and memory budget",
+    )
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     if not args.label.replace("-", "").replace("_", "").isalnum():
         parser.error(
             "label must contain only letters, numbers, hyphens, and underscores"
         )
+    if len(set(args.workers)) != len(args.workers):
+        parser.error("worker counts must be unique")
 
     campaign_dir = RESULTS / f"{args.label}-campaign"
     state_path = campaign_dir / "campaign.json"
@@ -191,6 +213,8 @@ def main():
             parser.error("source commit changed; start a new campaign label")
         if state.get("profile", "engine-only") != args.profile:
             parser.error("campaign profile changed; start a new campaign label")
+        if state.get("worker_counts", [8]) != args.workers:
+            parser.error("worker counts changed; start a new campaign label")
         if state["boot_id"] != boot_id:
             state.setdefault("sessions", []).append(
                 {
@@ -213,6 +237,7 @@ def main():
             "version": 1,
             "label": args.label,
             "profile": args.profile,
+            "worker_counts": args.workers,
             "status": "running",
             "source_commit": commit,
             "boot_id": boot_id,
@@ -271,6 +296,12 @@ def main():
             cwd=ROOT,
             env=environment,
         )
+        if verified.returncode == 0:
+            verified = subprocess.run(
+                ["bash", "scripts/verify-go-judge-worker-restart.sh"],
+                cwd=ROOT,
+                env=environment,
+            )
         if verified.returncode:
             state["status"] = "verification_failed"
             state["verification_status"] = "failed"
@@ -331,124 +362,138 @@ def main():
     write_state(state_path, state)
     report(campaign_dir, state)
     try:
-        for problem in PROBLEMS:
-            name = cell_label(args.label, problem)
-            cell = state["cells"].setdefault(
-                name, {"problem": problem, "status": "pending", "attempts": []}
-            )
-            if cell["status"] == "complete":
-                continue
-            guard = safety_check(
-                state["initial_swap_used_bytes"],
-                memory()["available_bytes"] < 2 * 1024**3,
-            )
-            if guard:
-                stop_campaign(campaign_dir, state_path, state, *guard)
-                return 2
-
-            attempt = len(cell["attempts"]) + 1
-            result_label = f"{name}-try{attempt:02d}"
-            cell["status"] = "running"
-            cell["attempts"].append(
-                {"label": result_label, "status": "running", "started_at": now()}
-            )
-            state["updated_at"] = now()
-            write_state(state_path, state)
-            report(campaign_dir, state)
-            command = [
-                sys.executable,
-                "scripts/runner-bench.py",
-                "--label",
-                result_label,
-                "--problem",
-                problem,
-                "--workers",
-                "8",
-                "--concurrency",
-                "1",
-                "10",
-                "25",
-                "--repetitions",
-                "3",
-            ]
-            paired_flag = (
-                "--paired-engine-group-persistent"
-                if args.profile == "group-persistent"
-                else "--paired-engine"
-            )
-            command.insert(4, paired_flag)
-            candidate = (
-                "go-judge-group-persistent"
-                if args.profile == "group-persistent"
-                else "go-judge"
-            )
-            print(f"Starting Judge0 versus {candidate}: {problem}", flush=True)
-            completed = subprocess.run(command, cwd=ROOT, env=environment)
-            attempt_state = cell["attempts"][-1]
-            attempt_state["finished_at"] = now()
-            attempt_state["exit_code"] = completed.returncode
-            result_dir = RESULTS / result_label
-            if completed.returncode:
-                safety_file = (
-                    next(result_dir.glob("**/safety-stop.json"), None)
-                    if result_dir.exists()
-                    else None
+        for workers in args.workers:
+            for problem in PROBLEMS:
+                name = cell_label(
+                    args.label, problem, workers if len(args.workers) > 1 else None
                 )
-                if safety_file:
-                    attempt_state["status"] = "safety_stopped"
-                    state["status"] = "safety_stopped"
-                    state["safety_stopped"] = True
-                    cell["status"] = "safety_stopped"
-                    attempt_state["safety_stop"] = str(safety_file.relative_to(ROOT))
-                else:
-                    attempt_state["status"] = "incomplete"
+                cell = state["cells"].setdefault(
+                    name,
+                    {
+                        "problem": problem,
+                        "workers": workers,
+                        "status": "pending",
+                        "attempts": [],
+                    },
+                )
+                if cell["status"] == "complete":
+                    continue
+                guard = safety_check(
+                    state["initial_swap_used_bytes"],
+                    memory()["available_bytes"] < 2 * 1024**3,
+                )
+                if guard:
+                    stop_campaign(campaign_dir, state_path, state, *guard)
+                    return 2
+
+                attempt = len(cell["attempts"]) + 1
+                result_label = f"{name}-try{attempt:02d}"
+                cell["status"] = "running"
+                cell["attempts"].append(
+                    {"label": result_label, "status": "running", "started_at": now()}
+                )
+                state["updated_at"] = now()
+                write_state(state_path, state)
+                report(campaign_dir, state)
+                command = [
+                    sys.executable,
+                    "scripts/runner-bench.py",
+                    "--label",
+                    result_label,
+                    "--problem",
+                    problem,
+                    "--workers",
+                    str(workers),
+                    "--concurrency",
+                    "1",
+                    "10",
+                    "25",
+                    "--repetitions",
+                    "3",
+                ]
+                paired_flag = (
+                    "--paired-engine-group-persistent"
+                    if args.profile == "group-persistent"
+                    else "--paired-engine"
+                )
+                command.insert(4, paired_flag)
+                candidate = (
+                    "go-judge-group-persistent"
+                    if args.profile == "group-persistent"
+                    else "go-judge"
+                )
+                print(
+                    f"Starting Judge0 versus {candidate}: {problem}, {workers} workers",
+                    flush=True,
+                )
+                completed = subprocess.run(command, cwd=ROOT, env=environment)
+                attempt_state = cell["attempts"][-1]
+                attempt_state["finished_at"] = now()
+                attempt_state["exit_code"] = completed.returncode
+                result_dir = RESULTS / result_label
+                if completed.returncode:
+                    safety_file = (
+                        next(result_dir.glob("**/safety-stop.json"), None)
+                        if result_dir.exists()
+                        else None
+                    )
+                    if safety_file:
+                        attempt_state["status"] = "safety_stopped"
+                        state["status"] = "safety_stopped"
+                        state["safety_stopped"] = True
+                        cell["status"] = "safety_stopped"
+                        attempt_state["safety_stop"] = str(
+                            safety_file.relative_to(ROOT)
+                        )
+                    else:
+                        attempt_state["status"] = "incomplete"
+                        cell["status"] = "incomplete"
+                        state["status"] = "incomplete"
+                    state["updated_at"] = now()
+                    write_state(state_path, state)
+                    report(campaign_dir, state)
+                    return completed.returncode
+
+                compared = subprocess.run(
+                    [
+                        sys.executable,
+                        "scripts/compare-runner-bench.py",
+                        str(result_dir.relative_to(ROOT)),
+                        "--candidate",
+                        candidate,
+                    ],
+                    cwd=ROOT,
+                    env=environment,
+                )
+                if compared.returncode:
+                    attempt_state["status"] = "comparison_failed"
                     cell["status"] = "incomplete"
                     state["status"] = "incomplete"
+                    state["updated_at"] = now()
+                    write_state(state_path, state)
+                    report(campaign_dir, state)
+                    return compared.returncode
+                comparison = json.loads((result_dir / "comparison.json").read_text())
+                if len(comparison.get("pairs", [])) != 9 or comparison.get(
+                    "incomplete_runs"
+                ):
+                    attempt_state["status"] = "incomplete_pairs"
+                    cell["status"] = "incomplete"
+                    state["status"] = "incomplete"
+                    state["updated_at"] = now()
+                    write_state(state_path, state)
+                    report(campaign_dir, state)
+                    return 1
+                attempt_state["status"] = "complete"
+                cell.update(
+                    status="complete",
+                    result_label=result_label,
+                    finished_at=now(),
+                    pair_count=len(comparison["pairs"]),
+                )
                 state["updated_at"] = now()
                 write_state(state_path, state)
                 report(campaign_dir, state)
-                return completed.returncode
-
-            compared = subprocess.run(
-                [
-                    sys.executable,
-                    "scripts/compare-runner-bench.py",
-                    str(result_dir.relative_to(ROOT)),
-                    "--candidate",
-                    candidate,
-                ],
-                cwd=ROOT,
-                env=environment,
-            )
-            if compared.returncode:
-                attempt_state["status"] = "comparison_failed"
-                cell["status"] = "incomplete"
-                state["status"] = "incomplete"
-                state["updated_at"] = now()
-                write_state(state_path, state)
-                report(campaign_dir, state)
-                return compared.returncode
-            comparison = json.loads((result_dir / "comparison.json").read_text())
-            if len(comparison.get("pairs", [])) != 9 or comparison.get(
-                "incomplete_runs"
-            ):
-                attempt_state["status"] = "incomplete_pairs"
-                cell["status"] = "incomplete"
-                state["status"] = "incomplete"
-                state["updated_at"] = now()
-                write_state(state_path, state)
-                report(campaign_dir, state)
-                return 1
-            attempt_state["status"] = "complete"
-            cell.update(
-                status="complete",
-                result_label=result_label,
-                finished_at=now(),
-                pair_count=len(comparison["pairs"]),
-            )
-            state["updated_at"] = now()
-            write_state(state_path, state)
-            report(campaign_dir, state)
 
         state["status"] = "complete"
         state["finished_at"] = now()

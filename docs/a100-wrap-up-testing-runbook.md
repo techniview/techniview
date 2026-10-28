@@ -1,24 +1,27 @@
-# Final grouped go-judge comparison on the A100 host
+# A100 candidate recovery and worker scaling campaign
 
-This campaign compares the current Judge0 path with the strongest test
-candidate from the prior runs: go-judge with grouped submission jobs,
-persistent bounded Ruby workers, and pooled app-to-runner connections. Python
-still starts fresh for every case. The candidate remains test-only.
+This follow-up keeps the candidate opt-in and tests two remaining questions:
+whether a real go-judge worker restart during an executing grouped case is
+handled without silently rerunning student code, and whether 16 workers improve
+on 8 under the same execution resource budget.
 
-Before timing, the campaign runs the grouped-profile integration, sandbox, and
-go-judge adapter checks. It then compares all three canonical workloads at
-concurrency 1, 10, and 25, with three paired repetitions per workload. Both
-profiles use 8 runner workers, 4 app workers, and a 6-CPU / 8-GiB execution
-budget. Paired order alternates. Each profile gets its own untimed warm-up.
+Before timing, the driver runs the candidate integration, sandbox, and adapter
+checks, then restarts the go-judge worker container during a long-running group
+case. The restart check expects an explicit `runner_outcome_unknown` result,
+completed group state, stable idempotency, and no automatic execution retry.
+Only after these checks pass does it run the full paired matrix.
 
-The campaign does not test a 100-submission burst or larger resource limits.
-It also does not inject an engine crash during a live grouped submission.
-Those capacity and crash-recovery checks remain separate work after this
-candidate is reviewed.
+The matrix compares Judge0 and go-judge with grouped jobs, persistent bounded
+Ruby workers, pooled HTTP, and fresh Python state per case. It runs Ransom Note,
+Number of Islands, and Minimum Cost for Tickets at runner worker counts 8 and
+16; each count uses concurrency 1, 10, and 25, with three paired repetitions.
+Both sides of each pair use the same worker count. Runner CPU and memory limits
+stay fixed at 6 CPUs and 8 GiB; app workers stay at 4. Each profile receives an
+untimed warm-up. The existing host safety stops remain active.
 
 ## Update the GPU checkout
 
-Run these commands on `cs-gpu-00` from the existing branch checkout:
+Run these commands on `cs-gpu-00`:
 
 ```bash
 cd ~/techniview-deploy
@@ -27,84 +30,86 @@ git fetch origin refs/heads/corniedj/infra-improvements
 git merge --ff-only FETCH_HEAD
 ```
 
-The imported A100 reports live under a separate `a100-group-persistent-imported`
-directory. The new campaign uses its own label, so it will not replace those
-files or the earlier raw campaign output.
+## Start the campaign
 
-## Run the final comparison
-
-Start it detached so it survives an SSH disconnect:
+The campaign takes roughly twice as long as the completed 8-worker-only run.
+Start it detached so it can continue if the SSH connection closes:
 
 ```bash
 cd ~/techniview-deploy
 nohup python3 -u scripts/run-engine-comparison-matrix.py \
-  --profile group-persistent --label a100-final-group-persistent-v2 \
-  > benchmark-results/local-runner/a100-final-group-persistent-v2-console.log 2>&1 \
+  --profile group-persistent --workers 8 16 \
+  --label a100-readiness-v1 \
+  > benchmark-results/local-runner/a100-readiness-v1-console.log 2>&1 \
   < /dev/null &
-echo $! > benchmark-results/local-runner/a100-final-group-persistent-v2.pid
+echo $! > benchmark-results/local-runner/a100-readiness-v1.pid
 ```
 
-The script builds images outside the timed bursts, uses one workload at a time,
-and stops on the existing host safety limits: available memory below 2 GiB for
-five seconds, or swap growth over 512 MiB from the campaign start. It records
-campaign state and preserves incomplete attempts. An ordinary interrupted
-workload can be retried with the same label. A safety-stopped campaign cannot
-resume on the same boot.
+The restart verifier uses its own disposable Compose project and removes only
+that project's containers, network, and database volume. The matrix uses the
+usual dedicated benchmark project. Both preserve logs and results outside the
+disposable database volume.
 
-## Monitor it
+## Check progress
 
-Read the campaign manifest:
+The campaign manifest is:
 
 ```bash
-cat benchmark-results/local-runner/a100-final-group-persistent-v2-campaign/campaign.json
+cat benchmark-results/local-runner/a100-readiness-v1-campaign/campaign.json
 ```
 
-Follow the log if you want live output:
+The campaign is complete when its top-level status is `complete`, verification
+is `complete`, and all six workload/worker cells are `complete` with
+`pair_count` 9. If `grep` is the only search tool installed, inspect those
+fields with:
 
 ```bash
-tail -f benchmark-results/local-runner/a100-final-group-persistent-v2-console.log
+grep -n '"status"\|"workers"\|"pair_count"\|"verification_status"\|"updated_at"' \
+  benchmark-results/local-runner/a100-readiness-v1-campaign/campaign.json
 ```
 
-The manifest records the profile verification result, image build, and the
-status of each workload. A successful run ends with `"status": "complete"`.
-Each workload must have nine complete pairs and no incomplete runs.
+The worker restart evidence is saved at:
 
-For an ordinary interruption, resume with:
-
-```bash
-python3 -u scripts/run-engine-comparison-matrix.py \
-  --profile group-persistent --label a100-final-group-persistent-v2 --resume
+```text
+benchmark-results/local-runner/go-judge-worker-restart-verification/restart-test.log
+benchmark-results/local-runner/go-judge-worker-restart-verification/services.log
 ```
 
-After a safety stop, wait for host recovery and reboot before resuming. The
-driver establishes a new swap baseline after the boot changes.
+## Copy the compact results back
 
-## Copy compact results back
-
-Once the campaign is complete, run this in the GPU SSH session:
+After the manifest says the campaign completed, run this on the GPU:
 
 ```bash
 cd ~/techniview-deploy/benchmark-results/local-runner
-tar -czf ~/a100-final-group-persistent-v2-results.tar.gz \
-  a100-final-group-persistent-v2-campaign/REPORT.md \
-  a100-final-group-persistent-v2-campaign/campaign.json \
-  a100-final-group-persistent-v2-ransom-note-try*/comparison.md \
-  a100-final-group-persistent-v2-ransom-note-try*/comparison.json \
-  a100-final-group-persistent-v2-number-of-islands-try*/comparison.md \
-  a100-final-group-persistent-v2-number-of-islands-try*/comparison.json \
-  a100-final-group-persistent-v2-minimum-cost-for-tickets-try*/comparison.md \
-  a100-final-group-persistent-v2-minimum-cost-for-tickets-try*/comparison.json
+tar -czf ~/a100-readiness-v1-results.tar.gz \
+  a100-readiness-v1-campaign/REPORT.md \
+  a100-readiness-v1-campaign/campaign.json \
+  a100-readiness-v1-ransom-note-w8-try*/comparison.md \
+  a100-readiness-v1-ransom-note-w8-try*/comparison.json \
+  a100-readiness-v1-number-of-islands-w8-try*/comparison.md \
+  a100-readiness-v1-number-of-islands-w8-try*/comparison.json \
+  a100-readiness-v1-minimum-cost-for-tickets-w8-try*/comparison.md \
+  a100-readiness-v1-minimum-cost-for-tickets-w8-try*/comparison.json \
+  a100-readiness-v1-ransom-note-w16-try*/comparison.md \
+  a100-readiness-v1-ransom-note-w16-try*/comparison.json \
+  a100-readiness-v1-number-of-islands-w16-try*/comparison.md \
+  a100-readiness-v1-number-of-islands-w16-try*/comparison.json \
+  a100-readiness-v1-minimum-cost-for-tickets-w16-try*/comparison.md \
+  a100-readiness-v1-minimum-cost-for-tickets-w16-try*/comparison.json \
+  go-judge-worker-restart-verification/restart-test.log \
+  go-judge-worker-restart-verification/services.log \
+  verify-go-judge-group-persistent-services.log
 ```
 
-Then, in a local terminal on the development PC:
+Then copy it from a local terminal on the development PC:
 
 ```bash
-scp corniedj@cs-gpu-00:~/a100-final-group-persistent-v2-results.tar.gz \
-  ~/a100-final-group-persistent-v2-results.tar.gz
+scp corniedj@cs-gpu-00:~/a100-readiness-v1-results.tar.gz \
+  ~/a100-readiness-v1-results.tar.gz
 ```
 
-The campaign report contains the source commit and workload links. Comparison
-JSON includes API acceptance, API turnaround, server completion, throughput,
-and stage summaries. Raw resource samples, service logs, and durable database
-snapshots remain on the GPU host if a slower stage needs investigation.
-
+The campaign report records the source commit and links the six comparisons.
+Each comparison includes API acceptance, API turnaround, server completion,
+throughput, and stage summaries. Resource samples remain on the GPU host if a
+stage needs deeper investigation. Small-sample p99 values are diagnostic, not
+production guarantees.
