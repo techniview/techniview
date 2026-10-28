@@ -49,8 +49,8 @@ until the combined report is written.
 
 The campaign tracker and compact reports from the completed grouped-worker run
 are now stored under
-`benchmark-results/local-runner/a100-group-persistent-campaign/` and the six
-matching `a100-group-persistent-*` result directories.
+`benchmark-results/local-runner/a100-group-persistent-imported/`. The `imported`
+suffix keeps these copies separate from raw results produced on the GPU host.
 
 **Decision:** Keep grouped jobs plus persistent Ruby workers as a promising
 test candidate if correctness evidence is clean. The data so far does not
