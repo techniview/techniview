@@ -39,10 +39,10 @@ Start it detached so it can continue if the SSH connection closes:
 cd ~/techniview-deploy
 nohup python3 -u scripts/run-engine-comparison-matrix.py \
   --profile group-persistent --workers 8 16 \
-  --label a100-readiness-v2 \
-  > benchmark-results/local-runner/a100-readiness-v2-console.log 2>&1 \
+  --label a100-readiness-v3 \
+  > benchmark-results/local-runner/a100-readiness-v3-console.log 2>&1 \
   < /dev/null &
-echo $! > benchmark-results/local-runner/a100-readiness-v2.pid
+echo $! > benchmark-results/local-runner/a100-readiness-v3.pid
 ```
 
 The restart verifier uses its own disposable Compose project and removes only
@@ -55,7 +55,7 @@ disposable database volume.
 The campaign manifest is:
 
 ```bash
-cat benchmark-results/local-runner/a100-readiness-v2-campaign/campaign.json
+cat benchmark-results/local-runner/a100-readiness-v3-campaign/campaign.json
 ```
 
 The campaign is complete when its top-level status is `complete`, verification
@@ -65,7 +65,7 @@ fields with:
 
 ```bash
 grep -n '"status"\|"workers"\|"pair_count"\|"verification_status"\|"updated_at"' \
-  benchmark-results/local-runner/a100-readiness-v2-campaign/campaign.json
+  benchmark-results/local-runner/a100-readiness-v3-campaign/campaign.json
 ```
 
 The worker restart evidence is saved at:
@@ -81,21 +81,21 @@ After the manifest says the campaign completed, run this on the GPU:
 
 ```bash
 cd ~/techniview-deploy/benchmark-results/local-runner
-tar -czf ~/a100-readiness-v2-results.tar.gz \
-  a100-readiness-v2-campaign/REPORT.md \
-  a100-readiness-v2-campaign/campaign.json \
-  a100-readiness-v2-ransom-note-w8-try*/comparison.md \
-  a100-readiness-v2-ransom-note-w8-try*/comparison.json \
-  a100-readiness-v2-number-of-islands-w8-try*/comparison.md \
-  a100-readiness-v2-number-of-islands-w8-try*/comparison.json \
-  a100-readiness-v2-minimum-cost-for-tickets-w8-try*/comparison.md \
-  a100-readiness-v2-minimum-cost-for-tickets-w8-try*/comparison.json \
-  a100-readiness-v2-ransom-note-w16-try*/comparison.md \
-  a100-readiness-v2-ransom-note-w16-try*/comparison.json \
-  a100-readiness-v2-number-of-islands-w16-try*/comparison.md \
-  a100-readiness-v2-number-of-islands-w16-try*/comparison.json \
-  a100-readiness-v2-minimum-cost-for-tickets-w16-try*/comparison.md \
-  a100-readiness-v2-minimum-cost-for-tickets-w16-try*/comparison.json \
+tar -czf ~/a100-readiness-v3-results.tar.gz \
+  a100-readiness-v3-campaign/REPORT.md \
+  a100-readiness-v3-campaign/campaign.json \
+  a100-readiness-v3-ransom-note-w8-try*/comparison.md \
+  a100-readiness-v3-ransom-note-w8-try*/comparison.json \
+  a100-readiness-v3-number-of-islands-w8-try*/comparison.md \
+  a100-readiness-v3-number-of-islands-w8-try*/comparison.json \
+  a100-readiness-v3-minimum-cost-for-tickets-w8-try*/comparison.md \
+  a100-readiness-v3-minimum-cost-for-tickets-w8-try*/comparison.json \
+  a100-readiness-v3-ransom-note-w16-try*/comparison.md \
+  a100-readiness-v3-ransom-note-w16-try*/comparison.json \
+  a100-readiness-v3-number-of-islands-w16-try*/comparison.md \
+  a100-readiness-v3-number-of-islands-w16-try*/comparison.json \
+  a100-readiness-v3-minimum-cost-for-tickets-w16-try*/comparison.md \
+  a100-readiness-v3-minimum-cost-for-tickets-w16-try*/comparison.json \
   go-judge-worker-restart-verification/restart-test.log \
   go-judge-worker-restart-verification/services.log \
   verify-go-judge-group-persistent-services.log
@@ -104,8 +104,8 @@ tar -czf ~/a100-readiness-v2-results.tar.gz \
 Then copy it from a local terminal on the development PC:
 
 ```bash
-scp corniedj@cs-gpu-00:~/a100-readiness-v2-results.tar.gz \
-  ~/a100-readiness-v2-results.tar.gz
+scp corniedj@cs-gpu-00:~/a100-readiness-v3-results.tar.gz \
+  ~/a100-readiness-v3-results.tar.gz
 ```
 
 The campaign report records the source commit and links the six comparisons.

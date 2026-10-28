@@ -98,10 +98,10 @@ def test_worker_restart_does_not_retry_ambiguous_group_case():
         {
             "case_id": 21,
             "source_code": (
-                "import time\ntime.sleep(25)\nprint('finished-after-restart')\n"
+                "import time\ntime.sleep(15)\nprint('finished-after-restart')\n"
             ),
             "expected_output": "finished-after-restart\n",
-            "wall_time_limit": 40,
+            "wall_time_limit": 20,
         }
     ]
     with httpx.Client(base_url="http://judge:2358", timeout=10) as runner:
