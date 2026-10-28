@@ -61,6 +61,8 @@ def test_group_is_idempotent_and_keeps_fresh_case_state():
         assert by_key.json()["token"] == group["token"]
 
         deadline = time.monotonic() + 90
+        reports = []
+        final = {}
         while time.monotonic() < deadline:
             reports = [
                 runner.get(
@@ -69,16 +71,18 @@ def test_group_is_idempotent_and_keeps_fresh_case_state():
                 ).json()
                 for item in group["cases"]
             ]
-            if all(report["status"]["id"] not in {1, 2} for report in reports):
+            final = runner.get(f"/internal/submission-groups/{group['token']}").json()
+            if (
+                all(report["status"]["id"] not in {1, 2} for report in reports)
+                and final["state"] == "complete"
+            ):
                 assert [report["status"]["id"] for report in reports] == [3, 3]
                 assert [report["stdout"] for report in reports] == [
                     "first\n",
                     "second\n",
                 ]
-                final = runner.get(
-                    f"/internal/submission-groups/{group['token']}"
-                ).json()
-                assert final["state"] == "complete"
                 return
             time.sleep(0.2)
-        pytest.fail("group did not complete")
+        pytest.fail(
+            f"group did not complete: state={final.get('state')}, reports={reports}"
+        )
