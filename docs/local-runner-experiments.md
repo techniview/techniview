@@ -1,15 +1,11 @@
 # Local runner experiments
 
-Work is on `corniedj/infra-improvements`, based on
-`2c2e5aebb8c17a62b2b2c36274b8b02078a46a45`. The earlier go-judge plus pooling
-matrix is complete. The separate grouped-job plus persistent-worker comparison
-is partial: Ransom Note completed at 8 workers for all target concurrencies,
-and at 16 workers for concurrency 1 and 10. The campaign-wide swap limit then
-stopped further load. See the [grouped-worker results](../benchmark-results/local-runner/group-persistent-ransom-w8/comparison.md),
-the [16-worker partial results](../benchmark-results/local-runner/group-persistent-ransom-w16/comparison.md),
-and the [safety-stop record](../benchmark-results/local-runner/group-persistent-ransom-w16/campaign-safety-stop.json).
-HTTP pooling, concurrent dispatch, the callback outbox, and go-judge remain
-explicit experiments. See the [completed matrix findings](../benchmark-results/local-runner/selected-matrix/FINDINGS.md) and the [earlier independent results](../benchmark-results/local-runner/resume/REPORT.md).
+This document retains the local runner experiment history. For the current
+A100-host findings, see the [Judge0 versus go-judge comparison](../benchmark-results/local-runner/a100-engine-ab-imported/FINDINGS.md)
+and the [final combined-profile runbook](a100-wrap-up-testing-runbook.md).
+The original local combined matrix and independent experiment results are
+summarized in the [selected matrix findings](../benchmark-results/local-runner/selected-matrix/FINDINGS.md)
+and the [resumed experiments report](../benchmark-results/local-runner/resume/REPORT.md).
 
 ## Measurement
 
@@ -90,34 +86,18 @@ include the source commit, tracked diff, hashes, machine and Docker versions,
 container image IDs, and service limits. New runs also retain untracked source
 files and a complete source hash manifest.
 
-## One-command A100 campaign
+## A100 campaigns
 
-After checking out the experiment branch on the amd64 A100 host, run the full
-grouped-worker comparison as a background user service:
+The grouped-job and persistent-worker comparison completed all three problems
+at 8 and 16 workers. A later engine-only comparison completed all three
+problems with 8 workers. These results are stored under
+`benchmark-results/local-runner/a100-group-persistent-imported/` and
+`benchmark-results/local-runner/a100-engine-ab-imported/`.
 
-```sh
-systemd-run --user --unit=techniview-runner-matrix --collect \
-  --property=WorkingDirectory=/path/to/techniview \
-  --setenv=UV_CACHE_DIR=/tmp/techniview-uv-cache \
-  python scripts/run-group-persistent-matrix.py --label a100-group-persistent
-```
-
-The campaign builds images before timing, then runs the three catalog workloads
-at 8 and 16 workers sequentially. Each cell has its own warm-up, paired c1/c10/c25
-runs, and comparison report. The campaign manifest records progress and skips
-complete cells when resumed. A host-wide safety baseline spans builds, cells,
-and individual bursts; crossing the swap or low-memory limit stops the current
-burst and the remaining matrix. It does not automatically restart after a safety
-stop.
-
-Check progress with `systemctl --user status techniview-runner-matrix` and
-`journalctl --user -u techniview-runner-matrix`. The campaign status and final
-cell links are in
-`benchmark-results/local-runner/a100-group-persistent-campaign/REPORT.md`.
-If the service exits after an ordinary interruption, start it again with the
-same label and `--resume`. A safety-stopped campaign on the same boot refuses a
-resume; wait for host recovery and begin a new campaign label. If the host rebooted,
-resume records the new boot and establishes a new swap baseline.
+The remaining paired test compares Judge0 with grouped, persistent go-judge.
+Use the [final runbook](a100-wrap-up-testing-runbook.md). It runs the
+profile-specific integration checks before the API performance matrix and
+records progress in a campaign manifest.
 
 ## Implemented candidates
 
@@ -370,10 +350,9 @@ removed after verification; reports and source snapshots remain on disk.
 
 The application still defaults to Isolate, fresh HTTP clients and sequential
 dispatch. The outbox, grouped jobs, persistent workers, and execution-engine
-experiments remain opt-in. Review the go-judge accounting/reliability
-differences before changing the engine default. The A100 host benchmark remains
-future work; its amd64 architecture is known, but this local laptop result does
-not predict A100 performance.
+experiments remain opt-in. The ungrouped go-judge profile was slower than Judge0
+on the A100 host. Compare the complete grouped-worker candidate against Judge0
+before considering an engine change.
 
 To recover another interrupted selected matrix, run
 `python benchmark-results/local-runner/selected-matrix/run.py --candidate pooled`.

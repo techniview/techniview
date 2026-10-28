@@ -321,6 +321,7 @@ def main():
     parser.add_argument("--paired-dispatch", action="store_true")
     parser.add_argument("--paired-engine", action="store_true")
     parser.add_argument("--paired-engine-shared", action="store_true")
+    parser.add_argument("--paired-engine-group-persistent", action="store_true")
     parser.add_argument("--paired-combined", action="store_true")
     parser.add_argument("--paired-group", action="store_true")
     parser.add_argument("--grouped", action="store_true")
@@ -344,6 +345,7 @@ def main():
             or args.paired_persistent
             or args.paired_shared
             or args.paired_group_persistent
+            or args.paired_engine_group_persistent
         )
         or args.combined_ablation
     ):
@@ -364,6 +366,11 @@ def main():
         parser.error("paired shared execution requires isolate or go-judge-shared")
     if args.paired_group_persistent and args.engine != "go-judge-shared":
         parser.error("paired group-persistent execution requires go-judge-shared")
+    if args.paired_engine_group_persistent and args.engine != "isolate":
+        parser.error(
+            "paired engine/group comparison selects its own engine profiles; "
+            "omit --engine"
+        )
     if args.combined_ablation and not args.paired_combined:
         parser.error("--combined-ablation requires --paired-combined")
     if not args.label.replace("-", "").replace("_", "").isalnum():
@@ -385,6 +392,7 @@ def main():
                 args.paired_persistent,
                 args.paired_shared,
                 args.paired_group_persistent,
+                args.paired_engine_group_persistent,
             ]
         )
         > 1
@@ -404,6 +412,7 @@ def main():
             args.paired_persistent,
             args.paired_shared,
             args.paired_group_persistent,
+            args.paired_engine_group_persistent,
         ]
     )
     if paired and (
@@ -473,6 +482,8 @@ def main():
             or bool(previous.get("paired_shared")) != args.paired_shared
             or bool(previous.get("paired_group_persistent"))
             != args.paired_group_persistent
+            or bool(previous.get("paired_engine_group_persistent"))
+            != args.paired_engine_group_persistent
             or previous.get("engine") != args.engine
             or previous["dispatch_concurrency"] != args.dispatch_concurrency
         ):
@@ -523,6 +534,7 @@ def main():
         "paired_persistent": args.paired_persistent,
         "paired_shared": args.paired_shared,
         "paired_group_persistent": args.paired_group_persistent,
+        "paired_engine_group_persistent": args.paired_engine_group_persistent,
         "persistent": args.persistent,
         "combined_ablation": args.combined_ablation,
         "source_commit": source,
@@ -657,6 +669,7 @@ def main():
             or args.paired_persistent
             or args.paired_shared
             or args.paired_group_persistent
+            or args.paired_engine_group_persistent
         ):
             base_compose = COMPOSE.copy()
             for concurrency in args.concurrency:
@@ -672,6 +685,8 @@ def main():
                         if args.paired_shared
                         else "group-persistent"
                         if args.paired_group_persistent
+                        else "go-judge-group-persistent"
+                        if args.paired_engine_group_persistent
                         else "go-judge-shared"
                         if args.paired_engine_shared
                         else "go-judge"
@@ -697,6 +712,8 @@ def main():
                         variants = ("grouped", "shared-python")
                     elif args.paired_group_persistent:
                         variants = ("baseline", "group-persistent")
+                    elif args.paired_engine_group_persistent and repeat % 2 == 0:
+                        variants = tuple(reversed(variants))
                     elif (
                         args.paired_combined
                         or args.paired_http
@@ -714,6 +731,10 @@ def main():
                             or args.paired_persistent
                             or args.paired_shared
                             or args.paired_group_persistent
+                            or (
+                                args.paired_engine_group_persistent
+                                and variant == "go-judge-group-persistent"
+                            )
                             else "0",
                         }
                         if args.paired_group:
@@ -792,6 +813,35 @@ def main():
                                 ],
                                 env=pair_env,
                             )
+                        if args.paired_engine_group_persistent:
+                            command(COMPOSE + ["stop", "judge", "workers"])
+                            if variant == "go-judge-group-persistent":
+                                COMPOSE[:] = base_compose + [
+                                    "-f",
+                                    "compose.go-judge-shared.yml",
+                                    "-f",
+                                    "compose.group-experiment.yml",
+                                    "-f",
+                                    "compose.persistent-workers.yml",
+                                ]
+                                pair_env["RUNNER_GROUP_PROFILE"] = "1"
+                                pair_env["JUDGE0_REUSE_CONNECTIONS"] = "1"
+                            else:
+                                COMPOSE[:] = base_compose
+                            command(
+                                COMPOSE
+                                + [
+                                    "up",
+                                    "-d",
+                                    "--wait",
+                                    "--wait-timeout",
+                                    "180",
+                                    "--force-recreate",
+                                    "judge",
+                                    "workers",
+                                ],
+                                env=pair_env,
+                            )
                         if (
                             args.paired_engine
                             or args.paired_engine_shared
@@ -865,6 +915,7 @@ def main():
                             or args.paired_persistent
                             or args.paired_shared
                             or args.paired_group_persistent
+                            or args.paired_engine_group_persistent
                             else 1,
                             args.workers,
                             source,

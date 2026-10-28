@@ -54,6 +54,7 @@ def main():
             "dispatch",
             "go-judge",
             "go-judge-shared",
+            "go-judge-group-persistent",
             "combined",
             "grouped",
             "persistent",

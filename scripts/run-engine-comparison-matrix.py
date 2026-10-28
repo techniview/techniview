@@ -29,6 +29,14 @@ BASE_COMPOSE = [
     "compose.benchmark.yml",
 ]
 GO_JUDGE_COMPOSE = BASE_COMPOSE + ["-f", "compose.go-judge-experiment.yml"]
+GROUP_PERSISTENT_COMPOSE = BASE_COMPOSE + [
+    "-f",
+    "compose.go-judge-shared.yml",
+    "-f",
+    "compose.group-experiment.yml",
+    "-f",
+    "compose.persistent-workers.yml",
+]
 PROBLEMS = (
     "Ransom Note",
     "Number of Islands",
@@ -63,6 +71,16 @@ def cell_label(prefix, problem):
 
 
 def report(campaign_dir, state):
+    profile = state.get("profile", "engine-only")
+    candidate = (
+        "go-judge-group-persistent" if profile == "group-persistent" else "go-judge"
+    )
+    profile_description = (
+        "Candidate: grouped jobs, persistent Ruby workers, pooled HTTP, "
+        "fresh Python per case."
+        if profile == "group-persistent"
+        else "Grouping, persistent workers, and HTTP reuse are disabled."
+    )
     lines = [
         f"# Judge0 versus go-judge campaign: {state['label']}",
         "",
@@ -71,8 +89,12 @@ def report(campaign_dir, state):
         f"Source commit: `{state['source_commit']}`",
         "",
         "Fixed profile: 8 runner workers, 4 app workers, 6 runner CPUs, 8 GiB.",
-        "Both profiles use fresh Python state per case. Grouping and HTTP reuse",
-        "are disabled.",
+        "Both profiles use fresh Python state per case.",
+        profile_description,
+        "",
+        f"Candidate profile: `{candidate}`",
+        "",
+        f"Profile checks: {state.get('verification_status', 'not required')}",
         "",
         "| Workload | Status | Comparison |",
         "| --- | --- | --- |",
@@ -143,6 +165,12 @@ def current_commit():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--label", required=True, help="Unique campaign label")
+    parser.add_argument(
+        "--profile",
+        choices=["engine-only", "group-persistent"],
+        default="engine-only",
+        help="Compare the engine alone or the complete grouped-worker candidate",
+    )
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     if not args.label.replace("-", "").replace("_", "").isalnum():
@@ -161,6 +189,8 @@ def main():
         state = json.loads(state_path.read_text())
         if state["source_commit"] != commit:
             parser.error("source commit changed; start a new campaign label")
+        if state.get("profile", "engine-only") != args.profile:
+            parser.error("campaign profile changed; start a new campaign label")
         if state["boot_id"] != boot_id:
             state.setdefault("sessions", []).append(
                 {
@@ -182,6 +212,7 @@ def main():
         state = {
             "version": 1,
             "label": args.label,
+            "profile": args.profile,
             "status": "running",
             "source_commit": commit,
             "boot_id": boot_id,
@@ -211,6 +242,10 @@ def main():
             "inspect them before starting"
         )
 
+    state["updated_at"] = now()
+    write_state(state_path, state)
+    report(campaign_dir, state)
+
     guard = safety_check(
         state["initial_swap_used_bytes"],
         host_memory["available_bytes"] < 2 * 1024**3,
@@ -224,19 +259,52 @@ def main():
     environment["RUNNER_BENCH_CAMPAIGN_SWAP_BASELINE_BYTES"] = str(
         state["initial_swap_used_bytes"]
     )
+
+    if args.profile == "group-persistent" and not state.get("verification_finished_at"):
+        state["verification_status"] = "running"
+        state["updated_at"] = now()
+        write_state(state_path, state)
+        report(campaign_dir, state)
+        print("Running grouped go-judge integration and sandbox checks", flush=True)
+        verified = subprocess.run(
+            ["bash", "scripts/verify-runner-candidate.sh", "go-judge-group-persistent"],
+            cwd=ROOT,
+            env=environment,
+        )
+        if verified.returncode:
+            state["status"] = "verification_failed"
+            state["verification_status"] = "failed"
+            state["verification_exit_code"] = verified.returncode
+            state["updated_at"] = now()
+            write_state(state_path, state)
+            report(campaign_dir, state)
+            return verified.returncode
+        state["verification_finished_at"] = now()
+        state["verification_status"] = "complete"
+        write_state(state_path, state)
+        report(campaign_dir, state)
+
+        guard = safety_check(
+            state["initial_swap_used_bytes"],
+            memory()["available_bytes"] < 2 * 1024**3,
+        )
+        if guard:
+            stop_campaign(campaign_dir, state_path, state, *guard)
+            print("Host safety stop after profile verification", file=sys.stderr)
+            return 2
+
     if not state.get("build_finished_at"):
-        print("Building Judge0 and go-judge benchmark images before timing", flush=True)
+        print("Building benchmark images before timing", flush=True)
+        compose = (
+            GROUP_PERSISTENT_COMPOSE
+            if args.profile == "group-persistent"
+            else GO_JUDGE_COMPOSE
+        )
+        build_services = ["backend", "app_worker", "tests", "judge", "workers"]
+        if args.profile == "engine-only":
+            build_services.append("go-judge")
         built = subprocess.run(
-            GO_JUDGE_COMPOSE
-            + [
-                "build",
-                "backend",
-                "app_worker",
-                "tests",
-                "judge",
-                "workers",
-                "go-judge",
-            ],
+            compose + ["build", *build_services],
             cwd=ROOT,
             env=environment,
         )
@@ -292,9 +360,6 @@ def main():
                 "scripts/runner-bench.py",
                 "--label",
                 result_label,
-                "--paired-engine",
-                "--engine",
-                "isolate",
                 "--problem",
                 problem,
                 "--workers",
@@ -306,7 +371,18 @@ def main():
                 "--repetitions",
                 "3",
             ]
-            print(f"Starting Judge0 versus go-judge: {problem}", flush=True)
+            paired_flag = (
+                "--paired-engine-group-persistent"
+                if args.profile == "group-persistent"
+                else "--paired-engine"
+            )
+            command.insert(4, paired_flag)
+            candidate = (
+                "go-judge-group-persistent"
+                if args.profile == "group-persistent"
+                else "go-judge"
+            )
+            print(f"Starting Judge0 versus {candidate}: {problem}", flush=True)
             completed = subprocess.run(command, cwd=ROOT, env=environment)
             attempt_state = cell["attempts"][-1]
             attempt_state["finished_at"] = now()
@@ -339,7 +415,7 @@ def main():
                     "scripts/compare-runner-bench.py",
                     str(result_dir.relative_to(ROOT)),
                     "--candidate",
-                    "go-judge",
+                    candidate,
                 ],
                 cwd=ROOT,
                 env=environment,

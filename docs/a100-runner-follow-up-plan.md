@@ -56,38 +56,45 @@ suffix keeps these copies separate from raw results produced on the GPU host.
 test candidate if correctness evidence is clean. The data so far does not
 justify raising the worker count to 16 by default.
 
-### 2. Compare Judge0 with go-judge on the full API path
+### 2. Engine-only Judge0 comparison (complete)
 
-This is the key untested engine decision. Run the current Judge0 integration
-and the go-judge test profile with identical canonical solutions, case sets,
-limits, API polling interval, service limits, and app/runner worker counts.
-Keep grouping and Ruby worker reuse either enabled on both sides or disabled on
-both sides. Do not combine an engine change with a grouping change in this
-comparison.
+The engine-only comparison is complete. It used the existing API with
+per-case execution, 8 runner workers, 4 app workers, and the same
+6-CPU / 8-GiB execution budget. All 27 pairs across the three problems and
+concurrency 1, 10, and 25 completed. The go-judge candidate was slower in every
+pair, by 42–60% at concurrency 1, 28–117% at concurrency 10, and 58–80% at
+concurrency 25. Queue-wait p50 roughly doubled in the stage aggregates.
 
-The guarded campaign wrapper is
-[`scripts/run-engine-comparison-matrix.py`](../scripts/run-engine-comparison-matrix.py).
-Its GPU run instructions are in
-[`a100-engine-comparison-runbook.md`](a100-engine-comparison-runbook.md).
+See the [engine comparison findings](../benchmark-results/local-runner/a100-engine-ab-imported/FINDINGS.md)
+and the [engine-only runbook](a100-engine-comparison-runbook.md).
 
-- First verify correctness and resource-limit behavior for all three catalog
-  problems, including expected case counts and durable result records.
-- Run one untimed warm-up, then paired baseline/candidate bursts at concurrency
-  1, 10, and 25, with three repetitions per problem. Keep the existing 200 ms
-  result poll interval.
-- Record API acceptance, submission-to-result, server completion, stage
-  timings, throughput, queue depth/age, CPU and memory use, throttling, and
-  failures. Report both absolute and percentage differences.
-- Exercise timeout, memory limit, output limit, engine restart, and ambiguous
-  execution outcomes. A runner restart must not cause student code to execute
-  twice.
+**Decision:** Do not replace Judge0 with the ungrouped go-judge profile. The
+separate grouped-worker campaign showed enough promise to test the combined
+candidate directly against Judge0.
 
-**Decision:** Select an engine for the next capacity tests only after both
-correctness and paired API measurements are available. If the test-only
-go-judge API adapter is missing, add it behind an internal test profile; leave
-the public submission API unchanged.
+### 3. Compare the combined candidate with Judge0 (next)
 
-### 3. Find useful CPU and worker settings
+The final paired profile compares current Judge0 against go-judge with grouped
+submission jobs, persistent bounded Ruby workers, and pooled HTTP connections.
+It keeps a fresh Python process per case. The test-only execution profile and
+public API remain unchanged.
+
+The campaign driver runs profile-specific integration, sandbox, and adapter
+checks before timed runs. It then measures all three catalog problems at
+concurrency 1, 10, and 25, with three paired repetitions, 8 runner workers,
+4 app workers, and the same 6-CPU / 8-GiB execution budget. Results include API
+acceptance, API turnaround, server completion, throughput, stage samples,
+resource samples, and durable result state.
+
+Use [`scripts/run-engine-comparison-matrix.py`](../scripts/run-engine-comparison-matrix.py)
+with `--profile group-persistent`. The complete GPU instructions are in
+[`a100-wrap-up-testing-runbook.md`](a100-wrap-up-testing-runbook.md).
+
+**Decision:** Keep the current Judge0 default unless the combined candidate
+passes correctness and shows a repeatable end-to-end improvement. This test
+does not change the default automatically.
+
+### 4. Find useful CPU and worker settings
 
 Use the selected engine and one fixed execution model. Change one resource
 dimension at a time. Keep memory at 8 GiB during the first CPU sweep, then test
@@ -111,7 +118,7 @@ Do not run a large Cartesian product. Each comparison should answer whether
 the bottleneck moved and whether more allocated capacity improved completed
 submissions per second.
 
-### 4. Run the 100-submission capacity check
+### 5. Run the 100-submission capacity check
 
 After choosing the engine and resource settings, run one staged capacity test
 at concurrency 25, then 50, then 100. Use all three catalog problems across
@@ -120,7 +127,7 @@ host-memory/swap guard. Record the same end-to-end and resource metrics.
 Define any production latency or TLE targets before using the run as a release
 gate; this plan does not invent those targets.
 
-### 5. Review reliability before changing defaults
+### 6. Review reliability before changing defaults
 
 Run the failure and isolation checks against the chosen profile:
 
