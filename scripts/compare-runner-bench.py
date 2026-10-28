@@ -43,6 +43,106 @@ def summarize_stages(stages):
     }
 
 
+def parse_cgroup_values(raw):
+    values = {}
+    for line in raw.splitlines():
+        name, value = line.split(maxsplit=1)
+        values[name] = int(value)
+    return values
+
+
+def summarize_worker_resources(directory):
+    """Summarize execution-service usage for one measured burst."""
+    containers_path = directory / "containers.json"
+    samples_path = directory / "resources.jsonl"
+    if not containers_path.exists() or not samples_path.exists():
+        return None
+
+    services = {
+        item["Id"]: item.get("Config", {})
+        .get("Labels", {})
+        .get("com.docker.compose.service")
+        for item in json.loads(containers_path.read_text())
+    }
+    worker_ids = {
+        container_id for container_id, name in services.items() if name == "workers"
+    }
+    if not worker_ids:
+        return None
+
+    first = None
+    last = None
+    memory_peak = 0
+    first_oom_count = None
+    last_oom_count = 0
+    for line in samples_path.read_text().splitlines():
+        sample = json.loads(line)
+        for container_id in worker_ids:
+            cgroup = sample.get("cgroups", {}).get(container_id)
+            if not cgroup or "cpu.stat" not in cgroup:
+                continue
+            counters = parse_cgroup_values(cgroup["cpu.stat"])
+            current = {
+                "elapsed_seconds": sample["elapsed_seconds"],
+                "usage_usec": counters.get("usage_usec", 0),
+                "nr_periods": counters.get("nr_periods", 0),
+                "nr_throttled": counters.get("nr_throttled", 0),
+                "throttled_usec": counters.get("throttled_usec", 0),
+                "oom_count": 0,
+            }
+            events = parse_cgroup_values(cgroup.get("memory.events", ""))
+            current["oom_count"] = events.get("oom", 0) + events.get("oom_kill", 0)
+            if first is None:
+                first = current
+                first_oom_count = current["oom_count"]
+            last = current
+            memory_peak = max(
+                memory_peak,
+                int(cgroup.get("memory.current", "0").strip() or 0),
+            )
+            last_oom_count = current["oom_count"]
+
+    if first is None or last is None:
+        return None
+    elapsed = max(last["elapsed_seconds"] - first["elapsed_seconds"], 0)
+    usage = max(last["usage_usec"] - first["usage_usec"], 0) / 1_000_000
+    periods = max(last["nr_periods"] - first["nr_periods"], 0)
+    throttled = max(last["nr_throttled"] - first["nr_throttled"], 0)
+    return {
+        "worker_cpu_seconds": usage,
+        "average_worker_cpu_cores": usage / elapsed if elapsed else 0,
+        "throttled_period_fraction": throttled / periods if periods else 0,
+        "worker_memory_peak_bytes": memory_peak,
+        "worker_oom_events": max(last_oom_count - (first_oom_count or 0), 0),
+        "sampled_elapsed_seconds": elapsed,
+    }
+
+
+def summarize_resource_variants(directory, pairs, baseline, candidate):
+    metrics = {baseline: {}, candidate: {}}
+    for pair in pairs:
+        for variant in (baseline, candidate):
+            path = directory / f"{pair['pair']}-{variant}"
+            sample = summarize_worker_resources(path)
+            if sample is None:
+                continue
+            for name, value in sample.items():
+                metrics[variant].setdefault(name, []).append(value)
+    return {
+        variant: {
+            "burst_count": max((len(values) for values in grouped.values()), default=0),
+            **{
+                name: {
+                    "median": statistics.median(values),
+                    "maximum": max(values),
+                }
+                for name, values in grouped.items()
+            },
+        }
+        for variant, grouped in metrics.items()
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -136,8 +236,12 @@ def main():
                 collected.setdefault(stage, []).extend(values)
     metadata_path = args.directory / "metadata.json"
     metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
+    resource_summary = summarize_resource_variants(
+        args.directory, pairs, args.baseline, args.candidate
+    )
     report = {
         "experiment_configuration": metadata,
+        "runner_cpu_limit": metadata.get("runner_cpu_limit", 6),
         "baseline_variant": args.baseline,
         "candidate_variant": args.candidate,
         "pairs": pairs,
@@ -145,6 +249,7 @@ def main():
         "stages_by_variant_excluding_warmups": {
             name: summarize_stages(values) for name, values in variants.items()
         },
+        "runner_worker_resources_by_variant_excluding_warmups": resource_summary,
         "runner_stages_all_bursts_including_warmups": stage_summary,
         "caveat": "Small-sample p99 values are diagnostic, not production guarantees.",
     }
@@ -173,6 +278,30 @@ def main():
         "See the companion JSON for acceptance, server completion, and API tails.",
         "Stage aggregates include both variants and warm-ups. "
         "They cannot attribute changes to one variant.",
+    ]
+    if all(
+        resource_summary.get(variant, {}).get("burst_count") for variant in variants
+    ):
+        lines += [
+            "",
+            "Runner container resource sample medians across measured bursts:",
+            "",
+            "| Variant | CPU cores used | Throttled periods | "
+            "Peak sampled memory | OOM events |",
+            "| --- | ---: | ---: | ---: | ---: |",
+        ]
+        for variant in (args.baseline, args.candidate):
+            summary = resource_summary[variant]
+            memory_gib = summary["worker_memory_peak_bytes"]["median"] / (1024**3)
+            oom_events = summary["worker_oom_events"]["maximum"]
+            lines.append(
+                f"| {variant} | "
+                f"{summary['average_worker_cpu_cores']['median']:.2f} | "
+                f"{summary['throttled_period_fraction']['median'] * 100:.1f}% | "
+                f"{memory_gib:.2f} GiB | {oom_events} |"
+            )
+    lines += [
+        "",
         "The public submission API and grading behavior are unchanged.",
     ]
     if incomplete:

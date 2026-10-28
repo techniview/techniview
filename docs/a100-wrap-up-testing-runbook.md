@@ -1,23 +1,22 @@
-# A100 candidate recovery and worker scaling campaign
+# Final A100 CPU and worker capacity comparison
 
-This follow-up keeps the candidate opt-in and tests two remaining questions:
-whether a real go-judge worker restart during an executing grouped case is
-handled without silently rerunning student code, and whether 16 workers improve
-on 8 under the same execution resource budget.
+This is the final planned runner-capacity campaign. It compares the current
+Judge0 path with go-judge using grouped submissions, persistent bounded Ruby
+workers, pooled HTTP, and fresh Python state for every case.
 
-Before timing, the driver runs the candidate integration, sandbox, and adapter
-checks, then restarts the go-judge worker container during a long-running group
-case. The restart check expects an explicit `runner_outcome_unknown` result,
-completed group state, stable idempotency, and no automatic execution retry.
-Only after these checks pass does it run the full paired matrix.
+The matrix tests runner CPU quotas of 6 and 24, each with 8, 16, and 24 runner
+workers. It runs Ransom Note, Number of Islands, and Minimum Cost for Tickets
+at concurrency 1, 10, and 25, with three paired repetitions. Both sides of each
+pair use the same worker count and CPU quota. Runner memory remains 8 GiB, app
+workers remain at 4, and other service limits stay fixed. Each profile gets an
+untimed warm-up. The campaign writes compact worker CPU, throttling, memory, and
+OOM summaries into the comparison JSON and Markdown.
 
-The matrix compares Judge0 and go-judge with grouped jobs, persistent bounded
-Ruby workers, pooled HTTP, and fresh Python state per case. It runs Ransom Note,
-Number of Islands, and Minimum Cost for Tickets at runner worker counts 8 and
-16; each count uses concurrency 1, 10, and 25, with three paired repetitions.
-Both sides of each pair use the same worker count. Runner CPU and memory limits
-stay fixed at 6 CPUs and 8 GiB; app workers stay at 4. Each profile receives an
-untimed warm-up. The existing host safety stops remain active.
+Before timed runs, it runs the candidate integration and sandbox checks, then
+restarts the go-judge worker service during an active grouped case. The recovery
+check expects an explicit unknown-outcome result, completed group state, stable
+idempotency, and no automatic re-execution. A campaign with all settings has 18
+cells and 9 pairs per cell. At the observed pace, allow about 6 to 9 hours.
 
 ## Update the GPU checkout
 
@@ -30,86 +29,83 @@ git fetch origin refs/heads/corniedj/infra-improvements
 git merge --ff-only FETCH_HEAD
 ```
 
-## Start the campaign
+## Start the final campaign
 
-The campaign takes roughly twice as long as the completed 8-worker-only run.
 Start it detached so it can continue if the SSH connection closes:
 
 ```bash
 cd ~/techniview-deploy
 nohup python3 -u scripts/run-engine-comparison-matrix.py \
-  --profile group-persistent --workers 8 16 \
-  --label a100-readiness-v3 \
-  > benchmark-results/local-runner/a100-readiness-v3-console.log 2>&1 \
+  --profile group-persistent \
+  --cpu-limits 6 24 \
+  --workers 8 16 24 \
+  --label a100-final-capacity-v1 \
+  > benchmark-results/local-runner/a100-final-capacity-v1-console.log 2>&1 \
   < /dev/null &
-echo $! > benchmark-results/local-runner/a100-readiness-v3.pid
+echo $! > benchmark-results/local-runner/a100-final-capacity-v1.pid
 ```
 
-The restart verifier uses its own disposable Compose project and removes only
-that project's containers, network, and database volume. The matrix uses the
-usual dedicated benchmark project. Both preserve logs and results outside the
-disposable database volume.
+The benchmark driver runs one cell at a time and keeps its host safety stops
+active. It stops if available memory stays below 2 GiB for five seconds or swap
+grows by more than 512 MiB from the campaign start. The isolated verifier and
+benchmark Compose projects remove only their own containers, networks, and
+database volumes. Reports and resource samples are kept outside those volumes.
 
 ## Check progress
 
 The campaign manifest is:
 
 ```bash
-cat benchmark-results/local-runner/a100-readiness-v3-campaign/campaign.json
+cat benchmark-results/local-runner/a100-final-capacity-v1-campaign/campaign.json
 ```
 
-The campaign is complete when its top-level status is `complete`, verification
-is `complete`, and all six workload/worker cells are `complete` with
-`pair_count` 9. If `grep` is the only search tool installed, inspect those
-fields with:
+The run is complete when the top-level status and verification status are both
+`complete`, and all 18 cells show `complete` with `pair_count` 9. To inspect the
+key fields with `grep`:
 
 ```bash
-grep -n '"status"\|"workers"\|"pair_count"\|"verification_status"\|"updated_at"' \
-  benchmark-results/local-runner/a100-readiness-v3-campaign/campaign.json
+grep -n '"status"\|"cpu_limit"\|"workers"\|"pair_count"\|"verification_status"\|"updated_at"' \
+  benchmark-results/local-runner/a100-final-capacity-v1-campaign/campaign.json
 ```
 
-The worker restart evidence is saved at:
+Follow the console log if needed:
+
+```bash
+tail -f benchmark-results/local-runner/a100-final-capacity-v1-console.log
+```
+
+The intentional restart evidence is saved at:
 
 ```text
 benchmark-results/local-runner/go-judge-worker-restart-verification/restart-test.log
 benchmark-results/local-runner/go-judge-worker-restart-verification/services.log
 ```
 
-## Copy the compact results back
+## Copy the results back
 
-After the manifest says the campaign completed, run this on the GPU:
+After the campaign completes, package its report, all comparisons, and restart
+verification logs on the GPU:
 
 ```bash
 cd ~/techniview-deploy/benchmark-results/local-runner
-tar -czf ~/a100-readiness-v3-results.tar.gz \
-  a100-readiness-v3-campaign/REPORT.md \
-  a100-readiness-v3-campaign/campaign.json \
-  a100-readiness-v3-ransom-note-w8-try*/comparison.md \
-  a100-readiness-v3-ransom-note-w8-try*/comparison.json \
-  a100-readiness-v3-number-of-islands-w8-try*/comparison.md \
-  a100-readiness-v3-number-of-islands-w8-try*/comparison.json \
-  a100-readiness-v3-minimum-cost-for-tickets-w8-try*/comparison.md \
-  a100-readiness-v3-minimum-cost-for-tickets-w8-try*/comparison.json \
-  a100-readiness-v3-ransom-note-w16-try*/comparison.md \
-  a100-readiness-v3-ransom-note-w16-try*/comparison.json \
-  a100-readiness-v3-number-of-islands-w16-try*/comparison.md \
-  a100-readiness-v3-number-of-islands-w16-try*/comparison.json \
-  a100-readiness-v3-minimum-cost-for-tickets-w16-try*/comparison.md \
-  a100-readiness-v3-minimum-cost-for-tickets-w16-try*/comparison.json \
+tar -czf ~/a100-final-capacity-v1-results.tar.gz \
+  a100-final-capacity-v1-campaign/REPORT.md \
+  a100-final-capacity-v1-campaign/campaign.json \
+  a100-final-capacity-v1-*-cpu*-w*-try*/comparison.md \
+  a100-final-capacity-v1-*-cpu*-w*-try*/comparison.json \
   go-judge-worker-restart-verification/restart-test.log \
   go-judge-worker-restart-verification/services.log \
   verify-go-judge-group-persistent-services.log
 ```
 
-Then copy it from a local terminal on the development PC:
+Then copy the archive from a local terminal on the development PC:
 
 ```bash
-scp corniedj@cs-gpu-00:~/a100-readiness-v3-results.tar.gz \
-  ~/a100-readiness-v3-results.tar.gz
+scp corniedj@cs-gpu-00:~/a100-final-capacity-v1-results.tar.gz \
+  ~/a100-final-capacity-v1-results.tar.gz
 ```
 
-The campaign report records the source commit and links the six comparisons.
-Each comparison includes API acceptance, API turnaround, server completion,
-throughput, and stage summaries. Resource samples remain on the GPU host if a
-stage needs deeper investigation. Small-sample p99 values are diagnostic, not
-production guarantees.
+The paired reports show API latency and throughput. Their resource section
+shows median worker CPU cores used, the fraction of CPU periods that were
+throttled, peak sampled worker memory, and OOM events. Small-sample p99 values
+remain diagnostic, not production guarantees.

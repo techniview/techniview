@@ -2,7 +2,7 @@
 services:
   workers:
     hostname: benchmark-workers
-    cpus: 6
+    cpus: ${RUNNER_EXEC_CPU_LIMIT:-6}
     mem_limit: 8g
     memswap_limit: 8g
     environment:

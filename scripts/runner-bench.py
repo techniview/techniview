@@ -266,6 +266,7 @@ def run_burst(
         "workload": problem,
         "concurrency": concurrency,
         "runner_workers": workers,
+        "runner_cpu_limit": int(os.environ.get("RUNNER_EXEC_CPU_LIMIT", "6")),
         "app_workers": 0 if direct_engine else 4,
         "direct_engine": direct_engine,
         "source_commit": source,
@@ -334,7 +335,7 @@ def main():
     parser.add_argument("--dispatch-concurrency", type=int, default=1)
     parser.add_argument("--callback-outbox", action="store_true")
     parser.add_argument("--problem", default="Ransom Note")
-    parser.add_argument("--workers", type=int, choices=[8, 16], default=8)
+    parser.add_argument("--workers", type=int, choices=[8, 16, 24], default=8)
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 10])
     parser.add_argument("--repetitions", type=int, default=3)
     args = parser.parse_args()
@@ -486,6 +487,8 @@ def main():
             != args.paired_engine_group_persistent
             or previous.get("engine") != args.engine
             or previous["dispatch_concurrency"] != args.dispatch_concurrency
+            or previous.get("runner_cpu_limit", 6)
+            != int(os.environ.get("RUNNER_EXEC_CPU_LIMIT", "6"))
         ):
             parser.error(
                 "resumed source commit/profile must match the original experiment"
@@ -520,6 +523,7 @@ def main():
         "boot_id": boot_id,
         "problem": args.problem,
         "workers": args.workers,
+        "runner_cpu_limit": int(os.environ.get("RUNNER_EXEC_CPU_LIMIT", "6")),
         "concurrency": args.concurrency,
         "repetitions": args.repetitions,
         "engine": args.engine,

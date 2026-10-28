@@ -1,4 +1,4 @@
-# Engine and compatibility workers share one work-conserving 6 CPU / 8 GiB budget.
+# Engine and compatibility workers share the configurable benchmark CPU / 8 GiB budget.
 services:
   workers:
     build:
