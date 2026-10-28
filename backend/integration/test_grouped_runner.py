@@ -2,7 +2,6 @@
 
 import os
 import time
-from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -105,10 +104,6 @@ def test_worker_restart_does_not_retry_ambiguous_group_case():
             "wall_time_limit": 40,
         }
     ]
-    control_path = Path(os.environ["RUNNER_RESTART_SIGNAL_PATH"])
-    control_path.parent.mkdir(parents=True, exist_ok=True)
-    control_path.unlink(missing_ok=True)
-
     with httpx.Client(base_url="http://judge:2358", timeout=10) as runner:
         created = runner.post(
             "/internal/submission-groups",
@@ -124,7 +119,7 @@ def test_worker_restart_does_not_retry_ambiguous_group_case():
                 # Allow the Go Judge request to reach the executing worker before the
                 # host verifier interrupts that worker container.
                 time.sleep(1.5)
-                control_path.touch()
+                print("GO_JUDGE_RESTART_READY", flush=True)
                 break
             time.sleep(0.1)
         else:

@@ -1,8 +1,0 @@
-# Host-controlled interruption test for the disposable go-judge profile.
-services:
-  tests:
-    environment:
-      RUNNER_RESTART_TEST: "1"
-      RUNNER_RESTART_SIGNAL_PATH: /run/runner-restart/ready
-    volumes:
-      - ${RUNNER_RESTART_CONTROL_DIR:?RUNNER_RESTART_CONTROL_DIR must be set}:/run/runner-restart

@@ -6,20 +6,17 @@ cd "$ROOT"
 
 project=techniview-restart-verify
 results="$ROOT/benchmark-results/local-runner/go-judge-worker-restart-verification"
-control="$results/control"
 compose=(docker compose --env-file /dev/null -p "$project"
   -f compose.integration.yml
   -f compose.benchmark.yml
   -f compose.go-judge-shared.yml
   -f compose.group-experiment.yml
-  -f compose.persistent-workers.yml
-  -f compose.runner-restart-verification.yml)
+  -f compose.persistent-workers.yml)
 base_compose=(docker compose --env-file /dev/null -p "$project"
   -f compose.integration.yml -f compose.benchmark.yml)
 
-mkdir -p "$control"
-rm -f "$control/ready"
-export RUNNER_RESTART_CONTROL_DIR="$control"
+mkdir -p "$results"
+rm -f "$results/restart-test.log"
 export LOAD_JUDGE0_WORKERS=8
 export JUDGE0_REUSE_CONNECTIONS=1
 export RUNNER_CALLBACK_OUTBOX=0
@@ -48,13 +45,14 @@ trap cleanup EXIT
 
 test_log="$results/restart-test.log"
 mkdir -p "$results"
-"${compose[@]}" run --rm --no-deps tests python -m pytest -v -s \
+"${compose[@]}" run --rm --no-deps -e RUNNER_RESTART_TEST=1 tests \
+  python -m pytest -v -s \
   integration/test_grouped_runner.py::test_worker_restart_does_not_retry_ambiguous_group_case \
   --override-ini=pythonpath=. > "$test_log" 2>&1 &
 test_pid=$!
 
 deadline=$((SECONDS + 90))
-while [[ ! -f "$control/ready" ]]; do
+while ! grep -q 'GO_JUDGE_RESTART_READY' "$test_log"; do
   if ! kill -0 "$test_pid" 2>/dev/null; then
     wait "$test_pid" || status=$?
     cat "$test_log"
