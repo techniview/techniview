@@ -323,6 +323,11 @@ def main():
     parser.add_argument("--paired-engine", action="store_true")
     parser.add_argument("--paired-engine-shared", action="store_true")
     parser.add_argument("--paired-engine-group-persistent", action="store_true")
+    parser.add_argument(
+        "--optimized-baseline",
+        action="store_true",
+        help="Give both paired engines grouping, persistent workers and HTTP reuse",
+    )
     parser.add_argument("--paired-combined", action="store_true")
     parser.add_argument("--paired-group", action="store_true")
     parser.add_argument("--grouped", action="store_true")
@@ -467,6 +472,8 @@ def main():
         parser.error("--resume requires an existing experiment with metadata")
     directory.mkdir(parents=True, exist_ok=args.resume)
     source = capture(["git", "rev-parse", "HEAD"]).strip()
+    if args.optimized_baseline and not args.paired_engine_group_persistent:
+        parser.error("--optimized-baseline requires --paired-engine-group-persistent")
     boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     session_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     provenance = directory / "sessions" / session_id if args.resume else directory
@@ -476,7 +483,8 @@ def main():
     )
     if args.resume:
         if (
-            previous["source_commit"] != source
+            bool(previous.get("optimized_baseline")) != args.optimized_baseline
+            or previous["source_commit"] != source
             or bool(previous.get("paired_combined")) != args.paired_combined
             or bool(previous.get("paired_group")) != args.paired_group
             or bool(previous.get("paired_persistent")) != args.paired_persistent
@@ -539,6 +547,7 @@ def main():
         "paired_shared": args.paired_shared,
         "paired_group_persistent": args.paired_group_persistent,
         "paired_engine_group_persistent": args.paired_engine_group_persistent,
+        "optimized_baseline": args.optimized_baseline,
         "persistent": args.persistent,
         "combined_ablation": args.combined_ablation,
         "source_commit": source,
@@ -737,7 +746,10 @@ def main():
                             or args.paired_group_persistent
                             or (
                                 args.paired_engine_group_persistent
-                                and variant == "go-judge-group-persistent"
+                                and (
+                                    variant == "go-judge-group-persistent"
+                                    or args.optimized_baseline
+                                )
                             )
                             else "0",
                         }
@@ -831,7 +843,19 @@ def main():
                                 pair_env["RUNNER_GROUP_PROFILE"] = "1"
                                 pair_env["JUDGE0_REUSE_CONNECTIONS"] = "1"
                             else:
-                                COMPOSE[:] = base_compose
+                                COMPOSE[:] = base_compose + (
+                                    [
+                                        "-f",
+                                        "compose.group-experiment.yml",
+                                        "-f",
+                                        "compose.persistent-workers.yml",
+                                    ]
+                                    if args.optimized_baseline
+                                    else []
+                                )
+                                if args.optimized_baseline:
+                                    pair_env["RUNNER_GROUP_PROFILE"] = "1"
+                                    pair_env["JUDGE0_REUSE_CONNECTIONS"] = "1"
                             command(
                                 COMPOSE
                                 + [

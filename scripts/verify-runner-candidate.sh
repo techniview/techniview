@@ -20,6 +20,10 @@ case "$mode" in
     compose+=(-f compose.go-judge-shared.yml)
     export JUDGE0_REUSE_CONNECTIONS=1 WORKER_DISPATCH_CONCURRENCY=4
     ;;
+  isolate-group-persistent)
+    compose+=(-f compose.group-experiment.yml -f compose.persistent-workers.yml)
+    export JUDGE0_REUSE_CONNECTIONS=1
+    ;;
   go-judge-group-persistent)
     compose+=(-f compose.go-judge-shared.yml -f compose.group-experiment.yml
       -f compose.persistent-workers.yml)
