@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -156,6 +157,18 @@ class CurriculumPoolResponse(BaseModel):
     optional: bool = False
     prerequisite_pool_slugs: list[str] = Field(default_factory=list)
     problems: list[CurriculumProblemResponse]
+
+
+class RecommendationItemResponse(BaseModel):
+    rank: int
+    reason: Literal["struggling_area", "next_trail_step", "low_completion_coverage"]
+    pool_slug: str
+    pool_name: str
+    problem: ProblemSummaryResponse
+
+
+class RecommendationListResponse(BaseModel):
+    items: list[RecommendationItemResponse] = Field(default_factory=list)
 
 
 class AssignmentItemResponse(BaseModel):

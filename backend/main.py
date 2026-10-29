@@ -17,6 +17,7 @@ from app.routers import (
     join,
     metrics,
     problems,
+    recommendations,
     submissions,
 )
 from fastapi import FastAPI
@@ -98,6 +99,7 @@ app.include_router(courses.router, prefix="/api")
 app.include_router(problems.router, prefix="/api")
 app.include_router(authoring.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")
+app.include_router(recommendations.router, prefix="/api")
 app.include_router(assignments.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
