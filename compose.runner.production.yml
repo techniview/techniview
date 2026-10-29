@@ -27,7 +27,7 @@ services:
       JUDGE0_REDIS_PORT: 6379
       ALLOW_ENABLE_NETWORK: "false"
       ENABLE_NETWORK: "false"
-      COUNT: ${JUDGE0_WORKER_COUNT:-4}
+      COUNT: ${JUDGE0_WORKER_COUNT:-16}
       MAX_QUEUE_SIZE: ${JUDGE0_MAX_QUEUE_SIZE:-12000}
     depends_on:
       db:
@@ -78,7 +78,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "6.0"
+          cpus: "${RUNNER_CPU_LIMIT:-24}"
           memory: ${JUDGE_WORKER_MEMORY_LIMIT:-8G}
     restart: unless-stopped
 

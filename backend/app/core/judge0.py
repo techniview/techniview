@@ -1,6 +1,35 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 import httpx
 
 from .config import settings
+
+_worker_client: ContextVar[httpx.Client | None] = ContextVar(
+    "judge0_client", default=None
+)
+
+
+@contextmanager
+def managed_judge0_client():
+    """Own one connection pool for this worker's lifetime."""
+    with httpx.Client() as client:
+        token = _worker_client.set(client)
+        try:
+            yield client
+        finally:
+            _worker_client.reset(token)
+
+
+@contextmanager
+def _request_client():
+    client = _worker_client.get()
+    if client is not None:
+        yield client
+    else:
+        with httpx.Client() as client:
+            yield client
+
 
 ALLOWED_LIMITS = frozenset(
     {
@@ -16,16 +45,16 @@ ALLOWED_LIMITS = frozenset(
 
 
 def judge0_about(timeout: float = 3.0):
-    with httpx.Client(timeout=timeout) as c:
-        resp = c.get(f"{settings.JUDGE0_URL}/about")
+    with _request_client() as c:
+        resp = c.get(f"{settings.JUDGE0_URL}/about", timeout=timeout)
         resp.raise_for_status()
         return resp.json()
 
 
 def judge0_workers(timeout: float = 1.0):
     """Return Judge0's live Resque worker and queue snapshots for operations metrics."""
-    with httpx.Client(timeout=timeout) as c:
-        resp = c.get(f"{settings.JUDGE0_URL}/workers")
+    with _request_client() as c:
+        resp = c.get(f"{settings.JUDGE0_URL}/workers", timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
     if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
@@ -59,14 +88,38 @@ def judge0_submit(
     for key, value in kwargs.items():
         if key in ALLOWED_LIMITS and value is not None:
             payload[key] = value
-    with httpx.Client(timeout=timeout) as c:
-        resp = c.post(url, json=payload)
+    with _request_client() as c:
+        resp = c.post(url, json=payload, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
 
 
 def judge0_get(token: str, timeout: float = 3.0):
-    with httpx.Client(timeout=timeout) as c:
-        resp = c.get(f"{settings.JUDGE0_URL}/submissions/{token}?base64_encoded=false")
+    with _request_client() as c:
+        resp = c.get(
+            f"{settings.JUDGE0_URL}/submissions/{token}?base64_encoded=false",
+            timeout=timeout,
+        )
         resp.raise_for_status()
         return resp.json()
+
+
+def judge0_group_submit(key: str, cases: list[dict], timeout: float = 5.0):
+    with _request_client() as client:
+        response = client.post(
+            f"{settings.JUDGE0_URL}/internal/submission-groups",
+            json={"idempotency_key": key, "cases": cases},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+def judge0_group_by_key(key: str, timeout: float = 3.0):
+    with _request_client() as client:
+        response = client.get(
+            f"{settings.JUDGE0_URL}/internal/submission-groups/by-key/{key}",
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()

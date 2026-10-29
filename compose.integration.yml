@@ -23,6 +23,8 @@ x-app: &app
     dockerfile: integration/Dockerfile
   environment: &app-environment
     DATABASE_URL: mysql+pymysql://integration:p%40ss%25word@mysql/integration
+    RUNNER_GROUP_PROFILE: "1"
+    RUNNER_GROUP_SECRET: integration-only-group-secret-2026-10-27
     JUDGE0_URL: http://judge:2358
     JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
     INTEGRATION_TESTS: "1"

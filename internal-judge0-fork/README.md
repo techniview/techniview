@@ -12,7 +12,7 @@ The Dockerfile has two production targets:
 | Target | Contents | Use |
 | --- | --- | --- |
 | `api` | Ruby, required Rails 8.1 components, locked gems, PostgreSQL client library, local API source | Accept submissions and serve results |
-| `worker` | API runtime plus Python 3.14.8, Isolate 2.7 and their shared libraries, process management tools | Execute queued Python jobs |
+| `worker` | API runtime plus Python 3.14.8, go-judge 1.13.3 and their shared libraries, process management tools | Execute queued Python jobs |
 
 Build tools exist only in intermediate stages. The final images exclude C/C++
 compilers, Node, Java, other submission languages, Git, sudo, cron, telemetry,
@@ -45,15 +45,15 @@ it is not needed to build or publish either image.
 Use a dedicated Linux runner VM with kernel 6.1 or newer, cgroup v2, and Docker
 with private cgroup namespace support. The API runs as UID 1000 without
 privileges. The worker starts privileged to initialize its own delegated cgroup
-subtree, then runs the queue process as UID 1000. Only the Isolate helper retains
-its required setuid permission. Do not enable `no-new-privileges` on the worker.
+subtree through go-judge and runs the persistent queue processes as UID 1000.
+Go-judge remains privileged to create isolated execution environments.
 
 The worker requires `cgroup: private`. It fails startup when cgroup delegation
 is unavailable. It never binds the host's `/sys/fs/cgroup` into the container.
 It remains a privileged container, so keep the dedicated VM and campus firewall
 boundary. Expose only the API's private port to the application VM.
 
-Each sandbox has a locked slot, distinct UID, network namespace, CPU/wall-time,
+Each sandbox has a separate execution environment, network namespace, CPU/wall-time,
 aggregate memory, process-count and output-file limits. It receives only Python,
 shared libraries, its own working directory and temporary directory. API files,
 credentials, Ruby, shell executables and the worker's filesystem are not mapped
@@ -84,7 +84,7 @@ configured. Execution callbacks retain the application-generated per-case token.
 Edit the source in `api/` directly. The old controller patch and external source
 image stage are gone. Ruby dependencies are recorded in `api/Gemfile.lock`;
 update that lockfile on Ruby 3.4 when changing the Gemfile. Review the slim base
-digest and the Python and Isolate source versions/checksums together.
+digest and the Python source and go-judge binary versions/checksums together.
 
 Run `make integration` on the supported Linux host. This starts disposable
 PostgreSQL, Redis, MySQL and application containers, then checks real execution,

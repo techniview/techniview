@@ -155,3 +155,54 @@ def test_unsupported_submission_features_are_rejected(runner, field, value):
     )
     assert response.status_code == 422, response.text
     assert field in response.json()["fields"]
+
+
+def test_case_files_and_imports_do_not_persist(runner):
+    first = submit(
+        runner,
+        "import collections\n"
+        "collections.techniview_marker = True\n"
+        "open('/tmp/techniview-case-state', 'w').write('leftover')\n"
+        "print('prepared')\n",
+        expected_output="prepared\n",
+    )
+    assert first["status"]["id"] == 3
+    second = submit(
+        runner,
+        "import collections, os\n"
+        "assert not hasattr(collections, 'techniview_marker')\n"
+        "assert not os.path.exists('/tmp/techniview-case-state')\n"
+        "print('fresh')\n",
+        expected_output="fresh\n",
+    )
+    assert second["status"]["id"] == 3, second
+
+
+def test_fatal_python_exit_is_a_case_result(runner):
+    result = submit(runner, "import os\nos._exit(23)\n")
+    assert result["status"]["id"] == 11, result
+
+
+def test_cpu_extra_time_does_not_make_an_over_budget_case_pass(runner):
+    result = submit(
+        runner,
+        "import time\n"
+        "started = time.process_time()\n"
+        "while time.process_time() - started < 0.4:\n    pass\n"
+        "print('completed')\n",
+        cpu_time_limit=0.1,
+        cpu_extra_time=1,
+        wall_time_limit=5,
+    )
+    assert result["status"]["id"] == 5, result
+
+
+def test_case_file_limit_also_applies_to_scratch_files(runner):
+    result = submit(
+        runner,
+        "with open('/tmp/scratch-budget', 'wb') as output:\n"
+        "    output.write(b'x' * (64 * 1024))\n"
+        "print('oversized scratch file was accepted')\n",
+        max_file_size=8,
+    )
+    assert result["status"]["id"] in {8, 11}, result

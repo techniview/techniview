@@ -1,6 +1,16 @@
 class SubmissionSerializer < ActiveModel::Serializer
   attributes((Submission.column_names + ["status", "language"] - ["id"]).collect(&:to_sym))
 
+  attribute :infrastructure_error_code, if: :execution_failure_code?
+
+  def execution_failure_code?
+    object.message == "runner_outcome_unknown"
+  end
+
+  def infrastructure_error_code
+    object.message
+  end
+
   def self.default_fields
     @@default_fields ||= [
       :token,
@@ -10,7 +20,8 @@ class SubmissionSerializer < ActiveModel::Serializer
       :stderr,
       :compile_output,
       :message,
-      :status
+      :status,
+      :infrastructure_error_code
     ]
   end
 
