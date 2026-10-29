@@ -54,6 +54,10 @@ services:
       MYSQL_DB: ${MYSQL_DB:?Set MYSQL_DB}
       JUDGE0_URL: http://${RUNNER_PRIVATE_HOST:?Set RUNNER_PRIVATE_HOST}:2358
       JUDGE0_CALLBACK_BASE_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}/api/internal/judge0/callbacks
+      BIG_O_OLLAMA_URL: ${BIG_O_OLLAMA_URL:-}
+      BIG_O_OLLAMA_MODEL: ${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
+      BIG_O_OLLAMA_TIMEOUT_SECONDS: ${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
+      BIG_O_ANALYSIS_MAX_ATTEMPTS: ${BIG_O_ANALYSIS_MAX_ATTEMPTS:-3}
       COOKIE_SECURE: "true"
       CORS_ORIGINS: https://${PUBLIC_HOST}
       PUBLIC_APP_URL: https://${PUBLIC_HOST}
@@ -144,6 +148,34 @@ services:
         limits:
           cpus: "1.0"
           memory: 1G
+
+  complexity_worker:
+    logging: *default-logging
+    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    environment: *application_environment
+    networks:
+      - data
+      - outbound
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: python -m app.worker.complexity
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    deploy:
+      replicas: ${COMPLEXITY_WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   mysql:
     logging: *default-logging

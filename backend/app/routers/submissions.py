@@ -23,6 +23,7 @@ from ..core.security import hash_token
 from ..models import (
     Assignment,
     AssignmentItem,
+    ComplexityAnalysis,
     Course,
     ErrorCategory,
     Submission,
@@ -31,6 +32,7 @@ from ..models import (
     TestVisibility,
     User,
 )
+from ..services.complexity_analysis import analysis_response, queue_submission_analysis
 from ..services.execution import snapshot_case_result
 from ..services.idempotency import (
     attach_idempotency_key,
@@ -445,6 +447,7 @@ def _reserve_submission(
     )
     db.add(submission)
     db.flush()
+    queue_submission_analysis(db, submission)
     return submission
 
 
@@ -614,6 +617,18 @@ def get_submission(submission_id: int, db: DbSession, user: CurrentUser):
     if submission is None:
         raise ApiError(404, "submission_not_found", "Submission not found.")
     return {**_submission_response(submission), "source_code": submission.source_code}
+
+
+@router.get("/{submission_id}/complexity")
+def get_submission_complexity(submission_id: int, db: DbSession, user: CurrentUser):
+    submission = db.scalar(
+        select(Submission).where(
+            Submission.id == submission_id, Submission.student_id == user.id
+        )
+    )
+    if submission is None:
+        raise ApiError(404, "submission_not_found", "Submission not found.")
+    return analysis_response(db.get(ComplexityAnalysis, submission.id))
 
 
 @internal_router.put("/callbacks/{callback_token}", include_in_schema=False)

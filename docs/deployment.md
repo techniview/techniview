@@ -106,6 +106,22 @@ docker compose --env-file .env.production -f compose.production.yml \
 Keep `EMAIL_SIGNING_KEY` stable across restarts. Email delivery requires a sender
 verified with Resend. `RESEARCH_EXPORT_SECRET` is not needed for normal operation.
 
+## Optional Big O estimates
+
+Complexity estimates are disabled unless `BIG_O_OLLAMA_URL` is set. Point it at
+an Ollama service reachable from the application and complexity-worker
+containers. Set `BIG_O_OLLAMA_MODEL` to a model pulled on that Ollama host. The
+default is `qwen3.8:27b`. `BIG_O_OLLAMA_TIMEOUT_SECONDS` sets the per-request
+timeout, and `BIG_O_ANALYSIS_MAX_ATTEMPTS` sets the retry limit. Keep Ollama and
+its model storage on the GPU host; the TechniView Compose stack does not start or
+manage Ollama. On a private network, restrict access to the service to TechniView
+and use TLS when traffic crosses a network boundary.
+
+The separate `complexity_worker` processes queued estimates. A model timeout or
+failure does not change grading. Students can read an estimate's queued,
+complete, or failed status from the submission complexity endpoint. The worker
+does not log submitted code or model responses.
+
 ## Image releases, updates, and rollback
 
 Push a reviewed `v*` tag to run CI and publish the backend, frontend, runner-api,

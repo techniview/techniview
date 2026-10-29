@@ -107,6 +107,13 @@ class SubmissionStatus(StrEnum):
     INFRASTRUCTURE_ERROR = "infrastructure_error"
 
 
+class ComplexityAnalysisStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETE = "complete"
+    FAILED = "failed"
+
+
 class ErrorCategory(StrEnum):
     WRONG_ANSWER = "wrong_answer"
     COMPILE_ERROR = "compile_error"
@@ -457,6 +464,31 @@ class Submission(Base):
         lazy="selectin",
         order_by="SubmissionCaseResult.test_case_id",
     )
+    complexity_analysis: Mapped[ComplexityAnalysis | None] = relationship(
+        back_populates="submission", lazy="selectin", uselist=False
+    )
+
+
+class ComplexityAnalysis(Base):
+    __tablename__ = "submission_complexity_analyses"
+
+    submission_id: Mapped[int] = mapped_column(
+        ForeignKey("submissions.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[ComplexityAnalysisStatus] = mapped_column(
+        db_enum(ComplexityAnalysisStatus), nullable=False
+    )
+    time_complexity: Mapped[str | None] = mapped_column(String(64))
+    space_complexity: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(32))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    submission: Mapped[Submission] = relationship(back_populates="complexity_analysis")
 
 
 class SubmissionCaseResult(Base):
