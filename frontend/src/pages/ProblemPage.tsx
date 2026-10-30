@@ -7,7 +7,13 @@ import {
     startProblem,
     type ProblemDetail,
 } from "../api/problems";
-import { createSubmission, getSubmission, type Submission } from "../api/submissions";
+import {
+    createSubmission,
+    getSubmission,
+    getSubmissionComplexity,
+    type ComplexityAnalysis,
+    type Submission,
+} from "../api/submissions";
 import ErrorState from "../components/ErrorState";
 import LoadingState from "../components/LoadingState";
 
@@ -66,6 +72,7 @@ export default function ProblemPage() {
     const [problem, setProblem] = useState<ProblemDetail | null>(null);
     const [sourceCode, setSourceCode] = useState("");
     const [submission, setSubmission] = useState<Submission | null>(null);
+    const [complexity, setComplexity] = useState<ComplexityAnalysis | null>(null);
     const [assignmentItemId, setAssignmentItemId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRunning, setIsRunning] = useState(false);
@@ -156,6 +163,47 @@ export default function ProblemPage() {
         };
     }, [submission]);
 
+    useEffect(() => {
+        if (!submission?.done || submission.is_practice_run) {
+            return;
+        }
+
+        let isCurrent = true;
+        let timeout: number | undefined;
+        const pollComplexity = async () => {
+            try {
+                const result = await getSubmissionComplexity(submission.id);
+                if (!isCurrent) {
+                    return;
+                }
+                setComplexity(result);
+                if (result.status === "queued" || result.status === "processing") {
+                    timeout = window.setTimeout(pollComplexity, POLL_INTERVAL_MS);
+                }
+            } catch {
+                if (isCurrent) {
+                    setComplexity({
+                        status: "unavailable",
+                        time_complexity: null,
+                        space_complexity: null,
+                        model: "",
+                        prompt_version: "",
+                        error_code: "request_failed",
+                        analyzed_at: null,
+                    });
+                }
+            }
+        };
+
+        void pollComplexity();
+        return () => {
+            isCurrent = false;
+            if (timeout !== undefined) {
+                window.clearTimeout(timeout);
+            }
+        };
+    }, [submission]);
+
     async function handleRun() {
         if (!problem || !sourceCode.trim() || isRunning) {
             return;
@@ -163,6 +211,7 @@ export default function ProblemPage() {
 
         setError(null);
         setSubmission(null);
+        setComplexity(null);
         setIsRunning(true);
         const action = requestKey("public_run", {
             problem_id: problem.id,
@@ -184,6 +233,7 @@ export default function ProblemPage() {
         }
         setError(null);
         setSubmission(null);
+        setComplexity(null);
         setIsRunning(true);
         const payload = {
             problem_id: problem.id,
@@ -344,6 +394,35 @@ export default function ProblemPage() {
                                     : "Submission result"}
                             </h3>
                             <p>{submissionMessage(submission)}</p>
+                            {!submission.is_practice_run && submission.done && (
+                                <section aria-labelledby="complexity-heading">
+                                    <h4 id="complexity-heading">
+                                        Estimated complexity
+                                    </h4>
+                                    {complexity === null ||
+                                    complexity.status === "queued" ||
+                                    complexity.status === "processing" ? (
+                                        <p>Analyzing your solution...</p>
+                                    ) : complexity.status === "complete" ? (
+                                        <dl>
+                                            <div>
+                                                <dt>Time</dt>
+                                                <dd>{complexity.time_complexity}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Auxiliary space</dt>
+                                                <dd>{complexity.space_complexity}</dd>
+                                            </div>
+                                        </dl>
+                                    ) : (
+                                        <p>Complexity estimate unavailable.</p>
+                                    )}
+                                    <p>
+                                        This is an AI estimate of growth, not a runtime
+                                        measurement. It does not affect grading.
+                                    </p>
+                                </section>
+                            )}
                             {submission.public_results.length > 0 && (
                                 <ul>
                                     {submission.public_results.map((result) => (

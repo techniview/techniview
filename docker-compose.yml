@@ -131,6 +131,9 @@ services:
       - RUNNER_GROUP_PROFILE=1
       - RUNNER_GROUP_SECRET=${RUNNER_GROUP_SECRET:-techniview-local-group-secret-2026-only}
       - JUDGE0_URL=http://server:2358
+      - BIG_O_OLLAMA_URL=${BIG_O_OLLAMA_URL:-}
+      - BIG_O_OLLAMA_MODEL=${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
+      - BIG_O_OLLAMA_TIMEOUT_SECONDS=${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
       - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
       - EMAIL_DELIVERY_MODE=${EMAIL_DELIVERY_MODE:-capture}
       - EMAIL_SIGNING_KEY=${EMAIL_SIGNING_KEY:-techniview-local-only-email-signing-key-2026}
@@ -164,6 +167,9 @@ services:
       - RUNNER_GROUP_PROFILE=1
       - RUNNER_GROUP_SECRET=${RUNNER_GROUP_SECRET:-techniview-local-group-secret-2026-only}
       - JUDGE0_URL=http://server:2358
+      - BIG_O_OLLAMA_URL=${BIG_O_OLLAMA_URL:-}
+      - BIG_O_OLLAMA_MODEL=${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
+      - BIG_O_OLLAMA_TIMEOUT_SECONDS=${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
       - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
       - EMAIL_DELIVERY_MODE=${EMAIL_DELIVERY_MODE:-capture}
       - EMAIL_SIGNING_KEY=${EMAIL_SIGNING_KEY:-techniview-local-only-email-signing-key-2026}
@@ -179,6 +185,30 @@ services:
       server:
         condition: service_started
     command: python -m app.worker
+
+  complexity_worker:
+    build: ./backend
+    image: techniview-backend:local
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-app_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
+      - MYSQL_DB=${MYSQL_DB:-app_db}
+      - BIG_O_OLLAMA_URL=${BIG_O_OLLAMA_URL:-}
+      - BIG_O_OLLAMA_MODEL=${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
+      - BIG_O_OLLAMA_TIMEOUT_SECONDS=${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
+      - BIG_O_ANALYSIS_MAX_ATTEMPTS=${BIG_O_ANALYSIS_MAX_ATTEMPTS:-3}
+      - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-60}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: python -m app.worker.complexity
 
   frontend:
     container_name: techniview-frontend

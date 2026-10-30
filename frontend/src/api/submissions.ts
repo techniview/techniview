@@ -46,6 +46,17 @@ export type Submission = {
     source_code?: string;
 };
 
+export type ComplexityAnalysis = {
+    status:
+        "disabled" | "unavailable" | "queued" | "processing" | "complete" | "failed";
+    time_complexity: string | null;
+    space_complexity: string | null;
+    model: string;
+    prompt_version: string;
+    error_code: string | null;
+    analyzed_at: string | null;
+};
+
 export function createSubmission(
     problemId: number,
     sourceCode: string,
@@ -65,6 +76,12 @@ export function createSubmission(
 
 export function getSubmission(submissionId: number) {
     return apiRequest<Submission>(`/api/submissions/${submissionId}`);
+}
+
+export function getSubmissionComplexity(submissionId: number) {
+    return apiRequest<ComplexityAnalysis>(
+        `/api/submissions/${submissionId}/complexity`,
+    );
 }
 
 export function listSubmissions(
