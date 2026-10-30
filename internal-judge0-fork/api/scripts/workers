@@ -1,3 +1,4 @@
 #!/bin/sh
 set -eu
-exec bundle exec rake resque:workers
+export FORK_PER_JOB=false
+exec bundle exec ruby scripts/worker_supervisor.rb

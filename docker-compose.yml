@@ -40,7 +40,11 @@ services:
     command: /api/scripts/workers
     cgroup: private
     init: true
+    cpus: ${RUNNER_CPU_LIMIT:-24}
+    mem_limit: 8g
+    memswap_limit: 8g
     environment:
+      - COUNT=${JUDGE0_WORKER_COUNT:-16}
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -124,6 +128,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
+      - RUNNER_GROUP_PROFILE=1
+      - RUNNER_GROUP_SECRET=${RUNNER_GROUP_SECRET:-techniview-local-group-secret-2026-only}
       - JUDGE0_URL=http://server:2358
       - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
       - EMAIL_DELIVERY_MODE=${EMAIL_DELIVERY_MODE:-capture}
@@ -142,6 +148,8 @@ services:
     command: bash -c "git -C /workspace config core.hooksPath .githooks 2>/dev/null || true; alembic upgrade head && python -m app.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   app_worker:
+    deploy:
+      replicas: ${APP_WORKER_REPLICAS:-4}
     build: ./backend
     image: techniview-backend:local
     working_dir: /app
@@ -153,6 +161,8 @@ services:
       - MYSQL_USER=${MYSQL_USER:-app_user}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
       - MYSQL_DB=${MYSQL_DB:-app_db}
+      - RUNNER_GROUP_PROFILE=1
+      - RUNNER_GROUP_SECRET=${RUNNER_GROUP_SECRET:-techniview-local-group-secret-2026-only}
       - JUDGE0_URL=http://server:2358
       - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
       - EMAIL_DELIVERY_MODE=${EMAIL_DELIVERY_MODE:-capture}

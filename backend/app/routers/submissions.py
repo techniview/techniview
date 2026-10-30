@@ -222,7 +222,7 @@ def _report_text(value: object) -> str | None:
     )
 
 
-def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
+def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> str | None:
     if _is_terminal(case_result.judge0_status_id):
         return
     if not isinstance(data, dict):
@@ -240,6 +240,9 @@ def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
             raise ValueError(f"Judge0 returned an unknown status: {status_id}")
         case_result.judge0_status_id = status_id
         case_result.infrastructure_error = status_id == Judge0Status.INTERNAL_ERROR
+    failure_code = data.get("infrastructure_error_code")
+    if failure_code not in (None, "runner_outcome_unknown"):
+        raise ValueError("Judge0 returned an invalid execution failure code")
     if data.get("time") is not None:
         execution_time_ms = Decimal(str(data["time"])) * Decimal("1000")
         if not execution_time_ms.is_finite() or execution_time_ms < 0:
@@ -253,6 +256,10 @@ def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> None:
     for field in ("stdout", "stderr", "compile_output"):
         if field in data:
             setattr(case_result, field, _report_text(data[field]))
+
+    if case_result.infrastructure_error and failure_code == "runner_outcome_unknown":
+        return "runner_outcome_unknown"
+    return None
 
 
 def _finalize_submission(db: Session, submission: Submission) -> None:
@@ -668,7 +675,9 @@ def receive_judge0_callback(
                 report[field] = base64.b64decode(
                     "".join(report[field].split()), validate=True
                 ).decode("utf-8", errors="replace")
-        _update_case_result(result, report)
+        failure_code = _update_case_result(result, report)
+        if failure_code is not None:
+            submission.failure_code = failure_code
     except (TypeError, ValueError, ArithmeticError) as error:
         db.rollback()
         raise HTTPException(status_code=400, detail="invalid Judge0 report") from error

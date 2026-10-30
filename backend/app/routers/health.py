@@ -22,7 +22,12 @@ def mysql_is_available() -> bool:
 def judge0_is_available() -> bool:
     try:
         with httpx.Client(timeout=HEALTH_CHECK_TIMEOUT_SECONDS) as client:
-            response = client.get(f"{settings.JUDGE0_URL}/about")
+            url = (
+                f"{settings.GO_JUDGE_URL}/version"
+                if settings.DIRECT_GO_JUDGE
+                else f"{settings.JUDGE0_URL}/about"
+            )
+            response = client.get(url)
             response.raise_for_status()
         return True
     except httpx.HTTPError:

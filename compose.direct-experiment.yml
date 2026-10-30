@@ -1,0 +1,61 @@
+# Use with compose.integration.yml and a dedicated disposable project.
+services:
+  judge:
+    profiles: [hybrid]
+  workers:
+    profiles: [hybrid]
+  postgres:
+    profiles: [hybrid]
+  redis:
+    profiles: [hybrid]
+  go-judge:
+    build:
+      context: ./internal-judge0-fork
+      target: direct
+    image: techniview-direct-go-judge:experiment
+    privileged: true
+    cgroup: private
+    init: true
+    cpus: ${RUNNER_CPU_LIMIT:-24}
+    mem_limit: 8g
+    memswap_limit: 8g
+    environment:
+      GO_JUDGE_PARALLELISM: ${DIRECT_EXECUTION_SLOTS:-16}
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version")']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  backend:
+    environment:
+      DIRECT_GO_JUDGE: '1'
+      RUNNER_GROUP_PROFILE: '0'
+    depends_on: !override
+      mysql:
+        condition: service_healthy
+      go-judge:
+        condition: service_healthy
+  app_worker:
+    command: python -m app.worker.direct_supervisor
+    environment:
+      DIRECT_GO_JUDGE: '1'
+      RUNNER_GROUP_PROFILE: '0'
+      DIRECT_WORKER_PROCESSES: ${DIRECT_WORKER_PROCESSES:-4}
+      DB_POOL_SIZE: '1'
+      DB_MAX_OVERFLOW: '0'
+    depends_on: !override
+      backend:
+        condition: service_healthy
+      go-judge:
+        condition: service_healthy
+  tests:
+    environment:
+      DIRECT_GO_JUDGE: '1'
+      RUNNER_GROUP_PROFILE: '0'
+    depends_on: !override
+      backend:
+        condition: service_healthy
+      go-judge:
+        condition: service_healthy
+      app_worker:
+        condition: service_started

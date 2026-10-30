@@ -1,3 +1,9 @@
+FROM debian:trixie-slim AS go-judge-build
+RUN test "$(dpkg --print-architecture)" = amd64 && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://github.com/criyle/go-judge/releases/download/v1.13.3/go-judge_1.13.3_linux_amd64 -o /go-judge \
+    && echo '509782f8959987256d99ac6dc8062ec593d776f291401c8e0c28bdc48dcd1880  /go-judge' | sha256sum -c - \
+    && chmod 755 /go-judge
+
 FROM ruby:3.4-slim-trixie@sha256:c12225b6a73743f943530d9e610f4ae78e0dbcffdcf797b01522a55f7d25acb3 AS runtime
 ENV RAILS_ENV=production \
     BUNDLE_PATH=/opt/bundle \
@@ -32,8 +38,6 @@ CMD ["/api/scripts/server"]
 FROM runtime AS sandbox-build
 ARG PYTHON_VERSION=3.14.8
 ARG PYTHON_SHA256=c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73
-ARG ISOLATE_COMMIT=8f185bb37f3f23e29b33b0c7727c91c13429abe3
-ARG ISOLATE_SHA256=00ffa7006e79dac51d1bd1899224cac55c9875445f4926ee083eee938eaefbb9
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl xz-utils pkg-config libcap-dev libseccomp-dev \
     libbz2-dev libffi-dev liblzma-dev libreadline-dev libsqlite3-dev libssl-dev \
@@ -52,13 +56,6 @@ RUN strip /opt/python/bin/python3.14 /opt/python/lib/python3.14/lib-dynload/*.so
     && rm -rf /opt/python/lib/pkgconfig /opt/python/lib/python3.14/config-* \
       /opt/python/lib/python3.14/ensurepip /opt/python/lib/python3.14/idlelib \
       /opt/python/lib/python3.14/turtledemo
-RUN curl -fsSL "https://codeload.github.com/ioi/isolate/tar.gz/${ISOLATE_COMMIT}" -o /tmp/isolate.tar.gz \
-    && echo "${ISOLATE_SHA256}  /tmp/isolate.tar.gz" | sha256sum -c - \
-    && mkdir /tmp/isolate && tar -xf /tmp/isolate.tar.gz -C /tmp/isolate --strip-components=1 \
-    && make -C /tmp/isolate isolate \
-    && install -Dm4755 /tmp/isolate/isolate /opt/isolate/bin/isolate \
-    && install -Dm644 /tmp/isolate/LICENSE /opt/isolate/LICENSE
-
 FROM api AS worker
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -66,12 +63,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3t64 libncursesw6 libuuid1 zlib1g util-linux procps \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=sandbox-build /opt/python /opt/python
-COPY --from=sandbox-build /opt/isolate /opt/isolate
-COPY isolate.conf /usr/local/etc/isolate
+COPY --from=go-judge-build /go-judge /usr/local/bin/go-judge
+COPY go-judge-mount.yaml /etc/go-judge-mount.yaml
 COPY worker-entrypoint.sh /usr/local/bin/worker-entrypoint
-ENV PATH="/opt/isolate/bin:/opt/python/bin:${PATH}"
-RUN mkdir -p /var/local/lib/isolate \
-    && chmod 4755 /opt/isolate/bin/isolate \
-    && chmod 755 /usr/local/bin/worker-entrypoint
+ENV PATH="/opt/python/bin:${PATH}" GO_JUDGE_URL=http://127.0.0.1:5050 FORK_PER_JOB=false
+RUN chmod 755 /usr/local/bin/worker-entrypoint
 ENTRYPOINT ["/usr/local/bin/worker-entrypoint"]
 CMD ["/api/scripts/workers"]
+
+# Standalone experiment: execution service contains no Rails or Ruby runtime.
+FROM debian:trixie-slim AS direct
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libbz2-1.0 libffi8 liblzma5 libreadline8t64 libsqlite3-0 libssl3t64 \
+    libncursesw6 libuuid1 zlib1g util-linux ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=sandbox-build /opt/python /opt/python
+COPY --from=go-judge-build /go-judge /usr/local/bin/go-judge
+COPY go-judge-mount.yaml /etc/go-judge-mount.yaml
+CMD ["sh", "-c", "exec go-judge -http-addr 0.0.0.0:5050 -no-fallback -mount-conf /etc/go-judge-mount.yaml -parallelism ${GO_JUDGE_PARALLELISM:-16} -output-limit 4m -copy-out-limit 4m -src-prefix /opt/python"]

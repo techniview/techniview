@@ -100,6 +100,22 @@ jobs:
           restic version
       - run: python3 scripts/tests/test_backup_mysql.py
 
+  direct-integration:
+    name: Direct go-judge integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test standalone execution and API results
+        run: |
+          set -euo pipefail
+          export DIRECT_EXECUTION_SLOTS=4 DIRECT_WORKER_PROCESSES=1 RUNNER_CPU_LIMIT=4
+          compose=(docker compose --env-file /dev/null -p techniview-direct-ci -f compose.integration.yml -f compose.direct-experiment.yml)
+          trap '${compose[@]} down --volumes --remove-orphans' EXIT
+          "${compose[@]}" up -d --build --wait --scale app_worker=4 backend go-judge app_worker
+          "${compose[@]}" build tests
+          "${compose[@]}" run --rm --no-deps tests python -m pytest -q integration/test_direct_runner.py --override-ini=pythonpath=.
+
   production-images:
     name: Production image builds
     runs-on: ubuntu-latest
@@ -111,7 +127,7 @@ jobs:
   ci:
     name: CI
     if: ${{ always() }}
-    needs: [workflows, backend, frontend, integration, production-images]
+    needs: [workflows, backend, frontend, integration, direct-integration, production-images]
     runs-on: ubuntu-latest
     steps:
       - name: Require every check to pass
@@ -120,6 +136,7 @@ jobs:
           test "${{ needs.backend.result }}" = success
           test "${{ needs.frontend.result }}" = success
           test "${{ needs.integration.result }}" = success
+          test "${{ needs.direct-integration.result }}" = success
           test "${{ needs.production-images.result }}" = success
 
   publish-production-images:

@@ -46,11 +46,11 @@ class SubmissionsController < ApplicationController
     end
 
     if params[:wait] == "true"
-      IsolateRunner.perform_now(submission)
+      ExecutionRunner.perform_now(submission)
       render json: submission.reload, status: :created,
              base64_encoded: @base64_encoded, fields: @requested_fields
     else
-      IsolateRunner.perform_later(submission)
+      ExecutionRunner.perform_later(submission)
       render json: {token: submission.token}, status: :created
     end
   rescue Encoding::UndefinedConversionError

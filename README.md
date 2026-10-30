@@ -10,7 +10,7 @@ LeetCode-style practice problems with class tracking attached. Built so intervie
 docker compose up -d --build
 ```
 
-- Judge0 at http://localhost:2358
+- Runner API at http://localhost:2358 (Judge0-derived orchestration, go-judge execution)
 - Backend at http://localhost:8000/api/docs
 - Frontend at http://localhost:5173
 - Health check at http://localhost:8000/api/health
@@ -221,3 +221,15 @@ full statement and public examples with `GET /api/problems/{problem_id}`.
 Trail progression is defined by the technique pools and their tiers. Individual
 problems do not have prerequisites; students can open any published practice
 problem even when another pool is currently recommended.
+
+## Runner execution
+
+The runner uses go-judge 1.13.3 with Python 3.14 and fresh sandbox/process state for every case. The existing Judge0-derived Rails API, PostgreSQL records, Redis queue and persistent Ruby workers own durable grouped jobs and callbacks. This is the measured hybrid architecture, not a standalone go-judge API replacement.
+
+The worker build supports Linux amd64 and requires cgroup v2 with a private cgroup namespace. Its pinned binary checksum is checked during the image build. The execution endpoint listens only on loopback inside the worker container. Normal Compose files enable grouped dispatch and four application workers. Runner defaults are 16 execution workers, a 24 CPU quota and 8 GiB of memory. Set `JUDGE0_WORKER_COUNT`, `RUNNER_CPU_LIMIT` and `APP_WORKER_REPLICAS` for a smaller development machine. CPU quota is a ceiling, not an exclusive core reservation.
+
+Application workers reuse HTTP connections. Group requests use stable identities and preserve individual case results. An interrupted execution with an uncertain outcome becomes an explicit infrastructure failure; recovery must not silently rerun it. Ruby workers recycle between completed groups; student Python processes never persist between cases.
+
+For local Compose, the default group secret is development-only. Deployment Compose requires a `runner_group_secret` file in `SECRET_DIR`, containing at least 32 random characters. All application workers and the backend must use the same secret. Keep it stable while submissions are pending. Deployment Compose filenames retain their existing `production` names; no existing production installation is assumed.
+
+See [runner decision and evidence](docs/runner-decision.md) for why this implementation was selected and its validation limits.
