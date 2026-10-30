@@ -70,3 +70,14 @@ ENV PATH="/opt/python/bin:${PATH}" GO_JUDGE_URL=http://127.0.0.1:5050 FORK_PER_J
 RUN chmod 755 /usr/local/bin/worker-entrypoint
 ENTRYPOINT ["/usr/local/bin/worker-entrypoint"]
 CMD ["/api/scripts/workers"]
+
+# Standalone experiment: execution service contains no Rails or Ruby runtime.
+FROM debian:trixie-slim AS direct
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libbz2-1.0 libffi8 liblzma5 libreadline8t64 libsqlite3-0 libssl3t64 \
+    libncursesw6 libuuid1 zlib1g util-linux ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=sandbox-build /opt/python /opt/python
+COPY --from=go-judge-build /go-judge /usr/local/bin/go-judge
+COPY go-judge-mount.yaml /etc/go-judge-mount.yaml
+CMD ["sh", "-c", "exec go-judge -http-addr 0.0.0.0:5050 -no-fallback -mount-conf /etc/go-judge-mount.yaml -parallelism ${GO_JUDGE_PARALLELISM:-16} -output-limit 4m -copy-out-limit 4m -src-prefix /opt/python"]

@@ -113,7 +113,11 @@ def client():
     with httpx.Client(timeout=5) as runner:
         while True:
             try:
-                runner.get("http://judge:2358/about").raise_for_status()
+                runner.get(
+                    "http://go-judge:5050/version"
+                    if os.getenv("DIRECT_GO_JUDGE") == "1"
+                    else "http://judge:2358/about"
+                ).raise_for_status()
                 break
             except httpx.HTTPError:
                 if time.monotonic() >= deadline:

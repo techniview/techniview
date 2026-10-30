@@ -53,6 +53,8 @@ def judge0_about(timeout: float = 3.0):
 
 def judge0_workers(timeout: float = 1.0):
     """Return Judge0's live Resque worker and queue snapshots for operations metrics."""
+    if settings.DIRECT_GO_JUDGE:
+        return []
     with _request_client() as c:
         resp = c.get(f"{settings.JUDGE0_URL}/workers", timeout=timeout)
         resp.raise_for_status()

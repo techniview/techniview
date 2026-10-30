@@ -286,6 +286,11 @@ def process_submission(
     *,
     case_ids_override: list[int] | None = None,
 ) -> None:
+    if settings.DIRECT_GO_JUDGE:
+        from .direct import process_submission as process_direct
+
+        process_direct(db, submission_id, owner)
+        return
     if case_ids_override is None and settings.RUNNER_GROUP_PROFILE:
         _process_group_submission(db, submission_id, owner)
         return
