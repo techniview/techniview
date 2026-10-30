@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "workloads": {
+    "short": {
+      "title": "Performance v1 short count",
+      "prompt": "Return the number of even integers in the input list.",
+      "difficulty": "easy",
+      "execution_mode": "call_based",
+      "function_name": "count_evens",
+      "starter_code": "def count_evens(values):\n    pass",
+      "canonical_solution": "def count_evens(values):\n    return sum(value % 2 == 0 for value in values)",
+      "cpu_time_limit_seconds": 2.0,
+      "memory_limit_kb": 128000,
+      "test_cases": [
+        {"visibility": "hidden", "input": "[[1, 2, 3, 4, 5, 6]]", "expected_output": "3"}
+      ]
+    },
+    "cpu-heavy": {
+      "title": "Performance v1 CPU pair sum",
+      "prompt": "Return the sum of (left times right) modulo 97 for each ordered pair of integers from 1 through limit minus 1.",
+      "difficulty": "medium",
+      "execution_mode": "call_based",
+      "function_name": "sum_pair_products_mod97",
+      "starter_code": "def sum_pair_products_mod97(limit):\n    pass",
+      "canonical_solution": "def sum_pair_products_mod97(limit):\n    total = 0\n    for left in range(1, limit):\n        for right in range(1, limit):\n            total += (left * right) % 97\n    return total",
+      "cpu_time_limit_seconds": 3.0,
+      "memory_limit_kb": 128000,
+      "test_cases": [
+        {"visibility": "hidden", "input": "[5000]", "expected_output": "1187409022"}
+      ]
+    },
+    "multi-case": {
+      "title": "Performance v1 25 case count",
+      "prompt": "Return the number of even integers in the input list.",
+      "difficulty": "easy",
+      "execution_mode": "call_based",
+      "function_name": "count_evens",
+      "starter_code": "def count_evens(values):\n    pass",
+      "canonical_solution": "def count_evens(values):\n    return sum(value % 2 == 0 for value in values)",
+      "cpu_time_limit_seconds": 2.0,
+      "memory_limit_kb": 128000,
+      "test_cases": [
+        {"visibility": "hidden", "input": "[[0]]", "expected_output": "1"},
+        {"visibility": "hidden", "input": "[[1]]", "expected_output": "0"},
+        {"visibility": "hidden", "input": "[[2, 3]]", "expected_output": "1"},
+        {"visibility": "hidden", "input": "[[3, 4]]", "expected_output": "1"},
+        {"visibility": "hidden", "input": "[[4, 5, 6]]", "expected_output": "2"},
+        {"visibility": "hidden", "input": "[[5, 6, 7]]", "expected_output": "1"},
+        {"visibility": "hidden", "input": "[[6, 7, 8, 9]]", "expected_output": "2"},
+        {"visibility": "hidden", "input": "[[7, 8, 9, 10]]", "expected_output": "2"},
+        {"visibility": "hidden", "input": "[[8, 9, 10, 11, 12]]", "expected_output": "3"},
+        {"visibility": "hidden", "input": "[[9, 10, 11, 12, 13]]", "expected_output": "2"},
+        {"visibility": "hidden", "input": "[[10, 11, 12, 13, 14, 15]]", "expected_output": "3"},
+        {"visibility": "hidden", "input": "[[11, 12, 13, 14, 15, 16]]", "expected_output": "3"},
+        {"visibility": "hidden", "input": "[[12, 13, 14, 15, 16, 17, 18]]", "expected_output": "4"},
+        {"visibility": "hidden", "input": "[[13, 14, 15, 16, 17, 18, 19]]", "expected_output": "3"},
+        {"visibility": "hidden", "input": "[[14, 15, 16, 17, 18, 19, 20, 21]]", "expected_output": "4"},
+        {"visibility": "hidden", "input": "[[15, 16, 17, 18, 19, 20, 21, 22]]", "expected_output": "4"},
+        {"visibility": "hidden", "input": "[[16, 17, 18, 19, 20, 21, 22, 23, 24]]", "expected_output": "5"},
+        {"visibility": "hidden", "input": "[[17, 18, 19, 20, 21, 22, 23, 24, 25]]", "expected_output": "4"},
+        {"visibility": "hidden", "input": "[[18, 19, 20, 21, 22, 23, 24, 25, 26, 27]]", "expected_output": "5"},
+        {"visibility": "hidden", "input": "[[19, 20, 21, 22, 23, 24, 25, 26, 27, 28]]", "expected_output": "5"},
+        {"visibility": "hidden", "input": "[[20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]]", "expected_output": "6"},
+        {"visibility": "hidden", "input": "[[21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]]", "expected_output": "5"},
+        {"visibility": "hidden", "input": "[[22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]]", "expected_output": "6"},
+        {"visibility": "hidden", "input": "[[23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34]]", "expected_output": "6"},
+        {"visibility": "hidden", "input": "[[24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]]", "expected_output": "7"}
+      ]
+    }
+  }
+}

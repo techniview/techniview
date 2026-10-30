@@ -146,6 +146,10 @@ def _seed_load_scenario(
             problem.function_name = workload["function_name"]
             problem.starter_code = workload["starter_code"]
             problem.canonical_solution = workload["canonical_solution"]
+            problem.cpu_time_limit_seconds = Decimal(
+                str(workload["cpu_time_limit_seconds"])
+            )
+            problem.memory_limit_kb = workload["memory_limit_kb"]
             problem.test_cases = [
                 ProblemTestCase(
                     case_order=index,
@@ -366,6 +370,38 @@ def _read_completion_rows(
         )
 
 
+def _read_queue_waits(submission_ids: list[int]) -> list[float]:
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(
+                Submission.submitted_at,
+                func.min(SubmissionCaseResult.dispatch_started_at),
+            )
+            .join(
+                SubmissionCaseResult,
+                SubmissionCaseResult.submission_id == Submission.id,
+            )
+            .where(Submission.id.in_(submission_ids))
+            .group_by(Submission.id, Submission.submitted_at)
+        ).all()
+    return [
+        max(0.0, (dispatch_started_at - submitted_at).total_seconds())
+        for submitted_at, dispatch_started_at in rows
+        if dispatch_started_at is not None
+    ]
+
+
+def _read_case_cpu_seconds(submission_ids: list[int]) -> list[float]:
+    with SessionLocal() as db:
+        values = db.scalars(
+            select(SubmissionCaseResult.execution_time_ms).where(
+                SubmissionCaseResult.submission_id.in_(submission_ids),
+                SubmissionCaseResult.execution_time_ms.is_not(None),
+            )
+        ).all()
+    return [float(value) / 1000 for value in values if value is not None]
+
+
 async def _run_burst(
     students: int,
     concurrency: int,
@@ -543,6 +579,9 @@ async def _run_burst(
     acceptance_latencies = [latency for _submission_id, latency in accepted]
     completion_latencies = [duration for _status, duration in completed.values()]
     api_latencies = [row["api_completion_seconds"] for row in observations]
+    queue_waits = _read_queue_waits(submission_ids)
+    case_cpu_seconds = _read_case_cpu_seconds(submission_ids)
+    failed_cases = actual_cases - passed_cases
     return {
         "raw_samples": observations,
         "result_poll_transport_errors": sum(
@@ -585,6 +624,18 @@ async def _run_burst(
             "p99": round(_percentile(completion_latencies, 0.99), 3),
             "max": round(max(completion_latencies), 3),
         },
+        "queue_wait_seconds": {
+            "count": len(queue_waits),
+            "p50": round(statistics.median(queue_waits), 3),
+            "p95": round(_percentile(queue_waits, 0.95), 3),
+            "max": round(max(queue_waits), 3),
+        },
+        "case_cpu_seconds": {
+            "count": len(case_cpu_seconds),
+            "p50": round(statistics.median(case_cpu_seconds), 3),
+            "p95": round(_percentile(case_cpu_seconds, 0.95), 3),
+            "max": round(max(case_cpu_seconds), 3),
+        },
         "max_observed_submission_queue_depth": int(samples["queue_depth"]),
         "max_observed_oldest_queue_age_seconds": round(samples["queue_age"], 3),
         "max_observed_waiting_to_dispatch_cases": int(
@@ -599,22 +650,23 @@ async def _run_burst(
         "metrics_scrape_errors": int(samples["metrics_scrape_errors"]),
         "metrics_last_scrape_error": samples["metrics_last_scrape_error"],
         "execution_cases": actual_cases,
+        "passed_cases": passed_cases,
+        "failed_cases": failed_cases,
+        "failed_submissions": len(failed_submissions),
     }
 
 
 def main() -> None:
     students = _integer_setting("LOAD_STUDENTS", 100, 1000)
     concurrency = _integer_setting("LOAD_CONCURRENCY", students, students)
-    workload_name = os.getenv("LOAD_PROBLEM")
+    workload_name = os.getenv("LOAD_WORKLOAD")
     workload = None
     if workload_name:
-        catalog = json.loads(
-            (Path(__file__).parents[1] / "data/problem_catalog.json").read_text()
-        )
-        matches = [p for p in catalog["problems"] if p["title"] == workload_name]
-        if len(matches) != 1:
-            raise ValueError(f"Expected one catalog problem named {workload_name!r}")
-        workload = matches[0]
+        catalog = json.loads((Path(__file__).parent / "workloads/v1.json").read_text())
+        try:
+            workload = catalog["workloads"][workload_name]
+        except KeyError as error:
+            raise ValueError(f"Unknown versioned workload {workload_name!r}") from error
     cases_per_submission = (
         len(workload["test_cases"])
         if workload
@@ -638,7 +690,35 @@ def main() -> None:
     )
     report["execution_path"] = "go-judge"
     report["workload"] = workload_name or "synthetic-count-evens"
+    report["workload_version"] = 1 if workload_name else None
+    report["workload_definition"] = workload
     report["source_commit"] = os.getenv("LOAD_SOURCE_COMMIT", "unrecorded")
+    report["backend_image_id"] = os.getenv("LOAD_BACKEND_IMAGE_ID", "unrecorded")
+    report["worker_image_id"] = os.getenv("LOAD_WORKER_IMAGE_ID", "unrecorded")
+    report["runner_image_id"] = os.getenv("LOAD_RUNNER_IMAGE_ID", "unrecorded")
+    report["application_image_revision"] = os.getenv(
+        "LOAD_APPLICATION_IMAGE_REVISION", "unrecorded"
+    )
+    report["case_cpu_time_limit_seconds"] = (
+        workload["cpu_time_limit_seconds"] if workload else 2.0
+    )
+    report["case_cpu_time_limit_fraction_p95"] = (
+        report["case_cpu_seconds"]["p95"] / report["case_cpu_time_limit_seconds"]
+    )
+    report["host_profile"] = json.loads(os.getenv("LOAD_HOST_PROFILE_JSON", "{}"))
+    report["worker_settings"] = {
+        "application_replicas": _integer_setting("LOAD_APP_WORKERS", 4, 100),
+        "direct_worker_processes": _integer_setting("DIRECT_WORKER_PROCESSES", 4, 100),
+        "go_judge_parallelism": _integer_setting("LOAD_GO_JUDGE_SLOTS", 4, 100),
+        "runner_cpu_limit": os.getenv("LOAD_RUNNER_CPU_LIMIT", "unrecorded"),
+        "runner_memory_limit": os.getenv("LOAD_RUNNER_MEMORY_LIMIT", "unrecorded"),
+    }
+    report["database_pool_settings"] = {
+        "api_pool_size": os.getenv("LOAD_API_DB_POOL_SIZE", "unrecorded"),
+        "worker_pool_size": os.getenv("LOAD_WORKER_DB_POOL_SIZE", "unrecorded"),
+        "max_overflow": os.getenv("LOAD_DB_MAX_OVERFLOW", "unrecorded"),
+    }
+    report["report_run"] = os.getenv("LOAD_REPORT_RUN", "measured")
     output = os.getenv("LOAD_REPORT_PATH")
     if output:
         Path(output).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

@@ -11,8 +11,8 @@ x-app: &app
     EMAIL_DELIVERY_MODE: capture
     EMAIL_SIGNING_KEY: techniview-integration-only-email-key-2026
     EMAIL_FROM: TechniView <noreply@example.test>
-    DB_POOL_SIZE: "30"
-    DB_MAX_OVERFLOW: "0"
+    DB_POOL_SIZE: ${LOAD_API_DB_POOL_SIZE:-30}
+    DB_MAX_OVERFLOW: ${LOAD_DB_MAX_OVERFLOW:-0}
 
 services:
   mysql:
@@ -35,8 +35,8 @@ services:
     cgroup: private
     init: true
     cpus: ${RUNNER_CPU_LIMIT:-4}
-    mem_limit: 8g
-    memswap_limit: 8g
+    mem_limit: ${RUNNER_MEMORY_LIMIT:-8g}
+    memswap_limit: ${RUNNER_MEMORY_LIMIT:-8g}
     environment:
       GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-4}
     healthcheck:
@@ -75,8 +75,8 @@ services:
     <<: *app
     environment:
       <<: *app-environment
-      DB_POOL_SIZE: "3"
-      DB_MAX_OVERFLOW: "0"
+      DB_POOL_SIZE: ${LOAD_WORKER_DB_POOL_SIZE:-3}
+      DB_MAX_OVERFLOW: ${LOAD_DB_MAX_OVERFLOW:-0}
       DIRECT_WORKER_PROCESSES: ${DIRECT_WORKER_PROCESSES:-4}
     command: python -m app.worker.direct_supervisor
     depends_on:
