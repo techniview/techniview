@@ -49,9 +49,9 @@ function submissionMessage(submission: Submission): string {
     if (!submission.done) {
         const messages = {
             waiting_to_send: "Waiting for TechniView to send your code...",
-            sending_to_judge0: "Sending your code to Judge0...",
-            waiting_on_judge0: "Queued in Judge0...",
-            running_on_judge0: "Running in Judge0...",
+            sending_to_go_judge: "Sending your code to go-judge...",
+            waiting_on_go_judge: "Queued for go-judge...",
+            running_on_go_judge: "Running in go-judge...",
             complete: "Finishing your result...",
         };
         return messages[submission.phase];

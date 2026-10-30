@@ -43,24 +43,11 @@ class Settings:
     EMAIL_TOKEN_COOLDOWN_SECONDS = int(os.getenv("EMAIL_TOKEN_COOLDOWN_SECONDS", "60"))
     EMAIL_MAX_ATTEMPTS = int(os.getenv("EMAIL_MAX_ATTEMPTS", "5"))
     EMAIL_LEASE_SECONDS = int(os.getenv("EMAIL_LEASE_SECONDS", "60"))
-    DIRECT_GO_JUDGE = os.getenv("DIRECT_GO_JUDGE", "0") == "1"
     GO_JUDGE_URL = os.getenv("GO_JUDGE_URL", "http://go-judge:5050")
     GO_JUDGE_WALL_SECONDS = int(os.getenv("GO_JUDGE_WALL_SECONDS", "5"))
-    RUNNER_GROUP_PROFILE = os.getenv("RUNNER_GROUP_PROFILE", "0") == "1"
-    RUNNER_GROUP_SECRET = _setting("RUNNER_GROUP_SECRET")
-    if RUNNER_GROUP_PROFILE and len(RUNNER_GROUP_SECRET) < 32:
-        raise ValueError("RUNNER_GROUP_SECRET must contain at least 32 characters")
     WORKER_LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "60"))
-    if DIRECT_GO_JUDGE and not (0 < GO_JUDGE_WALL_SECONDS < WORKER_LEASE_SECONDS - 20):
+    if not (0 < GO_JUDGE_WALL_SECONDS < WORKER_LEASE_SECONDS - 20):
         raise ValueError("direct execution timeout must fit within the worker lease")
-    WORKER_POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "2"))
-    WORKER_RECOVERY_SECONDS = int(os.getenv("WORKER_RECOVERY_SECONDS", "600"))
-    WORKER_DISPATCH_MAX_RETRIES = int(os.getenv("WORKER_DISPATCH_MAX_RETRIES", "5"))
-    WORKER_RETRY_BASE_SECONDS = float(os.getenv("WORKER_RETRY_BASE_SECONDS", "2"))
-    WORKER_RETRY_MAX_SECONDS = float(os.getenv("WORKER_RETRY_MAX_SECONDS", "30"))
-    WORKER_RETRY_AFTER_MAX_SECONDS = float(
-        os.getenv("WORKER_RETRY_AFTER_MAX_SECONDS", "60")
-    )
     BIG_O_OLLAMA_URL = os.getenv("BIG_O_OLLAMA_URL", "").rstrip("/")
     BIG_O_OLLAMA_MODEL = os.getenv("BIG_O_OLLAMA_MODEL", "qwen3.8:27b")
     BIG_O_OLLAMA_TIMEOUT_SECONDS = float(
@@ -93,23 +80,6 @@ class Settings:
         for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
         if origin.strip()
     )
-
-    # Judge0 Postgres/Redis
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
-    POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "test_password")
-    POSTGRES_DB = os.getenv("POSTGRES_DB", "postgres")
-
-    REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "test_password")
-
-    JUDGE0_URL = os.getenv("JUDGE0_URL", "http://server:2358")
-    JUDGE0_CALLBACK_BASE_URL = os.getenv(
-        "JUDGE0_CALLBACK_BASE_URL",
-        "http://backend:8000/api/internal/judge0/callbacks",
-    ).rstrip("/")
 
 
 settings = Settings()

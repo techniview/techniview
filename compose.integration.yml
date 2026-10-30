@@ -1,32 +1,12 @@
 name: techniview-integration
 
-x-judge-environment: &judge-environment
-  POSTGRES_HOST: postgres
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: integration-only
-  POSTGRES_DB: postgres
-  REDIS_HOST: redis
-  REDIS_PASSWORD: integration-only
-  MAX_QUEUE_SIZE: "12000"
-
-x-judge: &judge
-  environment: *judge-environment
-  depends_on:
-    postgres:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
-
 x-app: &app
   build:
     context: ./backend
     dockerfile: integration/Dockerfile
   environment: &app-environment
     DATABASE_URL: mysql+pymysql://integration:p%40ss%25word@mysql/integration
-    RUNNER_GROUP_PROFILE: "1"
-    RUNNER_GROUP_SECRET: integration-only-group-secret-2026-10-27
-    JUDGE0_URL: http://judge:2358
-    JUDGE0_CALLBACK_BASE_URL: http://backend:8000/api/internal/judge0/callbacks
+    GO_JUDGE_URL: http://go-judge:5050
     INTEGRATION_TESTS: "1"
     EMAIL_DELIVERY_MODE: capture
     EMAIL_SIGNING_KEY: techniview-integration-only-email-key-2026
@@ -48,44 +28,22 @@ services:
       interval: 2s
       timeout: 2s
       retries: 60
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_PASSWORD: integration-only
-    tmpfs: [/var/lib/postgresql/data]
-    healthcheck:
-      test: [CMD, pg_isready, -U, postgres]
-      interval: 2s
-      timeout: 2s
-      retries: 30
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass integration-only
-    healthcheck:
-      test: [CMD, redis-cli, -a, integration-only, ping]
-      interval: 2s
-      timeout: 2s
-      retries: 30
-  judge:
-    <<: *judge
-    build:
-      context: ./internal-judge0-fork
-      target: api
-    image: internal-judge0-fork-api:integration
-    command: /api/scripts/server
-  workers:
-    <<: *judge
-    environment:
-      <<: *judge-environment
-      COUNT: ${LOAD_JUDGE0_WORKERS:-4}
-    build:
-      context: ./internal-judge0-fork
-      target: worker
-    image: internal-judge0-fork-worker:integration
+  go-judge:
+    build: ./go-judge
+    image: techniview-go-judge:integration
     privileged: true
     cgroup: private
     init: true
-    command: /api/scripts/workers
+    cpus: ${RUNNER_CPU_LIMIT:-4}
+    mem_limit: 8g
+    memswap_limit: 8g
+    environment:
+      GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-4}
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version")']
+      interval: 2s
+      timeout: 3s
+      retries: 30
   backend:
     <<: *app
     ulimits:
@@ -109,10 +67,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-      judge:
-        condition: service_started
-      workers:
-        condition: service_started
+      go-judge:
+        condition: service_healthy
       app_worker:
         condition: service_started
   app_worker:
@@ -121,9 +77,10 @@ services:
       <<: *app-environment
       DB_POOL_SIZE: "3"
       DB_MAX_OVERFLOW: "0"
-    command: python -m app.worker
+      DIRECT_WORKER_PROCESSES: ${DIRECT_WORKER_PROCESSES:-4}
+    command: python -m app.worker.direct_supervisor
     depends_on:
       backend:
         condition: service_healthy
-      judge:
-        condition: service_started
+      go-judge:
+        condition: service_healthy

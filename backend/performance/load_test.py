@@ -326,8 +326,8 @@ async def _monitor_metrics(stop: asyncio.Event, samples: dict[str, float]) -> No
                 )
                 for phase in (
                     "waiting_to_dispatch",
-                    "waiting_on_judge0",
-                    "running_on_judge0",
+                    "waiting_on_go_judge",
+                    "running_on_go_judge",
                 ):
                     key = f"case_{phase}"
                     samples[key] = max(
@@ -346,54 +346,6 @@ async def _monitor_metrics(stop: asyncio.Event, samples: dict[str, float]) -> No
                 samples["metrics_last_scrape_error"] = str(error)[:300]
             try:
                 await asyncio.wait_for(stop.wait(), timeout=1)
-            except TimeoutError:
-                pass
-
-
-async def _monitor_judge0_workers(
-    stop: asyncio.Event, samples: dict[str, float]
-) -> None:
-    if settings.DIRECT_GO_JUDGE:
-        await stop.wait()
-        return
-    async with httpx.AsyncClient(base_url=settings.JUDGE0_URL, timeout=2) as api:
-        while not stop.is_set():
-            try:
-                response = await api.get("/workers")
-                response.raise_for_status()
-                queues = response.json()
-                if not isinstance(queues, list):
-                    raise ValueError("Judge0 returned invalid worker status")
-                observed = {
-                    "available": 0,
-                    "idle": 0,
-                    "working": 0,
-                    "paused": 0,
-                    "queue_size": 0,
-                }
-                for queue in queues:
-                    if not isinstance(queue, dict):
-                        raise ValueError("Judge0 returned invalid queue status")
-                    observed["queue_size"] += int(queue["size"])
-                    for state in ("available", "idle", "working", "paused"):
-                        observed[state] += int(queue[state])
-                for name, value in observed.items():
-                    key = (
-                        "judge0_queue_size"
-                        if name == "queue_size"
-                        else f"judge0_workers_{name}"
-                    )
-                    samples[key] = max(samples[key], value)
-                samples.setdefault("raw_worker_status", []).append(
-                    {"at": datetime.now(UTC).isoformat(), "queues": queues}
-                )
-                samples["judge0_worker_status_samples"] += 1
-                samples["judge0_workers_working_total"] += observed["working"]
-            except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
-                samples["judge0_status_scrape_errors"] += 1
-                samples["judge0_status_last_scrape_error"] = str(error)[:300]
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=0.2)
             except TimeoutError:
                 pass
 
@@ -434,24 +386,12 @@ async def _run_burst(
         "queue_depth": 0.0,
         "queue_age": 0.0,
         "case_waiting_to_dispatch": 0.0,
-        "case_waiting_on_judge0": 0.0,
-        "case_running_on_judge0": 0.0,
-        "judge0_workers_available": 0.0,
-        "judge0_workers_idle": 0.0,
-        "judge0_workers_working": 0.0,
-        "judge0_workers_paused": 0.0,
-        "judge0_queue_size": 0.0,
-        "judge0_worker_status_samples": 0.0,
-        "judge0_workers_working_total": 0.0,
+        "case_waiting_on_go_judge": 0.0,
+        "case_running_on_go_judge": 0.0,
         "metrics_scrape_errors": 0.0,
         "metrics_last_scrape_error": "",
-        "judge0_status_scrape_errors": 0.0,
-        "judge0_status_last_scrape_error": "",
     }
     monitor_task = asyncio.create_task(_monitor_metrics(stop_metrics, samples))
-    judge0_monitor_task = asyncio.create_task(
-        _monitor_judge0_workers(stop_metrics, samples)
-    )
 
     observations: list[dict] = []
     try:
@@ -543,22 +483,10 @@ async def _run_burst(
             await asyncio.sleep(0.2)
     finally:
         stop_metrics.set()
-        await asyncio.gather(monitor_task, judge0_monitor_task)
+        await monitor_task
 
-    if not settings.DIRECT_GO_JUDGE and not samples["judge0_worker_status_samples"]:
-        raise AssertionError("No live Judge0 worker status samples were collected")
-
-    configured_judge0_workers = _integer_setting("LOAD_JUDGE0_WORKERS", 8, 100)
+    configured_go_judge_slots = _integer_setting("LOAD_GO_JUDGE_SLOTS", 4, 100)
     configured_app_workers = _integer_setting("LOAD_APP_WORKERS", 4, 100)
-    if (
-        not settings.DIRECT_GO_JUDGE
-        and samples["judge0_workers_available"] != configured_judge0_workers
-    ):
-        raise AssertionError(
-            "Judge0 registered "
-            f"{int(samples['judge0_workers_available'])} worker processes; expected "
-            f"exactly {configured_judge0_workers}"
-        )
 
     completion_batch = time.perf_counter() - burst_started
     failed_submissions = {
@@ -624,7 +552,6 @@ async def _run_burst(
             sample["result_poll_transport_error_count"] > 0 for sample in observations
         ),
         "raw_metrics": samples.get("raw_metrics", []),
-        "raw_worker_status": samples.get("raw_worker_status", []),
         "result_poll_interval_seconds": 0.2,
         "api_submission_to_result_seconds": {
             "count": len(api_latencies),
@@ -637,7 +564,7 @@ async def _run_burst(
         "students": students,
         "submission_concurrency": concurrency,
         "application_worker_replicas_configured": configured_app_workers,
-        "judge0_worker_processes_configured": configured_judge0_workers,
+        "go_judge_execution_slots_configured": configured_go_judge_slots,
         "test_cases_per_submission": cases_per_submission,
         "accepted_submissions": len(accepted),
         "acceptance_burst_seconds": round(acceptance_burst, 3),
@@ -663,22 +590,12 @@ async def _run_burst(
         "max_observed_waiting_to_dispatch_cases": int(
             samples["case_waiting_to_dispatch"]
         ),
-        "max_observed_waiting_on_judge0_cases": int(samples["case_waiting_on_judge0"]),
-        "max_observed_running_on_judge0_cases": int(samples["case_running_on_judge0"]),
-        "max_observed_judge0_workers_available": int(
-            samples["judge0_workers_available"]
+        "max_observed_waiting_on_go_judge_cases": int(
+            samples["case_waiting_on_go_judge"]
         ),
-        "max_observed_judge0_workers_idle": int(samples["judge0_workers_idle"]),
-        "max_observed_judge0_workers_working": int(samples["judge0_workers_working"]),
-        "avg_observed_judge0_workers_working": round(
-            samples["judge0_workers_working_total"]
-            / max(1, samples["judge0_worker_status_samples"]),
-            3,
+        "max_observed_running_on_go_judge_cases": int(
+            samples["case_running_on_go_judge"]
         ),
-        "judge0_worker_status_samples": int(samples["judge0_worker_status_samples"]),
-        "judge0_worker_sample_interval_seconds": 0.2,
-        "max_observed_judge0_workers_paused": int(samples["judge0_workers_paused"]),
-        "max_observed_judge0_queue_size": int(samples["judge0_queue_size"]),
         "metrics_scrape_errors": int(samples["metrics_scrape_errors"]),
         "metrics_last_scrape_error": samples["metrics_last_scrape_error"],
         "execution_cases": actual_cases,
@@ -719,8 +636,7 @@ def main() -> None:
             workload["canonical_solution"] if workload else SOURCE_CODE,
         )
     )
-    report["runner_telemetry_available"] = not settings.DIRECT_GO_JUDGE
-    report["execution_path"] = "direct" if settings.DIRECT_GO_JUDGE else "hybrid"
+    report["execution_path"] = "go-judge"
     report["workload"] = workload_name or "synthetic-count-evens"
     report["source_commit"] = os.getenv("LOAD_SOURCE_COMMIT", "unrecorded")
     output = os.getenv("LOAD_REPORT_PATH")

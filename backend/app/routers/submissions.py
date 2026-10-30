@@ -1,11 +1,9 @@
-import base64
 import re
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal
 from enum import IntEnum
 
-import httpx
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, lazyload, selectinload
@@ -19,7 +17,6 @@ from ..core.dependencies import (
     StaffMembership,
 )
 from ..core.errors import ApiError
-from ..core.security import hash_token
 from ..models import (
     Assignment,
     AssignmentItem,
@@ -51,7 +48,6 @@ from ..services.progress import (
 from .problems import _staffed_problem_ids, _visible_problem
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
-internal_router = APIRouter(prefix="/internal/judge0", tags=["internal"])
 course_router = APIRouter(
     prefix="/courses/{course_id}/submissions", tags=["staff-submissions"]
 )
@@ -72,7 +68,7 @@ class SubmissionCreate(BaseModel):
         return value
 
 
-class Judge0Status(IntEnum):
+class ExecutionStatus(IntEnum):
     IN_QUEUE = 1
     PROCESSING = 2
     ACCEPTED = 3
@@ -109,29 +105,19 @@ def get_status_message(status_code: int) -> str:
     return messages.get(int(status_code), f"Unknown status code: {status_code}")
 
 
-def _judge0_error(error: Exception) -> HTTPException:
-    if isinstance(error, httpx.TimeoutException):
-        return HTTPException(status_code=504, detail="runner timed out")
-    if isinstance(error, httpx.HTTPStatusError):
-        status = error.response.status_code if error.response is not None else None
-        if status == 429:
-            return HTTPException(status_code=429, detail="runner busy, try again")
-    return HTTPException(status_code=502, detail="runner unavailable")
-
-
 def _is_terminal(status_id: int | None) -> bool:
-    return status_id is not None and status_id >= Judge0Status.ACCEPTED
+    return status_id is not None and status_id >= ExecutionStatus.ACCEPTED
 
 
 def _case_execution_phase(result: SubmissionCaseResult) -> str:
     if _is_terminal(result.judge0_status_id):
         return "complete"
-    if result.judge0_status_id == Judge0Status.PROCESSING:
-        return "running_on_judge0"
+    if result.judge0_status_id == ExecutionStatus.PROCESSING:
+        return "running_on_go_judge"
     if result.judge0_token is not None:
-        return "waiting_on_judge0"
+        return "waiting_on_go_judge"
     if result.dispatch_started_at is not None:
-        return "sending_to_judge0"
+        return "sending_to_go_judge"
     return "waiting_to_send"
 
 
@@ -140,9 +126,9 @@ def _submission_execution_phase(submission: Submission) -> str:
         return "complete"
     phases = {_case_execution_phase(result) for result in submission.case_results}
     for phase in (
-        "running_on_judge0",
-        "sending_to_judge0",
-        "waiting_on_judge0",
+        "running_on_go_judge",
+        "sending_to_go_judge",
+        "waiting_on_go_judge",
         "waiting_to_send",
     ):
         if phase in phases:
@@ -154,9 +140,9 @@ def _case_friendly_message(result: SubmissionCaseResult) -> str:
     phase = _case_execution_phase(result)
     messages = {
         "waiting_to_send": "Waiting for TechniView to send this case.",
-        "sending_to_judge0": "Sending this case to Judge0.",
-        "waiting_on_judge0": "Queued in Judge0.",
-        "running_on_judge0": "Running in Judge0.",
+        "sending_to_go_judge": "Sending this case to go-judge.",
+        "waiting_on_go_judge": "Queued for go-judge.",
+        "running_on_go_judge": "Running in go-judge.",
     }
     if phase in messages:
         return messages[phase]
@@ -166,21 +152,21 @@ def _case_friendly_message(result: SubmissionCaseResult) -> str:
 
 
 def _error_for_status(status_id: int) -> ErrorCategory | None:
-    if status_id == Judge0Status.WRONG_ANSWER:
+    if status_id == ExecutionStatus.WRONG_ANSWER:
         return ErrorCategory.WRONG_ANSWER
-    if status_id == Judge0Status.TIME_LIMIT_EXCEEDED:
+    if status_id == ExecutionStatus.TIME_LIMIT_EXCEEDED:
         return ErrorCategory.TIMEOUT
-    if status_id == Judge0Status.COMPILATION_ERROR:
+    if status_id == ExecutionStatus.COMPILATION_ERROR:
         return ErrorCategory.COMPILE_ERROR
-    if status_id == Judge0Status.SIGXFSZ:
+    if status_id == ExecutionStatus.SIGXFSZ:
         return ErrorCategory.RESOURCE_LIMIT
     if status_id in {
-        Judge0Status.SIGSEGV,
-        Judge0Status.SIGFPE,
-        Judge0Status.SIGABRT,
-        Judge0Status.NZEC,
-        Judge0Status.RUNTIME_OTHER,
-        Judge0Status.EXEC_FORMAT_ERROR,
+        ExecutionStatus.SIGSEGV,
+        ExecutionStatus.SIGFPE,
+        ExecutionStatus.SIGABRT,
+        ExecutionStatus.NZEC,
+        ExecutionStatus.RUNTIME_OTHER,
+        ExecutionStatus.EXEC_FORMAT_ERROR,
     }:
         return ErrorCategory.RUNTIME_ERROR
     return None
@@ -218,7 +204,7 @@ def _report_text(value: object) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise TypeError("Judge0 returned a non-text report field")
+        raise TypeError("Runner returned a non-text report field")
     return value.encode("utf-8")[:MAX_REPORT_TEXT_BYTES].decode(
         "utf-8", errors="ignore"
     )
@@ -228,32 +214,32 @@ def _update_case_result(case_result: SubmissionCaseResult, data: dict) -> str | 
     if _is_terminal(case_result.judge0_status_id):
         return
     if not isinstance(data, dict):
-        raise ValueError("Judge0 returned a non-object submission report")
+        raise ValueError("Runner returned a non-object submission report")
     status = data.get("status") or {}
     if not isinstance(status, dict):
-        raise TypeError("Judge0 returned an invalid status")
+        raise TypeError("Runner returned an invalid status")
     status_id = status.get("id")
     if status_id is not None:
         status_id = int(status_id)
         if (
-            status_id < Judge0Status.IN_QUEUE
-            or status_id > Judge0Status.EXEC_FORMAT_ERROR
+            status_id < ExecutionStatus.IN_QUEUE
+            or status_id > ExecutionStatus.EXEC_FORMAT_ERROR
         ):
-            raise ValueError(f"Judge0 returned an unknown status: {status_id}")
+            raise ValueError(f"Runner returned an unknown status: {status_id}")
         case_result.judge0_status_id = status_id
-        case_result.infrastructure_error = status_id == Judge0Status.INTERNAL_ERROR
+        case_result.infrastructure_error = status_id == ExecutionStatus.INTERNAL_ERROR
     failure_code = data.get("infrastructure_error_code")
     if failure_code not in (None, "runner_outcome_unknown"):
-        raise ValueError("Judge0 returned an invalid execution failure code")
+        raise ValueError("Runner returned an invalid execution failure code")
     if data.get("time") is not None:
         execution_time_ms = Decimal(str(data["time"])) * Decimal("1000")
         if not execution_time_ms.is_finite() or execution_time_ms < 0:
-            raise ValueError("Judge0 returned an invalid execution time")
+            raise ValueError("Runner returned an invalid execution time")
         case_result.execution_time_ms = execution_time_ms.quantize(Decimal("0.001"))
     if data.get("memory") is not None:
         memory_kb = Decimal(str(data["memory"]))
         if not memory_kb.is_finite() or memory_kb < 0:
-            raise ValueError("Judge0 returned invalid memory usage")
+            raise ValueError("Runner returned invalid memory usage")
         case_result.memory_kb = int(memory_kb.to_integral_value(rounding=ROUND_CEILING))
     for field in ("stdout", "stderr", "compile_output"):
         if field in data:
@@ -275,7 +261,7 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
             submission.status = (
                 SubmissionStatus.RUNNING
                 if any(
-                    result.judge0_status_id == Judge0Status.PROCESSING
+                    result.judge0_status_id == ExecutionStatus.PROCESSING
                     for result in results
                 )
                 or submission.status == SubmissionStatus.RUNNING
@@ -292,7 +278,8 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
         submission.status = (
             SubmissionStatus.RUNNING
             if any(
-                result.judge0_status_id == Judge0Status.PROCESSING for result in results
+                result.judge0_status_id == ExecutionStatus.PROCESSING
+                for result in results
             )
             or submission.status == SubmissionStatus.RUNNING
             else SubmissionStatus.QUEUED
@@ -300,7 +287,7 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
         return
 
     passed_count = sum(
-        result.judge0_status_id == Judge0Status.ACCEPTED for result in results
+        result.judge0_status_id == ExecutionStatus.ACCEPTED for result in results
     )
     submission.completed_at = datetime.now(UTC).replace(tzinfo=None)
     submission.score = Decimal(passed_count) / Decimal(len(results))
@@ -354,7 +341,7 @@ def _submission_response(submission: Submission) -> dict:
         if result.visibility == TestVisibility.PUBLIC
     ]
     passed_count = sum(
-        result.judge0_status_id == Judge0Status.ACCEPTED
+        result.judge0_status_id == ExecutionStatus.ACCEPTED
         for result in submission.case_results
     )
     return {
@@ -508,7 +495,7 @@ def _mark_case_infrastructure_error(
     )
     if result is None:
         return
-    result.judge0_status_id = Judge0Status.INTERNAL_ERROR
+    result.judge0_status_id = ExecutionStatus.INTERNAL_ERROR
     result.infrastructure_error = True
     submission = _load_submission(db, submission_id)
     if submission is not None:
@@ -638,69 +625,6 @@ def get_submission_complexity(submission_id: int, db: DbSession, user: CurrentUs
     return analysis_response(db.get(ComplexityAnalysis, submission.id))
 
 
-@internal_router.put("/callbacks/{callback_token}", include_in_schema=False)
-def receive_judge0_callback(
-    callback_token: str,
-    data: dict,
-    db: DbSession,
-):
-    result = db.scalar(
-        select(SubmissionCaseResult).where(
-            SubmissionCaseResult.callback_token_hash == hash_token(callback_token)
-        )
-    )
-    if result is None:
-        raise HTTPException(status_code=404, detail="callback not found")
-    submission = _load_submission(db, result.submission_id)
-    if submission is None:
-        raise HTTPException(status_code=404, detail="submission not found")
-    result = db.scalar(
-        select(SubmissionCaseResult)
-        .where(
-            SubmissionCaseResult.submission_id == result.submission_id,
-            SubmissionCaseResult.test_case_id == result.test_case_id,
-        )
-        .with_for_update()
-    )
-    if result is None:
-        raise HTTPException(status_code=404, detail="callback not found")
-    reported_token = data.get("token")
-    if reported_token is not None and (
-        not isinstance(reported_token, str) or len(reported_token) > 36
-    ):
-        raise HTTPException(status_code=400, detail="invalid Judge0 token")
-    if (
-        reported_token is not None
-        and result.judge0_token is not None
-        and reported_token != result.judge0_token
-    ):
-        raise HTTPException(status_code=409, detail="callback token mismatch")
-    if submission.status in TERMINAL_SUBMISSION_STATUSES or _is_terminal(
-        result.judge0_status_id
-    ):
-        return {"ok": True}
-    if reported_token is not None:
-        result.judge0_token = reported_token
-    try:
-        report = dict(data)
-        for field in ("stdout", "stderr", "compile_output"):
-            if report.get(field) is not None:
-                if not isinstance(report[field], str):
-                    raise TypeError("Judge0 callback text must be a Base64 string")
-                report[field] = base64.b64decode(
-                    "".join(report[field].split()), validate=True
-                ).decode("utf-8", errors="replace")
-        failure_code = _update_case_result(result, report)
-        if failure_code is not None:
-            submission.failure_code = failure_code
-    except (TypeError, ValueError, ArithmeticError) as error:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="invalid Judge0 report") from error
-    _finalize_submission(db, submission)
-    db.commit()
-    return {"ok": True}
-
-
 def _course_item_ids(db: Session, course_id: int) -> list[int]:
     return list(
         db.scalars(
@@ -723,7 +647,7 @@ def _staff_submission_response(submission: Submission) -> dict:
             "friendly_message": (
                 get_status_message(result.judge0_status_id)
                 if result.judge0_status_id is not None
-                else get_status_message(Judge0Status.IN_QUEUE)
+                else get_status_message(ExecutionStatus.IN_QUEUE)
             ),
             "execution_time_ms": result.execution_time_ms,
             "memory_kb": result.memory_kb,
@@ -810,7 +734,7 @@ def get_course_submission(
     _staff: StaffMembership,
 ):
     # DB-only read: unlike the student view, staff inspection never polls
-    # Judge0 and never finalizes, so it performs no writes.
+    # go-judge and never finalizes, so it performs no writes.
     submission = db.scalar(
         select(Submission)
         .options(selectinload(Submission.case_results))

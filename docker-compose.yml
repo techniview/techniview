@@ -1,90 +1,24 @@
 name: techniview
 
 services:
-  server:
-    container_name: internal-judge0-fork-server
-    build:
-      context: ./internal-judge0-fork
-      target: api
-    image: internal-judge0-fork-api:local
+  go-judge:
+    build: ./go-judge
+    image: techniview-go-judge:local
     ports:
-      - "${JUDGE0_PORT:-2358}:2358"
-    command: /api/scripts/server
-    environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-      - JUDGE0_POSTGRES_HOST=db
-      - JUDGE0_POSTGRES_PORT=5432
-      - JUDGE0_POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - JUDGE0_POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - JUDGE0_POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - JUDGE0_REDIS_HOST=redis
-      - JUDGE0_REDIS_PORT=6379
-      - JUDGE0_REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-    depends_on:
-      - db
-      - redis
-
-  workers:
-    container_name: internal-judge0-fork-workers
-    build:
-      context: ./internal-judge0-fork
-      target: worker
-    image: internal-judge0-fork-worker:local
-    command: /api/scripts/workers
+      - "${GO_JUDGE_PORT:-5050}:5050"
+    privileged: true
     cgroup: private
     init: true
     cpus: ${RUNNER_CPU_LIMIT:-24}
     mem_limit: 8g
     memswap_limit: 8g
     environment:
-      - COUNT=${JUDGE0_WORKER_COUNT:-16}
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-      - JUDGE0_POSTGRES_HOST=db
-      - JUDGE0_POSTGRES_PORT=5432
-      - JUDGE0_POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - JUDGE0_POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - JUDGE0_POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - JUDGE0_REDIS_HOST=redis
-      - JUDGE0_REDIS_PORT=6379
-      - JUDGE0_REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-    privileged: true
-    security_opt:
-      - seccomp=unconfined
-    depends_on:
-      - db
-      - redis
-      - server
-
-  db:
-    container_name: techniview-postgres
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    container_name: techniview-redis
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD:-test_password}
-    volumes:
-      - redis_data:/data
+      GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-16}
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version")']
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
   mysql:
     container_name: techniview-mysql
@@ -120,21 +54,10 @@ services:
       - MYSQL_USER=${MYSQL_USER:-app_user}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
       - MYSQL_DB=${MYSQL_DB:-app_db}
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_password}
-      - RUNNER_GROUP_PROFILE=1
-      - RUNNER_GROUP_SECRET=${RUNNER_GROUP_SECRET:-techniview-local-group-secret-2026-only}
-      - JUDGE0_URL=http://server:2358
+      - GO_JUDGE_URL=http://go-judge:5050
       - BIG_O_OLLAMA_URL=${BIG_O_OLLAMA_URL:-}
       - BIG_O_OLLAMA_MODEL=${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
       - BIG_O_OLLAMA_TIMEOUT_SECONDS=${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
-      - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
       - EMAIL_DELIVERY_MODE=${EMAIL_DELIVERY_MODE:-capture}
       - EMAIL_SIGNING_KEY=${EMAIL_SIGNING_KEY:-techniview-local-only-email-signing-key-2026}
       - EMAIL_FROM=${EMAIL_FROM:-TechniView <noreply@example.test>}
@@ -144,10 +67,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      db:
-        condition: service_started
-      redis:
-        condition: service_started
+      go-judge:
+        condition: service_healthy
     command: bash -c "git -C /workspace config core.hooksPath .githooks 2>/dev/null || true; alembic upgrade head && python -m app.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   app_worker:
@@ -164,13 +85,11 @@ services:
       - MYSQL_USER=${MYSQL_USER:-app_user}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-app_password}
       - MYSQL_DB=${MYSQL_DB:-app_db}
-      - RUNNER_GROUP_PROFILE=1
-      - RUNNER_GROUP_SECRET=${RUNNER_GROUP_SECRET:-techniview-local-group-secret-2026-only}
-      - JUDGE0_URL=http://server:2358
+      - GO_JUDGE_URL=http://go-judge:5050
+      - DIRECT_WORKER_PROCESSES=${DIRECT_WORKER_PROCESSES:-4}
       - BIG_O_OLLAMA_URL=${BIG_O_OLLAMA_URL:-}
       - BIG_O_OLLAMA_MODEL=${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
       - BIG_O_OLLAMA_TIMEOUT_SECONDS=${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
-      - JUDGE0_CALLBACK_BASE_URL=${JUDGE0_CALLBACK_BASE_URL:-http://backend:8000/api/internal/judge0/callbacks}
       - EMAIL_DELIVERY_MODE=${EMAIL_DELIVERY_MODE:-capture}
       - EMAIL_SIGNING_KEY=${EMAIL_SIGNING_KEY:-techniview-local-only-email-signing-key-2026}
       - EMAIL_FROM=${EMAIL_FROM:-TechniView <noreply@example.test>}
@@ -182,9 +101,9 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-      server:
-        condition: service_started
-    command: python -m app.worker
+      go-judge:
+        condition: service_healthy
+    command: python -m app.worker.direct_supervisor
 
   complexity_worker:
     build: ./backend
@@ -225,6 +144,4 @@ services:
       - backend
 
 volumes:
-  postgres_data:
-  redis_data:
   mysql_data:

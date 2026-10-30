@@ -38,7 +38,6 @@ def passed(execution):
 async def test_direct_persists_results_without_callbacks(
     student_client, db_session, monkeypatch
 ):
-    monkeypatch.setattr(settings, "DIRECT_GO_JUDGE", True)
     monkeypatch.setattr(go_judge, "execute", passed)
     sid = await queue(student_client)
     assert process_next_submission(db_session, "first")
@@ -51,7 +50,6 @@ async def test_direct_persists_results_without_callbacks(
 async def test_direct_crash_never_reexecutes_started_case(
     student_client, db_session, monkeypatch
 ):
-    monkeypatch.setattr(settings, "DIRECT_GO_JUDGE", True)
     sid = await queue(student_client)
     calls = []
 

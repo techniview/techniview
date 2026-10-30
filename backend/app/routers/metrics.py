@@ -1,13 +1,10 @@
 from datetime import UTC, datetime
 
-import httpx
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import Integer, case, cast, func, select
 
-from ..core.config import settings
 from ..core.db import SessionLocal
-from ..core.judge0 import judge0_workers
 from ..core.observability import http_metrics
 from ..models import Submission, SubmissionCaseResult, SubmissionStatus
 
@@ -26,48 +23,9 @@ def _metric_labels(**values: str) -> str:
     return "{" + ",".join(labels) + "}"
 
 
-def _judge0_worker_metrics() -> list[str]:
-    if settings.DIRECT_GO_JUDGE:
-        return []
-    try:
-        queues = judge0_workers()
-        samples = [
-            "# HELP techniview_judge0_worker_status_scrape_success "
-            "Whether the live Judge0 worker status was fetched.",
-            "# TYPE techniview_judge0_worker_status_scrape_success gauge",
-            "techniview_judge0_worker_status_scrape_success 1",
-            "# HELP techniview_judge0_workers "
-            "Live Judge0 Resque workers by queue and state.",
-            "# TYPE techniview_judge0_workers gauge",
-            "# HELP techniview_judge0_queue_size "
-            "Jobs currently waiting in each Judge0 queue.",
-            "# TYPE techniview_judge0_queue_size gauge",
-        ]
-        for row in queues:
-            queue = str(row["queue"])
-            samples.append(
-                f"techniview_judge0_queue_size{_metric_labels(queue=queue)} "
-                f"{int(row['size'])}"
-            )
-            for state in ("available", "idle", "working", "paused"):
-                samples.append(
-                    f"techniview_judge0_workers"
-                    f"{_metric_labels(queue=queue, state=state)} "
-                    f"{int(row[state])}"
-                )
-        return samples
-    except (httpx.HTTPError, KeyError, TypeError, ValueError):
-        return [
-            "# HELP techniview_judge0_worker_status_scrape_success "
-            "Whether the live Judge0 worker status was fetched.",
-            "# TYPE techniview_judge0_worker_status_scrape_success gauge",
-            "techniview_judge0_worker_status_scrape_success 0",
-        ]
-
-
 @router.get("/metrics", include_in_schema=False)
 def metrics():
-    lines = [http_metrics.render().rstrip(), *_judge0_worker_metrics()]
+    lines = [http_metrics.render().rstrip()]
     with SessionLocal() as db:
         submission_counts = db.execute(
             select(
@@ -101,16 +59,16 @@ def metrics():
                     (SubmissionCaseResult.judge0_token.is_(None))
                     & (SubmissionCaseResult.judge0_status_id.is_(None))
                     & (SubmissionCaseResult.dispatch_started_at.is_not(None))
-                ).label("sending_to_judge0"),
+                ).label("sending_to_go_judge"),
                 _count_matching(
                     (SubmissionCaseResult.judge0_token.is_not(None))
                     & (
                         (SubmissionCaseResult.judge0_status_id.is_(None))
                         | (SubmissionCaseResult.judge0_status_id == 1)
                     )
-                ).label("waiting_on_judge0"),
+                ).label("waiting_on_go_judge"),
                 _count_matching(SubmissionCaseResult.judge0_status_id == 2).label(
-                    "running_on_judge0"
+                    "running_on_go_judge"
                 ),
                 _count_matching(SubmissionCaseResult.infrastructure_error).label(
                     "infrastructure_errors"
@@ -132,9 +90,9 @@ def metrics():
         for phase in (
             "total",
             "waiting_to_dispatch",
-            "sending_to_judge0",
-            "waiting_on_judge0",
-            "running_on_judge0",
+            "sending_to_go_judge",
+            "waiting_on_go_judge",
+            "running_on_go_judge",
             "infrastructure_errors",
         ):
             lines.append(

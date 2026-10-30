@@ -65,6 +65,7 @@ docker compose --env-file .env.production -f compose.production.yml \
 ```
 
 Check `/api/health` after restart and inspect worker logs for submissions that
-were in flight during the restore. Runner state lives on a separate VM. The app
-worker polls Judge0 after restart, and marks unrecoverable cases as infrastructure
-errors after the configured recovery deadline.
+were in flight during the restore. go-judge does not retain execution results.
+The app worker marks an interrupted case with an unknown execution outcome as
+an infrastructure error, so the student can submit again without using an
+attempt.

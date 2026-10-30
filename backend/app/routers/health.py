@@ -19,14 +19,10 @@ def mysql_is_available() -> bool:
         return False
 
 
-def judge0_is_available() -> bool:
+def go_judge_is_available() -> bool:
     try:
         with httpx.Client(timeout=HEALTH_CHECK_TIMEOUT_SECONDS) as client:
-            url = (
-                f"{settings.GO_JUDGE_URL}/version"
-                if settings.DIRECT_GO_JUDGE
-                else f"{settings.JUDGE0_URL}/about"
-            )
+            url = f"{settings.GO_JUDGE_URL}/version"
             response = client.get(url)
             response.raise_for_status()
         return True
@@ -44,7 +40,7 @@ def _response(ok: bool):
 @router.get("")
 @router.get("/")
 def health():
-    return _response(mysql_is_available() and judge0_is_available())
+    return _response(mysql_is_available() and go_judge_is_available())
 
 
 @router.get("/ready")
@@ -57,6 +53,6 @@ def health_mysql():
     return _response(mysql_is_available())
 
 
-@router.get("/judge0")
-def health_judge0():
-    return _response(judge0_is_available())
+@router.get("/go-judge")
+def health_go_judge():
+    return _response(go_judge_is_available())

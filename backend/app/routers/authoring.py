@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from ..core.dependencies import CurrentUser, DbSession
 from ..core.errors import ApiError
-from ..core.judge0 import judge0_submit
+from ..core.go_judge import Execution, execute
 from ..models import (
     Difficulty,
     ExecutionMode,
@@ -278,14 +278,14 @@ def validate_problem(problem_id: int, db: DbSession, user: CurrentUser):
         for case in p.test_cases:
             execution = build_case_execution(p, case, p.canonical_solution)
             try:
-                result = judge0_submit(
-                    execution.source_code,
-                    stdin=execution.stdin,
-                    expected_output=execution.expected_output,
-                    wait=True,
-                    timeout=10,
-                    cpu_time_limit=float(p.cpu_time_limit_seconds),
-                    memory_limit=p.memory_limit_kb,
+                result = execute(
+                    Execution(
+                        execution.source_code,
+                        execution.stdin,
+                        execution.expected_output,
+                        float(p.cpu_time_limit_seconds),
+                        p.memory_limit_kb,
+                    )
                 )
                 if result.get("status", {}).get("id") != 3:
                     issues.append(
