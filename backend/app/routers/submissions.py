@@ -321,6 +321,15 @@ def _finalize_submission(db: Session, submission: Submission) -> None:
 
 def _submission_response(submission: Submission) -> dict:
     done = submission.status in TERMINAL_SUBMISSION_STATUSES
+    now = datetime.now(UTC).replace(tzinfo=None)
+    wait_seconds = (
+        max(0.0, (submission.started_at - submission.submitted_at).total_seconds())
+        if submission.started_at is not None
+        else (
+            None if done else max(0.0, (now - submission.submitted_at).total_seconds())
+        )
+    )
+    execution_end = submission.completed_at or now
     public_results = [
         {
             "case_order": result.case_order,
@@ -365,7 +374,15 @@ def _submission_response(submission: Submission) -> dict:
         "primary_error": submission.primary_error,
         "python_exception_type": submission.python_exception_type,
         "submitted_at": submission.submitted_at,
+        "started_at": submission.started_at,
         "completed_at": submission.completed_at,
+        "wait_seconds": wait_seconds,
+        "execution_seconds": (
+            max(0.0, (execution_end - submission.started_at).total_seconds())
+            if submission.started_at is not None
+            and (not done or submission.completed_at is not None)
+            else None
+        ),
         "poll_url": f"/api/submissions/{submission.id}",
     }
 
