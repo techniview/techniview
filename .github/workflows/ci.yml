@@ -109,7 +109,7 @@ jobs:
       - name: Test standalone execution and API results
         run: |
           set -euo pipefail
-          export DIRECT_EXECUTION_SLOTS=4 DIRECT_WORKER_PROCESSES=1 RUNNER_CPU_LIMIT=6
+          export DIRECT_EXECUTION_SLOTS=4 DIRECT_WORKER_PROCESSES=1 RUNNER_CPU_LIMIT=4
           compose=(docker compose --env-file /dev/null -p techniview-direct-ci -f compose.integration.yml -f compose.direct-experiment.yml)
           trap '${compose[@]} down --volumes --remove-orphans' EXIT
           "${compose[@]}" up -d --build --wait --scale app_worker=4 backend go-judge app_worker

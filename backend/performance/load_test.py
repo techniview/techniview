@@ -248,7 +248,7 @@ async def _submit_once(
             flush=True,
         )
         deadline = started + _integer_setting(
-            "LOAD_COMPLETION_TIMEOUT_SECONDS", 300, 300
+            "LOAD_COMPLETION_TIMEOUT_SECONDS", 300, 3600
         )
         poll_errors = []
         while True:
@@ -703,7 +703,7 @@ def main() -> None:
         if workload
         else _integer_setting("LOAD_CASES_PER_SUBMISSION", 1, 10000)
     )
-    completion_timeout = _integer_setting("LOAD_COMPLETION_TIMEOUT_SECONDS", 300, 300)
+    completion_timeout = _integer_setting("LOAD_COMPLETION_TIMEOUT_SECONDS", 300, 3600)
     problem_id, assignment_item_id, tokens = _seed_load_scenario(
         students, cases_per_submission, workload
     )
