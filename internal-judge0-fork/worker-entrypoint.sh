@@ -1,27 +1,34 @@
-#!/bin/sh
-set -eu
-
-# Docker's private cgroup namespace restricts these operations to this container.
-root=/sys/fs/cgroup
-[ -f "$root/cgroup.controllers" ] || {
-    echo "Runner requires Linux cgroup v2 and a private cgroup namespace." >&2
-    exit 1
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -f /sys/fs/cgroup/cgroup.controllers ]] || { echo 'Runner requires cgroup v2' >&2; exit 1; }
+grep -qx '0::/' /proc/self/cgroup || { echo 'Runner requires a private cgroup namespace' >&2; exit 1; }
+export FORK_PER_JOB=false
+export GO_JUDGE_URL=http://127.0.0.1:5050
+# Both processes share this container's execution budget; Go owns sandbox cgroups.
+setsid /usr/local/bin/go-judge -http-addr 127.0.0.1:5050 -no-fallback \
+  -mount-conf /etc/go-judge-mount.yaml -parallelism "${COUNT:-16}" \
+  -output-limit "${MAX_MAX_FILE_SIZE:-4096}k" -copy-out-limit "${MAX_MAX_FILE_SIZE:-4096}k" -src-prefix /opt/python &
+go_pid=$!
+ruby_pid=
+cleanup() {
+  status=$?; trap - EXIT TERM INT
+  kill -TERM -- "-$go_pid" 2>/dev/null || true
+  if [[ -n "$ruby_pid" ]]; then kill -TERM "$ruby_pid" 2>/dev/null || true; fi
+  wait || true
+  exit "$status"
 }
-[ "$(wc -l < /proc/self/cgroup)" -eq 1 ]
-grep -qx '0::/' /proc/self/cgroup || {
-    echo "Runner requires a private cgroup namespace; host cgroups are unsupported." >&2
-    exit 1
-}
-mkdir -p "$root/manager"
-printf '%s\n' "$$" > "$root/manager/cgroup.procs"
-# init:true also places tini in the container; move it before enabling controllers.
-while read -r pid; do
-    [ -z "$pid" ] || printf '%s\n' "$pid" > "$root/manager/cgroup.procs"
-done < "$root/cgroup.procs"
-printf '%s\n' '+cpu +memory +pids' > "$root/cgroup.subtree_control"
-mkdir -p "$root/sandboxes" /run/isolate/locks /run/isolate/slots
-printf '%s\n' '+cpu +memory +pids' > "$root/sandboxes/cgroup.subtree_control"
-printf '%s\n' "$root/sandboxes" > /run/isolate/cgroup
-chown judge0:judge0 /run/isolate/slots
+trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+for attempt in $(seq 1 100); do
+  if /opt/python/bin/python3.14 -c 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version", timeout=1).read()' 2>/dev/null; then break; fi
+  kill -0 "$go_pid"
+  [[ "$attempt" != 100 ]] || exit 1
+  sleep 0.1
+done
 export HOME=/home/judge0
-exec setpriv --reuid=judge0 --regid=judge0 --init-groups /api/docker-entrypoint.sh "$@"
+setsid setpriv --reuid=judge0 --regid=judge0 --init-groups /api/docker-entrypoint.sh "$@" &
+ruby_pid=$!
+# Fail the service when either component exits, rather than advertise unused workers.
+wait -n "$go_pid" "$ruby_pid"
+exit 1

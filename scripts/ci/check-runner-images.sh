@@ -38,7 +38,8 @@ docker run --rm --network none --entrypoint sh "$api_image" -ec '
   test ! -d /opt/python
 '
 docker run --rm --network none --entrypoint sh "$worker_image" -ec '
-  isolate --version
+  ! command -v isolate
+  go-judge -version
   python3.14 -I -B -c "import bz2, ctypes, decimal, hashlib, lzma, math, sqlite3, ssl, uuid; print(ssl.OPENSSL_VERSION)"
   test ! -d /opt/python/include
   test ! -d /opt/python/lib/python3.14/test

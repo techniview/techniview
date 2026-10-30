@@ -222,3 +222,6 @@ __marimo__/
 # Node
 node_modules/
 frontend/dist/
+
+# Disposable integration verification artifacts
+test-results/
