@@ -254,6 +254,7 @@ services:
       - ./ops/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - monitoring
+      - grafana_access
     read_only: true
     tmpfs:
       - /tmp
@@ -294,3 +295,4 @@ networks:
   outbound:
   monitoring:
     internal: true
+  grafana_access:
