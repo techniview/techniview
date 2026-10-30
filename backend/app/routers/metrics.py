@@ -104,7 +104,10 @@ def metrics():
             select(
                 func.count().label("count"),
                 func.min(Submission.submitted_at).label("oldest"),
-            ).where(Submission.status == SubmissionStatus.QUEUED)
+            ).where(
+                Submission.status == SubmissionStatus.QUEUED,
+                Submission.started_at.is_(None),
+            )
         ).one()
         oldest_age = (
             max(
