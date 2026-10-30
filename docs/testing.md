@@ -23,8 +23,15 @@ pre-commit hook runs local checks without rewriting files.
   submission. Reports include source code and cases, image IDs, commit, host
   and worker profile, completion and queue-wait percentiles, batch time,
   throughput, case counts, and p95 case CPU time as a fraction of its CPU
-  limit. The CPU-heavy case sums 4,999-by-4,999 modular products with a
-  three-second case limit. CI fails a workload only when median batch time
+  limit. The CPU-heavy case sums 4,999-by-4,999 modular products with an
+  eight-second case limit. In CI run 41089874056, its five-student warm-up
+  measured 2.64 seconds p95 under the former three-second limit, or 88 percent
+  of that limit. The following 100-student runs timed out many cases. With the
+  current eight-second limit, that same measured p95 would use 33 percent of
+  the limit. A local one-CPU smoke with the eight-second cap measured p95 case
+  CPU time of 1.03 seconds for base and 0.98 seconds for proposed, 13 and 12
+  percent of the cap. The next CI run must confirm the new limit on its host.
+  CI fails a workload only when median batch time
   is both more than 50 percent and more than two seconds slower than base. It
   compares each workload on its own and never combines results into one score.
   CI uploads base and proposed reports even when a run fails. If a new branch

@@ -23,7 +23,7 @@
       "function_name": "sum_pair_products_mod97",
       "starter_code": "def sum_pair_products_mod97(limit):\n    pass",
       "canonical_solution": "def sum_pair_products_mod97(limit):\n    total = 0\n    for left in range(1, limit):\n        for right in range(1, limit):\n            total += (left * right) % 97\n    return total",
-      "cpu_time_limit_seconds": 3.0,
+      "cpu_time_limit_seconds": 8.0,
       "memory_limit_kb": 128000,
       "test_cases": [
         {"visibility": "hidden", "input": "[5000]", "expected_output": "1187409022"}
