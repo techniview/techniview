@@ -3,6 +3,10 @@
 Production uses standalone go-judge 1.13.3 with Python 3.14.8. The application
 owns durable submission and case attempts in MySQL, grades the returned output,
 and marks interrupted attempts as unknown. go-judge owns sandbox execution only.
+The runner image pins the Debian base by digest and installs build and runtime
+packages from a fixed Debian snapshot. The Python source archive and go-judge
+binary are checksum-verified. The runtime keeps Python's OpenSSL library and CA
+bundle without the unused `openssl` command-line package.
 
 The earlier Judge0 fork, grouped Ruby workers, PostgreSQL, and Redis were part of
 the hybrid experiment. They are no longer built or deployed. The A100 comparison

@@ -46,6 +46,17 @@ def test_direct_sandbox_limits(source, expected, code, cpu, memory):
     assert report["stdout"] != "bad\n"
 
 
+def test_direct_sandbox_loads_ca_bundle():
+    source = (
+        "import ssl; count = ssl.create_default_context().cert_store_stats()"
+        "['x509_ca']; print('ok' if count >= 100 else str(count))"
+    )
+    report = go_judge.execute(go_judge.Execution(source, "", "ok", 2, 128000))
+
+    assert report["status"]["id"] == 3, report
+    assert report["stdout"].strip() == "ok", report
+
+
 def test_direct_cases_are_fresh():
     first = (
         "import collections; collections.marker=True; "
