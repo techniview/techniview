@@ -87,7 +87,7 @@ async def _submit_pass(client, db_session, problem_id, item_id):
         },
     )
     assert created.status_code == 202
-    with patch("app.worker.submissions.judge0_submit", side_effect=ALL_PASS):
+    with patch("app.core.go_judge.execute", side_effect=ALL_PASS):
         assert process_next_submission(db_session, "late-test")
     return await client.get(f"/api/submissions/{created.json()['id']}")
 
@@ -194,7 +194,7 @@ async def test_approve_on_time_submission_rejected(client, db_session):
     await _login(client, "student@techniview.local", "student-demo")
     assignments = await client.get(f"/api/courses/{course_id}/assignments")
     on_time_item = assignments.json()["items"][0]["items"][0]
-    with patch("app.worker.submissions.judge0_submit", side_effect=ALL_PASS):
+    with patch("app.core.go_judge.execute", side_effect=ALL_PASS):
         created = await client.post(
             "/api/submissions",
             headers={"Idempotency-Key": uuid4().hex},

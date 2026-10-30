@@ -182,7 +182,7 @@ minutes old.
 The backend exposes Prometheus text metrics at `/api/metrics`, including API
 request latency, submission status, queue depth, and queue age. Scrape this
 endpoint from the app Docker network. The direct execution path does not expose
-Judge0 Resque worker metrics. Monitor go-judge through container health, CPU,
+Monitor go-judge through container health, CPU,
 memory, and restart counts.
 
 The Compose projects use Docker's rotating `local` log driver and retain the

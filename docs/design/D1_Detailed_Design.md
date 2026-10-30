@@ -1,5 +1,8 @@
 # TechniView D1: Detailed design
 
+> Historical design snapshot. The current runner is standalone go-judge; see
+> [runner decision](../runner-decision.md) and [deployment](../deployment.md).
+
 ## Header, scope, and conventions
 
 **Project title:** TechniView Design Diagram  

@@ -17,7 +17,7 @@ docker build -f backend/Dockerfile.prod \
   -t "$image_namespace/backend:$GITHUB_SHA" backend
 docker build -f frontend/Dockerfile.prod \
   -t "$image_namespace/frontend:$GITHUB_SHA" frontend
-docker build --target direct -t "$image_namespace/go-judge:$GITHUB_SHA" internal-judge0-fork
+docker build -t "$image_namespace/go-judge:$GITHUB_SHA" go-judge
 ./scripts/ci/check-go-judge-image.sh "$image_namespace/go-judge:$GITHUB_SHA"
 
 docker push "$image_namespace/backend:$GITHUB_SHA"

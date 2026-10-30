@@ -6,12 +6,12 @@ cd "$ROOT"
 
 project=techniview-direct-restart
 results="$ROOT/test-results/direct-restart"
-compose=(docker compose --env-file /dev/null -p "$project" -f compose.integration.yml -f compose.direct-experiment.yml)
+compose=(docker compose --env-file /dev/null -p "$project" -f compose.integration.yml)
 base_compose=("${compose[@]}")
 
 mkdir -p "$results"
 rm -f "$results/restart-test.log"
-export DIRECT_EXECUTION_SLOTS=4 DIRECT_WORKER_PROCESSES=1 RUNNER_CPU_LIMIT=6
+export GO_JUDGE_PARALLELISM=4 DIRECT_WORKER_PROCESSES=1 RUNNER_CPU_LIMIT=6
 
 running=$("${base_compose[@]}" ps --status running -q)
 if [[ -n "$running" ]]; then
@@ -37,7 +37,7 @@ test_log="$results/restart-test.log"
 mkdir -p "$results"
 "${compose[@]}" run --rm --no-deps -e DIRECT_RESTART_TEST=1 tests \
   python -m pytest -v -s \
-  integration/test_direct_runner.py::test_direct_worker_restart \
+  integration/test_go_judge.py::test_direct_worker_restart \
   --override-ini=pythonpath=. > "$test_log" 2>&1 &
 test_pid=$!
 

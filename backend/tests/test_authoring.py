@@ -87,7 +87,6 @@ async def test_published_builtin_problem_cannot_be_edited_in_place(teacher_clien
 async def test_draft_edits_preserve_queued_and_running_case_snapshots(
     teacher_client, db_session, monkeypatch, dispatch_before_edit
 ):
-    from app.models import Submission
     from app.worker.submissions import process_next_submission
     from sqlalchemy import text
 
@@ -108,15 +107,16 @@ async def test_draft_edits_preserve_queued_and_running_case_snapshots(
     run_id = response.json()["id"]
     calls = []
 
-    def submit(source, **kwargs):
-        calls.append((source, kwargs))
-        return {"token": "snapshot-token", "status": {"id": 1}}
+    def submit(execution):
+        calls.append(execution)
+        return {
+            "status": {"id": 3},
+            "stdout": execution.expected + "\n",
+            "time": 0.01,
+            "memory": 128,
+        }
 
-    monkeypatch.setattr("app.worker.submissions.judge0_submit", submit)
-    monkeypatch.setattr(
-        "app.worker.submissions.judge0_get",
-        lambda token: {"token": token, "status": {"id": 3}, "stdout": "1\n"},
-    )
+    monkeypatch.setattr("app.core.go_judge.execute", submit)
     if dispatch_before_edit:
         assert process_next_submission(db_session, "snapshot-test")
     replacement = problem_payload()
@@ -132,18 +132,13 @@ async def test_draft_edits_preserve_queued_and_running_case_snapshots(
     if not dispatch_before_edit:
         assert process_next_submission(db_session, "snapshot-test")
     assert len(calls) == 1
-    source, options = calls[0]
+    execution = calls[0]
+    source = execution.source
     assert "__techniview_name = 'solve'" in source
     assert "__techniview_json.loads('[1]')" in source
-    assert options["expected_output"] == "1"
-    assert options["cpu_time_limit"] == 2
-    assert options["memory_limit"] == 64000
-    run = db_session.get(Submission, run_id)
-    run.next_check_at = None
-    for case_result in run.case_results:
-        case_result.next_attempt_at = None
-    db_session.commit()
-    assert process_next_submission(db_session, "snapshot-test")
+    assert execution.expected == "1"
+    assert execution.cpu_seconds == 2
+    assert execution.memory_kb == 64000
     result = await teacher_client.get(f"/api/submissions/{run_id}")
     assert result.status_code == 200, result.text
     assert result.json()["status"] == "passed"

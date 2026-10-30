@@ -115,20 +115,6 @@ markupsafe==3.0.3 \
     --hash=sha256:f3e98bb3798ead92273dc0e5fd0f31ade220f59a266ffd8a4f6065e0a3ce0523 \
     --hash=sha256:fed51ac40f757d41b7c48425901843666a6677e3e8eb0abcff09e4ba6e664f50
     # via mako
-psycopg2-binary==2.9.12 \
-    --hash=sha256:1006fb62f0f0bc5ce256a832356c6262e91be43f5e4eb15b5eaf38079464caf2 \
-    --hash=sha256:527e6342b3e44c2f0544f6b8e927d60de7f163f5723b8f1dfa7d2a84298738cd \
-    --hash=sha256:54a0dfecab1b48731f934e06139dfe11e24219fb6d0ceb32177cf0375f14c7b5 \
-    --hash=sha256:5ac9444edc768c02a6b6a591f070b8aae28ff3a99be57560ac996001580f294c \
-    --hash=sha256:6f3b3de8a74ef8db215f22edffb19e32dc6fa41340456de7ec99efdc8a7b3ec2 \
-    --hash=sha256:77b348775efd4cdab410ec6609d81ccecd1139c90265fa583a7255c8064bc03d \
-    --hash=sha256:840066105706cd2eb29b9a1c2329620056582a4bf3e8169dec5c447042d0869f \
-    --hash=sha256:863f5d12241ebe1c76a72a04c2113b6dc905f90b9cef0e9be0efd994affd9354 \
-    --hash=sha256:96937c9c5d891f772430f418a7a8b4691a90c3e6b93cf72b5bd7cad8cbca32a5 \
-    --hash=sha256:a99eaab34a9010f1a086b126de467466620a750634d114d20455f3a824aae033 \
-    --hash=sha256:f12ae41fcafadb39b2785e64a40f9db05d6de2ac114077457e0e7c597f3af980 \
-    --hash=sha256:ffdd7dc5463ccd61845ac37b7012d0f35a1548df9febe14f8dd549be4a0bc81e
-    # via techniview-backend
 pydantic==2.13.5 \
     --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73 \
     --hash=sha256:51a9c5f7b2f8e636f04c6cada605d9b6a3bf1348fdf945a3d8869b19bba0ee08
@@ -195,10 +181,6 @@ pyyaml==6.0.3 \
     --hash=sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f \
     --hash=sha256:ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b
     # via uvicorn
-redis==8.1.0 \
-    --hash=sha256:6e1a19beef9225c83efd689c7e6b7da2d5215b1f42cd13b7fc3714d0a09c7b25 \
-    --hash=sha256:a4fe1aac3d3b3cc791d4b3d5931c5a956045dc951ee74d1c913ee3ac4d2ee9fb
-    # via techniview-backend
 sqlalchemy==2.0.52 \
     --hash=sha256:3b81b8363a919ce53453591cdb93702e6bd54ade6c4fa2f468fc053baee5ed89 \
     --hash=sha256:410d52be41d17f1a236d19520fbe776257dc16516ed06bd16d433311842aefd9 \

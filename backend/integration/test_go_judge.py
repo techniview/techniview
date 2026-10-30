@@ -1,4 +1,4 @@
-"""Direct sandbox probes; run only in the disposable direct stack."""
+"""Real sandbox probes in the disposable integration stack."""
 
 import os
 import time
@@ -7,14 +7,14 @@ from uuid import uuid4
 import pytest
 from app.core import go_judge
 from app.models import Problem, Submission
-from integration import test_judge0_mysql as fixtures
+from integration import test_submission_mysql as fixtures
 from sqlalchemy import select
 
 client = fixtures.client
 database = fixtures.database
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("DIRECT_GO_JUDGE") != "1" or os.getenv("INTEGRATION_TESTS") != "1",
+    os.getenv("INTEGRATION_TESTS") != "1",
     reason="requires direct integration stack",
 )
 

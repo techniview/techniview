@@ -4,8 +4,8 @@ import signal
 import time
 
 from ..core.db import SessionLocal
-from ..core.judge0 import managed_judge0_client
 from ..core.observability import configure_logging, log_event
+from ..core.runner_http import managed_runner_client
 from ..services.email_delivery import process_email_jobs
 from .submissions import process_next_submission, purge_expired_idempotency_keys
 
@@ -25,7 +25,7 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    with managed_judge0_client():
+    with managed_runner_client():
         while not stopping:
             try:
                 with SessionLocal() as db:

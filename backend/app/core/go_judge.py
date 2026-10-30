@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import httpx
 
 from .config import settings
-from .judge0 import _request_client
+from .runner_http import request_client
 
 
 class OutcomeUnknown(Exception):
@@ -49,7 +49,7 @@ def execute(case: Execution) -> dict:
         "procLimit": 60,
     }
     try:
-        with _request_client() as client:
+        with request_client() as client:
             response = client.post(
                 f"{settings.GO_JUDGE_URL}/run",
                 json={"cmd": [command]},

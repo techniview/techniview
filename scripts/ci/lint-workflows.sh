@@ -12,9 +12,7 @@ fi
 
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck -S warning .githooks/pre-commit scripts/setup-hooks.sh scripts/ci/*.sh \
-    scripts/backup-mysql.sh internal-judge0-fork/worker-entrypoint.sh \
-    internal-judge0-fork/api/docker-entrypoint.sh \
-    internal-judge0-fork/api/scripts/server internal-judge0-fork/api/scripts/workers
+    scripts/backup-mysql.sh scripts/verify-direct-runner.sh
 else
   echo "shellcheck is required to lint shell scripts." >&2
   exit 1

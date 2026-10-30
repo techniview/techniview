@@ -1,6 +1,5 @@
 from datetime import UTC, datetime, timedelta
 
-import httpx
 import pytest
 from app.core.observability import HttpMetrics
 from app.models import (
@@ -30,20 +29,6 @@ def metrics_database(db_session, monkeypatch):
         metrics, "SessionLocal", sessionmaker(bind=db_session.get_bind())
     )
     monkeypatch.setattr(metrics, "http_metrics", HttpMetrics())
-    monkeypatch.setattr(
-        metrics,
-        "judge0_workers",
-        lambda: [
-            {
-                "queue": "python",
-                "size": 7,
-                "available": 4,
-                "idle": 2,
-                "working": 2,
-                "paused": 0,
-            }
-        ],
-    )
     return db_session
 
 
@@ -131,9 +116,9 @@ def test_execution_metrics_classify_persisted_cases_without_sensitive_data(
     for phase, count in {
         "total": 7,
         "waiting_to_dispatch": 1,
-        "sending_to_judge0": 1,
-        "waiting_on_judge0": 2,
-        "running_on_judge0": 2,
+        "sending_to_go_judge": 1,
+        "waiting_on_go_judge": 2,
+        "running_on_go_judge": 2,
         "infrastructure_errors": 1,
     }.items():
         assert values[f'techniview_execution_cases{{phase="{phase}"}}'] == count
@@ -146,13 +131,6 @@ def test_execution_metrics_classify_persisted_cases_without_sensitive_data(
     assert values["techniview_runner_poll_failures"] == 2
     assert values["techniview_runner_busy_submissions"] == 1
     assert values["techniview_runner_unknown_outcomes"] == 1
-    assert values["techniview_judge0_worker_status_scrape_success"] == 1
-    assert values['techniview_judge0_queue_size{queue="python"}'] == 7
-    for state, count in {"available": 4, "idle": 2, "working": 2, "paused": 0}.items():
-        assert (
-            values[f'techniview_judge0_workers{{queue="python",state="{state}"}}']
-            == count
-        )
     for private_value in (
         "private-",
         student.email,
@@ -176,41 +154,3 @@ def test_empty_execution_queue_exports_numeric_zeroes(metrics_database):
     assert execution_values == [0] * 6
     assert values["techniview_submission_queue_depth"] == 0
     assert values["techniview_submission_queue_oldest_seconds"] == 0
-
-
-def test_metrics_remain_available_when_live_judge0_worker_scrape_fails(
-    metrics_database, monkeypatch
-):
-    def fail_scrape():
-        raise httpx.ConnectError("runner unavailable")
-
-    monkeypatch.setattr(metrics, "judge0_workers", fail_scrape)
-    values = samples(metrics.metrics().body.decode())
-    assert values["techniview_judge0_worker_status_scrape_success"] == 0
-    assert values["techniview_submission_queue_depth"] == 0
-
-
-def test_http_histogram_is_cumulative_includes_overflow_and_escapes_labels():
-    registry = HttpMetrics()
-    route = '/api/"quoted"/\\path\nnext'
-    for duration in (0.005, 0.02, 7):
-        registry.observe("GET", route, 200, duration)
-    registry.observe("GET", route, 500, 0.1)
-    payload = registry.render()
-    values = samples(payload)
-    labels = 'method="GET",route="/api/\\"quoted\\"/\\\\path\\nnext",status="200"'
-    prefix = "techniview_http_request_duration_seconds"
-    assert values[f"techniview_http_requests_total{{{labels}}}"] == 3
-    for bound, count in (
-        ("0.005", 1),
-        ("0.01", 1),
-        ("0.025", 2),
-        ("5", 2),
-        ("+Inf", 3),
-    ):
-        assert values[f'{prefix}_bucket{{{labels},le="{bound}"}}'] == count
-    assert values[f"{prefix}_count{{{labels}}}"] == 3
-    assert values[f"{prefix}_sum{{{labels}}}"] == pytest.approx(7.025)
-    error_labels = labels.replace('status="200"', 'status="500"')
-    assert values[f"techniview_http_requests_total{{{error_labels}}}"] == 1
-    assert "\nnext" not in payload

@@ -1,6 +1,5 @@
 from datetime import timedelta
 from unittest.mock import patch
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -18,13 +17,10 @@ from sqlalchemy import select
 pytestmark = pytest.mark.anyio
 
 
-def _run(db, reports, polling=None):
-    with patch("app.worker.submissions.judge0_submit", side_effect=reports) as submit:
-        with patch(
-            "app.worker.submissions.judge0_get", side_effect=polling or []
-        ) as get:
-            assert process_next_submission(db, "test-worker") is True
-    return submit, get
+def _run(db, reports):
+    with patch("app.core.go_judge.execute", side_effect=reports) as execute:
+        assert process_next_submission(db, "test-worker") is True
+    return execute
 
 
 async def _problem_id(client, title):
@@ -86,7 +82,7 @@ async def test_worker_runs_server_cases_and_redacts_hidden_case(
         },
         {"token": "hidden-token", "status": {"id": 4}, "stdout": "wrong\n"},
     ]
-    submit, _ = _run(db_session, reports)
+    execute = _run(db_session, reports)
     body = (await student_client.get(f"/api/submissions/{created.json()['id']}")).json()
     assert body["status"] == "failed"
     assert body["score"] == 0.5
@@ -96,47 +92,11 @@ async def test_worker_runs_server_cases_and_redacts_hidden_case(
     assert body["public_results"][0]["execution_time_ms"] == 125
     assert "wrong\n" not in str(body)
     assert "[[-2, 2]]" not in str(body)
-    assert submit.call_count == 2
-    assert [call.kwargs["expected_output"] for call in submit.call_args_list] == [
-        "6",
-        "0",
-    ]
-    assert all("language_id" not in call.kwargs for call in submit.call_args_list)
+    assert execute.call_count == 2
+    assert [call.args[0].expected for call in execute.call_args_list] == ["6", "0"]
 
 
-async def test_callback_finalizes_without_student_poll(student_client, db_session):
-    problem_id = await _problem_id(student_client, "Sum a List")
-    created = await student_client.post(
-        "/api/submissions",
-        json={"problem_id": problem_id, "source_code": "print(2)"},
-        headers={"Idempotency-Key": uuid4().hex},
-    )
-    submit, _ = _run(db_session, [{"token": "callback-1"}, {"token": "callback-2"}])
-    paths = [urlsplit(c.kwargs["callback_url"]).path for c in submit.call_args_list]
-    for path, token in zip(paths, ("callback-1", "callback-2"), strict=True):
-        callback = await student_client.put(
-            path,
-            json={
-                "token": token,
-                "status": {"id": 3},
-                "stdout": "Mgo=",
-                "time": "0.01",
-                "memory": 12,
-            },
-        )
-        assert callback.status_code == 200
-        assert (
-            await student_client.put(path, json={"token": token, "status": {"id": 3}})
-        ).status_code == 200
-    row = db_session.get(Submission, created.json()["id"])
-    assert row.status == "passed"
-    assert all(case.execution_time_ms == 10 for case in row.case_results)
-    assert (await student_client.get(f"/api/submissions/{row.id}")).json()[
-        "done"
-    ] is True
-
-
-async def test_worker_polling_updates_progress_once(student_client, db_session):
+async def test_direct_execution_updates_progress_once(student_client, db_session):
     problem_id = await _problem_id(student_client, "Count Evens")
     created = await student_client.post(
         "/api/submissions",
@@ -144,21 +104,15 @@ async def test_worker_polling_updates_progress_once(student_client, db_session):
         headers={"Idempotency-Key": uuid4().hex},
     )
     assert created.status_code == 202
-    _run(db_session, [{"token": "poll-token", "status": {"id": 1}}])
+    _run(db_session, [{"status": {"id": 3}, "stdout": "2\n", "time": 0.01}])
     row = db_session.get(Submission, created.json()["id"])
-    row.next_check_at = utc_now() - timedelta(seconds=1)
-    row.case_results[0].next_attempt_at = utc_now() - timedelta(seconds=1)
-    db_session.commit()
-    _run(db_session, [], [{"token": "poll-token", "status": {"id": 3}}])
-    assert (await student_client.get(f"/api/submissions/{row.id}")).json()[
-        "done"
-    ] is True
+    assert (await student_client.get(f"/api/submissions/{row.id}")).json()["done"]
     retry = await student_client.post(
         "/api/submissions",
         json={"problem_id": problem_id, "source_code": "print(0)"},
         headers={"Idempotency-Key": uuid4().hex},
     )
-    _run(db_session, [{"token": "retry-token", "status": {"id": 4}}])
+    _run(db_session, [{"status": {"id": 4}, "stdout": "0\n", "time": 0.01}])
     assert retry.status_code == 202
     student_id = (await student_client.get("/api/auth/me")).json()["id"]
     db_session.expire_all()
@@ -293,10 +247,9 @@ async def test_graded_submission_idempotency_precedes_active_attempt_conflict(
     assert changed.json()["error"]["code"] == "idempotency_key_reused"
 
 
-@pytest.mark.parametrize("delivery", ["response", "callback"])
-async def test_runner_reported_unknown_outcome_is_retryable(
-    student_client, db_session, delivery
-):
+async def test_runner_reported_unknown_outcome_is_retryable(student_client, db_session):
+    from app.core import go_judge
+
     problem_id = await _problem_id(student_client, "Sum a List")
     response = await student_client.post(
         "/api/submissions",
@@ -305,31 +258,8 @@ async def test_runner_reported_unknown_outcome_is_retryable(
     )
     assert response.status_code == 202
     submission_id = response.json()["id"]
-    count = len(
-        db_session.scalars(
-            select(SubmissionCaseResult).where(
-                SubmissionCaseResult.submission_id == submission_id
-            )
-        ).all()
-    )
-    reports = [
-        {
-            "token": f"unknown-outcome-{index}",
-            "status": {"id": 13},
-            "infrastructure_error_code": "runner_outcome_unknown",
-        }
-        for index in range(count)
-    ]
-    if delivery == "response":
-        _run(db_session, reports)
-    else:
-        submitted, _ = _run(
-            db_session, [{"token": report["token"]} for report in reports]
-        )
-        for call, report in zip(submitted.call_args_list, reports, strict=True):
-            path = urlsplit(call.kwargs["callback_url"]).path
-            callback = await student_client.put(path, json=report)
-            assert callback.status_code == 200
+    with patch("app.core.go_judge.execute", side_effect=go_judge.OutcomeUnknown):
+        assert process_next_submission(db_session, "unknown-worker")
     result = (await student_client.get(f"/api/submissions/{submission_id}")).json()
     assert result["failure_code"] == "runner_outcome_unknown"
     assert result["retryable"] is True

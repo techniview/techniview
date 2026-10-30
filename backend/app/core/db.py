@@ -1,7 +1,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 
-import psycopg2
 import pymysql
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -31,22 +30,6 @@ def mysql_conn():
         user=settings.MYSQL_USER,
         password=settings.MYSQL_PASSWORD,
         database=settings.MYSQL_DB,
-        connect_timeout=2,
-    )
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-@contextmanager
-def postgres_conn():
-    conn = psycopg2.connect(
-        host=settings.POSTGRES_HOST,
-        port=settings.POSTGRES_PORT,
-        dbname=settings.POSTGRES_DB,
-        user=settings.POSTGRES_USER,
-        password=settings.POSTGRES_PASSWORD,
         connect_timeout=2,
     )
     try:

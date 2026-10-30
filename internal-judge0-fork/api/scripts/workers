@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-export FORK_PER_JOB=false
-exec bundle exec ruby scripts/worker_supervisor.rb

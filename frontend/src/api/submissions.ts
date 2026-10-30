@@ -16,9 +16,9 @@ export type SubmissionResult = {
 
 export type ExecutionPhase =
     | "waiting_to_send"
-    | "sending_to_judge0"
-    | "waiting_on_judge0"
-    | "running_on_judge0"
+    | "sending_to_go_judge"
+    | "waiting_on_go_judge"
+    | "running_on_go_judge"
     | "complete";
 
 export type Submission = {

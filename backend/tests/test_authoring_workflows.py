@@ -42,19 +42,19 @@ def test_canonical_validation_checks_every_case_and_reports_failure(
     created = authoring.create_problem(_problem_input(), db_session, professor)
     calls = []
 
-    def passing_runner(source, **kwargs):
-        calls.append((source, kwargs))
+    def passing_runner(execution):
+        calls.append(execution)
         return {"status": {"id": 3}}
 
-    monkeypatch.setattr(authoring, "judge0_submit", passing_runner)
+    monkeypatch.setattr(authoring, "execute", passing_runner)
     result = authoring.validate_problem(created["id"], db_session, professor)
     assert result == {"valid": True, "issues": []}
     assert len(calls) == 2
 
     monkeypatch.setattr(
         authoring,
-        "judge0_submit",
-        lambda *_args, **_kwargs: {"status": {"id": 4}},
+        "execute",
+        lambda _execution: {"status": {"id": 4}},
     )
     result = authoring.validate_problem(created["id"], db_session, professor)
     assert result["valid"] is False

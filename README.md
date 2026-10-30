@@ -10,7 +10,7 @@ LeetCode-style practice problems with class tracking attached. Built so intervie
 docker compose up -d --build
 ```
 
-- Runner API at http://localhost:2358 (Judge0-derived orchestration, go-judge execution)
+- go-judge sandbox at http://localhost:5050 (private in production)
 - Backend at http://localhost:8000/api/docs
 - Frontend at http://localhost:5173
 - Health check at http://localhost:8000/api/health
@@ -21,8 +21,8 @@ curl http://localhost:8000/api/health | jq
 
 ## What is in here
 
-- docker-compose.yml - brings up Judge0, Postgres, Redis, MySQL and the backend
-- internal-judge0-fork - Python-only Judge0 fork and maintenance notes
+- docker-compose.yml - brings up go-judge, MySQL, the backend, and application workers
+- go-judge - pinned go-judge and Python sandbox image
 - backend - FastAPI on Python 3.14
   - main.py
   - requirements.txt
@@ -31,7 +31,7 @@ curl http://localhost:8000/api/health | jq
   - app/services - response shaping and shared analytics formulas
   - app/models - SQLAlchemy application schema
   - migrations - Alembic schema revisions
-  - app/worker - durable Judge0 dispatch, polling recovery, and email delivery
+  - app/worker - durable go-judge execution, recovery, and email delivery
 - frontend - Vite + React + strict TypeScript, with login, student problem/statistics, and teacher class/problem/analytics routes
 - docs - research notes and tests; the design set is in [docs/design](docs/design/), with D0, D1, D2, user stories, and review notes
 - .githooks - versioned pre-commit hook
@@ -48,17 +48,11 @@ cp .env.example .env
 
 Compose works without `.env` too, it falls back to dev defaults.
 
-Judge0 sends completed execution reports to the backend callback URL. Compose
-uses `http://backend:8000/api/internal/judge0/callbacks` by default. Set
-`JUDGE0_CALLBACK_BASE_URL` when Judge0 needs a different route to reach the API.
-TechniView maintains an internal image derived from Judge0 in
-`internal-judge0-fork/`, with Python 3.14 as its only active language.
-The fork builds separate API and Python worker images from a supported slim
-base. Release CI publishes both to GHCR. Build and start them locally with
-`docker compose up -d --build`; the worker needs Linux cgroup v2.
-TechniView submissions do not include a language selector or Judge0 language
-ID. The fork maps each request to its only active Python runtime internally;
-Judge0 still uses a language database key for its own records.
+go-judge executes Python 3.14 in a fresh sandbox for each case. The application
+worker records each case attempt in MySQL before execution and stores the result
+when go-judge returns. If a worker dies after dispatch, recovery records an
+unknown outcome instead of running the case again. The runner needs Linux cgroup
+v2 and privileged container access.
 
 ## Dev setup
 
@@ -69,7 +63,7 @@ dependencies, and turns the hooks on. Hooks run checks only. They do not install
 tools or rewrite files.
 
 `make check` runs the local checks. `make verify` also builds the frontend and
-runs the temporary MySQL/Judge0 integration suite. The checks are:
+runs the temporary MySQL/go-judge integration suite. The checks are:
 
 - ruff check backend - lint imports and style
 - ruff format --check backend - verify 88-column, double-quote formatting
@@ -86,7 +80,7 @@ make fmt   # ruff fix + format, prettier --write
 make check # lint and fast tests
 make build # frontend production build
 make verify # check + build + integration tests
-make integration # disposable MySQL + Judge0 integration stack (requires Docker)
+make integration # disposable MySQL + go-judge integration stack (requires Docker)
 make up    # docker compose up -d --build
 make down  # docker compose down
 ```
@@ -117,25 +111,17 @@ The API uses an HTTP-only session cookie. Its OpenAPI contract is available at
 `assignment_id` query filters.
 
 Student submission requests return `202` with a submission ID. The application
-worker dispatches cases to Judge0 and finalizes them through callbacks or polling.
-`POST /api/problems/{id}/run` also returns `202` and uses the durable worker
-pipeline for public cases. Run jobs do not consume a graded attempt. Execution
-responses distinguish work waiting in TechniView from cases queued or running in
-Judge0. The problem page offers separate Run and Submit actions; Submit uses all
-server-owned cases. Both POST routes require an `Idempotency-Key`. The browser
-reuses the key after a network failure and clears it after a successful response.
-Keys expire after 24 hours. A new key starts a new run, even when the source code
-is unchanged. The worker retries clear Judge0 `429` rejections with backoff. It
-does not resend a request after an ambiguous network failure because Judge0 may
-have accepted it. Repeated `429` responses finish with a retryable busy result;
-the student can start a new run later. Keep `app_worker` running alongside the
-API. Course enrollment, email verification,
-and password recovery use an email outbox; local Compose captures messages in the
-worker at `/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
-`EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both API
-and worker. The frontend handles join links, email verification, and password
-recovery through its public account pages. See
-[course and account setup](docs/course-accounts.md).
+worker executes cases through go-judge and persists results in MySQL.
+`POST /api/problems/{id}/run` uses public cases and does not consume a graded
+attempt. Submit uses all server-owned cases. Both POST routes require an
+`Idempotency-Key`; the browser reuses the key after a network failure and clears
+it after a successful response. Keys expire after 24 hours. A new key starts a
+new run, even when the source code is unchanged. Keep `app_worker` running
+alongside the API. Course enrollment, email verification, and password recovery
+use an email outbox; local Compose captures messages in the worker at
+`/tmp/techniview-mail`. For hosted delivery, set `EMAIL_DELIVERY_MODE=resend`,
+`EMAIL_SIGNING_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and `PUBLIC_APP_URL` on both
+API and worker. See [course and account setup](docs/course-accounts.md).
 
 Course summaries update with grading transactions. Set a stable
 `RESEARCH_EXPORT_SECRET` of at least 32 bytes before producing a research CSV.
@@ -143,19 +129,14 @@ See [backend reporting](docs/backend-reporting.md) for export fields and the
 offline progress rebuild procedure. The [database recovery guide](docs/database-recovery.md)
 has the Compose backup and restore steps.
 
-`make integration` runs migrations against a fresh MySQL database, forces overlapping
-callbacks under REPEATABLE READ, and runs Python submissions through Judge0. It
-checks completion by reading MySQL without polling the submission API. The stack
-uses separate containers, no host ports, and temporary database storage; it does
-not read your `.env`. Judge0 uses the same privileged cgroup access as the dev
-stack. Containers are removed when the command exits.
+`make integration` runs migrations against a fresh MySQL database and executes
+real Python cases through go-judge. The stack has no host ports or persistent
+database storage, does not read `.env`, and removes its containers on exit.
 
 For a hosted installation, use [the campus deployment guide](docs/deployment.md).
 Production uses separate application and runner VMs. The application Compose
-stack serves HTTPS and keeps MySQL off host ports. The runner API binds only to
-its private interface; its databases stay off host ports. Production imports the
-reviewed catalog and does not create demo accounts. The current runner image must
-be refreshed before it is used with real student submissions.
+stack serves HTTPS and keeps MySQL off host ports. go-judge binds only to the
+runner VM's private interface.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 
@@ -224,12 +205,16 @@ problem even when another pool is currently recommended.
 
 ## Runner execution
 
-The runner uses go-judge 1.13.3 with Python 3.14 and fresh sandbox/process state for every case. The existing Judge0-derived Rails API, PostgreSQL records, Redis queue and persistent Ruby workers own durable grouped jobs and callbacks. This is the measured hybrid architecture, not a standalone go-judge API replacement.
+The [go-judge image](go-judge/Dockerfile) pins go-judge 1.13.3 and Python 3.14.8.
+The application owns the submission queue, attempt records, grading, and recovery.
+The runner VM owns sandbox execution only. The default is 16 go-judge execution
+slots and four application worker processes per application worker container.
+`GO_JUDGE_PARALLELISM` and `DIRECT_WORKER_PROCESSES` set those limits. CPU quota is
+a ceiling, not an exclusive core reservation.
 
-The worker build supports Linux amd64 and requires cgroup v2 with a private cgroup namespace. Its pinned binary checksum is checked during the image build. The execution endpoint listens only on loopback inside the worker container. Normal Compose files enable grouped dispatch and four application workers. Runner defaults are 16 execution workers, a 24 CPU quota and 8 GiB of memory. Set `JUDGE0_WORKER_COUNT`, `RUNNER_CPU_LIMIT` and `APP_WORKER_REPLICAS` for a smaller development machine. CPU quota is a ceiling, not an exclusive core reservation.
+The app worker records each attempt before sending it to go-judge. If the worker
+dies while a case may have run, recovery marks that case as an infrastructure
+failure and never silently reruns it. The student can start a new submission.
 
-Application workers reuse HTTP connections. Group requests use stable identities and preserve individual case results. An interrupted execution with an uncertain outcome becomes an explicit infrastructure failure; recovery must not silently rerun it. Ruby workers recycle between completed groups; student Python processes never persist between cases.
-
-For local Compose, the default group secret is development-only. Deployment Compose requires a `runner_group_secret` file in `SECRET_DIR`, containing at least 32 random characters. All application workers and the backend must use the same secret. Keep it stable while submissions are pending. Deployment Compose filenames retain their existing `production` names; no existing production installation is assumed.
-
-See [runner decision and evidence](docs/runner-decision.md) for why this implementation was selected and its validation limits.
+See [runner decision and evidence](docs/runner-decision.md) for the benchmark
+history and [testing](docs/testing.md) for integration checks.

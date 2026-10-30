@@ -11,7 +11,7 @@ Conventions: Stick Figures represent users, Cylinders represent
 databases, squares represent user interfaces, rectangles with lines
 inside represent servers
 
-Implementation note: The User Data DB and Question DB cylinders show logical data groups. The current deployment stores both groups in the platform MySQL database. Judge0 runs separately and has its own PostgreSQL and Redis services.
+Implementation note: The User Data DB and Question DB cylinders show logical data groups. The current deployment stores both groups in the platform MySQL database. The separate go-judge service executes code without a database or queue.
 
 ## Block diagram
 
