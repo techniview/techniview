@@ -1,5 +1,8 @@
+import hashlib
+import hmac
 import logging
 import secrets
+import time
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
@@ -7,7 +10,12 @@ import httpx
 from sqlalchemy import or_, select
 
 from ..core.config import settings
-from ..core.judge0 import judge0_get, judge0_submit
+from ..core.judge0 import (
+    judge0_get,
+    judge0_group_by_key,
+    judge0_group_submit,
+    judge0_submit,
+)
 from ..core.observability import log_event
 from ..core.security import hash_token
 from ..models import (
@@ -76,7 +84,7 @@ def _retry_delay(attempt: int, retry_after: str | None = None) -> float:
                 if retry_at.tzinfo is None:
                     retry_at = retry_at.replace(tzinfo=UTC)
                 delay = max(delay, (retry_at - datetime.now(UTC)).total_seconds())
-            except (TypeError, ValueError, OverflowError):
+            except TypeError, ValueError, OverflowError:
                 pass
     return max(0.0, min(delay, settings.WORKER_RETRY_AFTER_MAX_SECONDS))
 
@@ -117,13 +125,185 @@ def _mark_infrastructure_failure(row, case, failure_code: str) -> None:
     row.failure_code = failure_code
 
 
-def process_submission(db, submission_id: int, owner: str) -> None:
+def _group_key(row: Submission) -> str:
+    material = f"group:{row.id}:{row.submitted_at.isoformat(timespec='microseconds')}"
+    return hmac.new(
+        settings.RUNNER_GROUP_SECRET.encode(), material.encode(), hashlib.sha256
+    ).hexdigest()
+
+
+def _group_callback(key: str, case_id: int) -> str:
+    return hmac.new(
+        settings.RUNNER_GROUP_SECRET.encode(),
+        f"callback:{key}:{case_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _release_group_claim(db, row: Submission, now: datetime) -> None:
+    results._finalize_submission(db, row)
+    _schedule_submission(row, now)
+    row.claim_owner = None
+    row.claimed_at = None
+    db.commit()
+
+
+def _process_group_submission(db, submission_id: int, owner: str) -> None:
+    row = results._load_submission(db, submission_id)
+    if row is None or row.claim_owner != owner:
+        db.rollback()
+        return
+    ordered_cases = sorted(row.case_results, key=lambda case: case.case_order)
+    case_ids = [case.test_case_id for case in ordered_cases]
+    missing = [
+        case
+        for case in row.case_results
+        if case.judge0_token is None and not results._is_terminal(case.judge0_status_id)
+    ]
+    if not missing:
+        db.commit()
+        process_submission(db, submission_id, owner, case_ids_override=case_ids)
+        return
+
+    key = _group_key(row)
+    first_attempt = all(case.dispatch_started_at is None for case in missing)
+    now = utc_now()
+    payload = []
+    for case in ordered_cases:
+        callback = _group_callback(key, case.test_case_id)
+        callback_hash = hash_token(callback)
+        if (
+            case.callback_token_hash is not None
+            and case.callback_token_hash != callback_hash
+        ):
+            raise ValueError("group callback token changed during recovery")
+        case.callback_token_hash = callback_hash
+        if case.dispatch_started_at is None:
+            case.dispatch_started_at = now
+        payload.append(
+            {
+                "case_id": case.test_case_id,
+                "source_code": case.execution_source,
+                "stdin": case.execution_stdin,
+                "expected_output": case.execution_expected_output,
+                "callback_url": f"{settings.JUDGE0_CALLBACK_BASE_URL}/{callback}",
+                "cpu_time_limit": float(case.cpu_time_limit_seconds),
+                "memory_limit": case.memory_limit_kb,
+            }
+        )
+    row.claimed_at = now
+    db.commit()
+
+    report = None
+    failure = None
+    started = time.perf_counter()
+    try:
+        if not first_attempt:
+            try:
+                report = judge0_group_by_key(key)
+            except httpx.HTTPStatusError as error:
+                if error.response is None or error.response.status_code != 404:
+                    raise
+        if report is None:
+            report = judge0_group_submit(key, payload)
+    except (httpx.HTTPError, ValueError, TypeError, KeyError) as error:
+        failure = error
+    log_event(
+        logger,
+        logging.INFO,
+        "runner_group_request_completed",
+        submission_id=submission_id,
+        seconds=time.perf_counter() - started,
+        failed=failure is not None,
+    )
+
+    row = results._load_submission(db, submission_id)
+    if row is None or row.claim_owner != owner:
+        db.rollback()
+        return
+    now = utc_now()
+    if failure is not None:
+        status = (
+            failure.response.status_code
+            if isinstance(failure, httpx.HTTPStatusError) and failure.response
+            else None
+        )
+        expired = any(
+            case.dispatch_started_at
+            and now - case.dispatch_started_at
+            >= timedelta(seconds=settings.WORKER_RECOVERY_SECONDS)
+            for case in row.case_results
+        )
+        if expired or (status is not None and status in {400, 409, 422}):
+            for case in row.case_results:
+                if not results._is_terminal(case.judge0_status_id):
+                    _mark_infrastructure_failure(row, case, "runner_outcome_unknown")
+        else:
+            for case in row.case_results:
+                if case.judge0_token is None:
+                    case.next_attempt_at = now + timedelta(seconds=5)
+        _release_group_claim(db, row, now)
+        return
+
+    try:
+        returned = report["cases"]
+        if not isinstance(returned, list) or len(returned) != len(case_ids):
+            raise ValueError("group case count mismatch")
+        tokens = {}
+        for item in returned:
+            case_id, token = item["case_id"], item["token"]
+            if (
+                not isinstance(case_id, int)
+                or case_id in tokens
+                or not isinstance(token, str)
+                or not token
+                or len(token) > 36
+            ):
+                raise ValueError("invalid group case identity")
+            tokens[case_id] = token
+        if set(tokens) != set(case_ids):
+            raise ValueError("group case identities mismatch")
+        for case in row.case_results:
+            token = tokens[case.test_case_id]
+            if case.judge0_token is not None and case.judge0_token != token:
+                raise ValueError("group case token changed")
+            case.judge0_token = token
+            case.next_attempt_at = None
+    except KeyError, TypeError, ValueError:
+        for case in row.case_results:
+            if not results._is_terminal(case.judge0_status_id):
+                _mark_infrastructure_failure(row, case, "runner_outcome_unknown")
+        _release_group_claim(db, row, now)
+        return
+    db.commit()
+    process_submission(db, submission_id, owner, case_ids_override=case_ids)
+
+
+def process_submission(
+    db,
+    submission_id: int,
+    owner: str,
+    *,
+    case_ids_override: list[int] | None = None,
+) -> None:
+    if settings.DIRECT_GO_JUDGE:
+        from .direct import process_submission as process_direct
+
+        process_direct(db, submission_id, owner)
+        return
+    if case_ids_override is None and settings.RUNNER_GROUP_PROFILE:
+        _process_group_submission(db, submission_id, owner)
+        return
     row = results._load_submission(db, submission_id)
     if row is None or row.claim_owner != owner:
         db.rollback()
         return
     log_event(logger, logging.INFO, "submission_claimed", submission_id=submission_id)
-    case_ids = [result.test_case_id for result in row.case_results]
+    case_ids = (
+        case_ids_override
+        if case_ids_override is not None
+        else [result.test_case_id for result in row.case_results]
+    )
     row.next_check_at = None
     db.commit()
 
@@ -167,6 +347,7 @@ def process_submission(db, submission_id: int, owner: str) -> None:
 
         report = None
         failure: Exception | None = None
+        request_started = time.perf_counter()
         try:
             if dispatch:
                 report = judge0_submit(
@@ -199,6 +380,16 @@ def process_submission(db, submission_id: int, owner: str) -> None:
         ) as error:
             failure = error
 
+        log_event(
+            logger,
+            logging.INFO,
+            "runner_request_completed",
+            submission_id=submission_id,
+            case_id=case_id,
+            operation="dispatch" if dispatch else "poll",
+            seconds=time.perf_counter() - request_started,
+            failed=failure is not None,
+        )
         row = results._load_submission(db, submission_id)
         if (
             row is None
@@ -321,8 +512,8 @@ def process_submission(db, submission_id: int, owner: str) -> None:
             if token is not None:
                 case.judge0_token = token
             try:
-                results._update_case_result(case, report)
-            except (TypeError, ValueError, ArithmeticError):
+                reported_failure_code = results._update_case_result(case, report)
+            except TypeError, ValueError, ArithmeticError:
                 if expired:
                     _mark_infrastructure_failure(row, case, "runner_outcome_unknown")
                 else:
@@ -337,8 +528,10 @@ def process_submission(db, submission_id: int, owner: str) -> None:
                 case.poll_failure_count = 0
                 if results._is_terminal(case.judge0_status_id):
                     case.next_attempt_at = None
-                    if case.infrastructure_error:
-                        row.failure_code = "runner_internal_error"
+                    if reported_failure_code is not None:
+                        row.failure_code = reported_failure_code
+                    elif case.infrastructure_error:
+                        row.failure_code = row.failure_code or "runner_internal_error"
                 elif case.judge0_token is not None:
                     _schedule_case(row, case, now, settings.WORKER_POLL_SECONDS)
                 elif case.dispatch_started_at is not None:

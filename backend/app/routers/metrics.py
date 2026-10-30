@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import Integer, case, cast, func, select
 
+from ..core.config import settings
 from ..core.db import SessionLocal
 from ..core.judge0 import judge0_workers
 from ..core.observability import http_metrics
@@ -26,6 +27,8 @@ def _metric_labels(**values: str) -> str:
 
 
 def _judge0_worker_metrics() -> list[str]:
+    if settings.DIRECT_GO_JUDGE:
+        return []
     try:
         queues = judge0_workers()
         samples = [

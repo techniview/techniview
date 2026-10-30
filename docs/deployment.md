@@ -2,24 +2,22 @@
 
 TechniView runs as two independent Docker Compose projects on separate campus
 Linux VMs. The application VM runs Caddy, FastAPI, the application worker, and
-MySQL. The runner VM runs Judge0, its worker, PostgreSQL, and Redis. The runner
+MySQL. The runner VM runs standalone go-judge. The runner
 VM executes untrusted student code and must not share a host with student data.
 
 ## Campus network requirements
 
 - Publish ports 80 and 443 on the application VM for the website and HTTPS.
-- Bind the Judge0 API to the runner VM's private address. Allow inbound port 2358
+- Bind go-judge to the runner VM's private address. Allow inbound port 5050
   only from the application VM's private address.
-- Allow the runner VM to make outbound HTTPS requests to the application
-  hostname for Judge0 callbacks. Callbacks use TLS and per-case random tokens.
-- Do not publish MySQL, PostgreSQL, Redis, or the runner worker ports.
+- Do not publish MySQL or any other runner port.
 - Point the public DNS name at the application VM. Caddy obtains and renews the
   HTTPS certificate, so ports 80 and 443 must be reachable for certificate
   validation.
 
 Request an initial 4 vCPU / 8 GiB application VM and an 8 vCPU / 16 GiB runner
 VM. Set `API_WORKERS`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and
-`APP_WORKER_REPLICAS` in `.env.production` after load testing. API workers handle
+`APP_WORKER_REPLICAS` and `DIRECT_WORKER_PROCESSES` in `.env.production` after load testing. API workers handle
 concurrent HTTP requests; the database pool settings bound each process's
 connections and must fit under MySQL's connection limit; application worker
 replicas claim and process queued submissions concurrently. Allocate enough CPU
@@ -27,26 +25,18 @@ and memory for the selected counts. The Compose files cap service CPU and memory
 use within those budgets. Treat these as starting sizes
 and adjust them from the assignment load test.
 
-The application worker retries Judge0 `429` dispatch rejections up to five
-times, with exponential backoff and jitter. `WORKER_DISPATCH_MAX_RETRIES`,
-`WORKER_RETRY_BASE_SECONDS`, `WORKER_RETRY_MAX_SECONDS`, and
-`WORKER_RETRY_AFTER_MAX_SECONDS` set the retry policy. A run that still receives
-`429` after those retries completes with `failure_code=runner_busy`; the API
-marks it retryable and tells the student to try again later. The worker does not
-resend a dispatch after a timeout or lost response. Judge0 may have accepted
-that request, so TechniView waits for the callback and then reports an unknown
-outcome if the recovery window expires.
+The application commits each case attempt before calling go-judge. After a worker
+crash or ambiguous response, recovery marks that case unknown without rerunning
+it. Remaining unstarted cases continue after the worker lease expires.
 
-Use encrypted campus storage for both VMs. Judge0 keeps copies of submitted code
-and execution output in its own database, so protect and retain that volume as
-student data too.
+Use encrypted campus storage for both VMs. TechniView stores submission code and
+results in MySQL. The execution service does not keep a second submission database.
 
 The runner needs Linux kernel 6.1 or newer and cgroup v2. Its worker requires
-privileged mode for Isolate, with a private cgroup namespace and no host
+privileged mode for go-judge, with a private cgroup namespace and no host
 cgroup bind mount. Keep it on the
 dedicated runner VM, patch the VM promptly, restrict SSH to campus administrators,
-and never give application users access to the Docker daemon. The web-facing
-Judge0 server does not need host cgroup access or privileged mode.
+and never give application users access to the Docker daemon. Expose the go-judge port only on the private app-to-runner interface.
 
 ## Configure each VM
 
@@ -68,9 +58,7 @@ Put the verified provider key in `resend_api_key`. Keep the complete secret
 directory backed up using campus-approved encrypted secret storage.
 
 On the runner VM, set `RUNNER_PRIVATE_BIND_IP` to its private interface address.
-Create `/etc/techniview-runner/secrets` with mode `0700`, then create unique
-`postgres_password` and `redis_password` files with mode `0444`. The runner
-containers read these Compose secrets at startup. Start the runner:
+The runner needs no separate database or secret files. Start the runner:
 
 ```sh
 docker compose --env-file .env.runner.production \
@@ -124,11 +112,10 @@ does not log submitted code or model responses.
 
 ## Image releases, updates, and rollback
 
-Push a reviewed `v*` tag to run CI and publish the backend, frontend, runner-api,
-and runner-worker images to GitHub Container Registry. Each image is tagged with the source commit
+Push a reviewed `v*` tag to run CI and publish the backend, frontend, and
+go-judge images to GitHub Container Registry. Each image is tagged with the source commit
 SHA. Set that same SHA as `IMAGE_TAG` in both VM environment files. Give each VM
-read-only access to the packages, then pull and start the runner first. Confirm
-`/about` works from the application VM, then pull and start the app. The host
+read-only access to the packages, then pull and start the runner first. Confirm `/version` on the runner private port works from the application VM, then pull and start the app. The host
 does not build images.
 
 Back up MySQL and the application secrets before each update. The API applies
@@ -141,9 +128,7 @@ rollback strategy.
 
 Back up the MySQL application database hourly to encrypted campus storage outside
 the application VM. Keep signing and export secrets in a separate protected
-backup. Judge0's PostgreSQL and Redis contain execution state, not the grading
-record; after losing runner state, in-flight cases recover through callbacks or
-eventually become infrastructure errors under the worker recovery policy.
+backup. A lost runner response leaves the affected case with an unknown outcome.
 
 The repo includes an hourly `restic` backup script and systemd timer. Install
 `restic` with `backup --stdin-from-command` support on the application VM, configure an encrypted campus repository in
@@ -194,52 +179,29 @@ minutes old.
 
 ## Operations signals
 
-The backend exposes Prometheus text metrics at `/api/metrics`. It includes
-request totals and latency histograms by method, route template, and status;
-submission counts by status and practice-run type; queued submission depth and
-age; case counts by dispatch phase; and live Judge0 Resque worker counts by
-queue and state (`available`, `idle`, `working`, and `paused`), plus each queue's
-depth. `techniview_judge0_worker_status_scrape_success` indicates whether the
-backend could fetch the live runner status. Scrape this endpoint from a
-Prometheus-compatible collector on the app Docker network. Caddy returns 404
-for this path on the public hostname. Runner retry gauges include persisted
-dispatch retries, current poll failures, submissions that ended busy, and
-submissions whose dispatch outcome could not be confirmed.
-
-The persisted `techniview_execution_cases{phase="running_on_judge0"}` gauge is
-the number of cases whose latest recorded Judge0 status is `Processing`; it can
-miss short executions between application polls. Use the live
-`techniview_judge0_workers{state="working"}` gauge to track actual runner worker
-utilization.
+The backend exposes Prometheus text metrics at `/api/metrics`, including API
+request latency, submission status, queue depth, and queue age. Scrape this
+endpoint from the app Docker network. The direct execution path does not expose
+Judge0 Resque worker metrics. Monitor go-judge through container health, CPU,
+memory, and restart counts.
 
 The Compose projects use Docker's rotating `local` log driver and retain the
 latest three 10 MiB files per service. The API and app worker write JSON events
 to stdout. API request records include
 the request ID, route template, status, and duration. Worker records cover
-claim, Judge0 dispatch/failure, and completion. They intentionally omit source
+claim, sandbox execution failure, and completion. They intentionally omit source
 code, callback credentials, and student identifiers. Forward these logs to the
 campus log collector before a pilot if longer retention or centralized alerts
 are required.
 
 ## Launch gates
 
-The runner now builds from Debian 13, Ruby 3.4, Rails 8.1, Python 3.14 and
-Isolate 2.7. Scan the release images and pass the real execution integration
-suite on the campus VM before the pilot. The Isolate worker still needs
-`privileged` mode, confined to its private cgroup namespace. Campus IT should
-review the dedicated VM boundary before student code is accepted.
+The runner image pins go-judge 1.13.3 and Python 3.14.8. Run the real execution,
+resource-limit, and worker-restart tests on the target VM before accepting student
+code. The runner requires privileged mode for its private cgroup namespace;
+restrict its port to the application VM.
 
-Drain pending runner jobs before replacing the old images: the refreshed fork
-uses a new queue name. Back up PostgreSQL and keep the previous images for
-rollback. The existing schema migrations and Python language ID are retained.
-
-Before enrolling participants, confirm campus DNS and firewall rules, approved
-email delivery, SSO requirements, research data handling requirements with the
-IRB advisor, the retention period for Judge0's duplicate source and output data,
-and a successful backup restore. Load test the pilot profile in a disposable
-environment. CI runs a 1,000-student synchronized burst with one real case per
-submission. GitHub-hosted results are useful for regressions but do not establish
-campus capacity; repeat the profile on the proposed campus VM sizes before the
-pilot. The runner queue limit defaults to 12,000 cases to hold that profile with
-headroom. Reduce it only if the planned peak load is lower and queue backpressure
-is intentional.
+Before enrolling participants, confirm DNS and firewall rules, email delivery,
+research data handling, a successful backup restore, and a load test on the
+allocated VMs. The A100 comparison favored direct execution on the tested
+Ransom Note workload; its small bursts do not establish production p99.

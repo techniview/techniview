@@ -220,3 +220,9 @@ with a new database and new Judge0 queue.
 The authoring API is available to professor accounts. Create/edit custom draft problems with nested `tags` and ordered `test_cases`; use the validate endpoint to run the canonical solution against every case before publishing. Copy a visible problem to start a separate custom draft. Hidden cases and canonical source are intentionally excluded from ordinary problem detail responses.
 
 Question sets are private to their owner. Replace their ordered contents with `PUT /api/question-sets/{id}/items`, then publish them. Creating an assignment from a published question set snapshots its ordered problem IDs into assignment items, so later edits to the source set do not affect the assignment.
+
+## Grouped go-judge runner
+
+The normal integration Compose stack now uses the selected go-judge runtime and grouped dispatch. Run its integration suite on Linux amd64 with cgroup v2. `scripts/verify-runner-restart.sh` builds a dedicated disposable stack, interrupts the worker during execution, checks that recovery records an unknown outcome without rerunning student code, and removes only that stack's resources. Logs are kept in `test-results/runner-restart/`. The restart test is skipped in ordinary pytest runs because it requires host control of Docker.
+
+The runner image checks verify the pinned go-judge version, Ruby syntax, Python libraries and image size budgets. No experiment Compose overlays are needed.

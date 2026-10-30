@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -447,9 +447,13 @@ class Submission(Base):
     # hard-erased, which RESTRICT constraints would block.
     late_approved_by_membership_id: Mapped[int | None] = mapped_column(ID_TYPE)
     submitted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), server_default=func.now()
+        DateTime(timezone=False).with_variant(mysql.DATETIME(fsp=6), "mysql"),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        server_default=func.now(),
     )
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False).with_variant(mysql.DATETIME(fsp=6), "mysql")
+    )
     is_practice_run: Mapped[bool] = mapped_column(
         default=False, nullable=False, server_default="0"
     )
