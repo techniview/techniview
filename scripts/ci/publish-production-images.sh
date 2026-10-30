@@ -17,11 +17,9 @@ docker build -f backend/Dockerfile.prod \
   -t "$image_namespace/backend:$GITHUB_SHA" backend
 docker build -f frontend/Dockerfile.prod \
   -t "$image_namespace/frontend:$GITHUB_SHA" frontend
-docker build --target api -t "$image_namespace/runner-api:$GITHUB_SHA" internal-judge0-fork
-docker build --target worker -t "$image_namespace/runner-worker:$GITHUB_SHA" internal-judge0-fork
-./scripts/ci/check-runner-images.sh "$image_namespace/runner-api:$GITHUB_SHA" "$image_namespace/runner-worker:$GITHUB_SHA"
+docker build --target direct -t "$image_namespace/go-judge:$GITHUB_SHA" internal-judge0-fork
+./scripts/ci/check-go-judge-image.sh "$image_namespace/go-judge:$GITHUB_SHA"
 
 docker push "$image_namespace/backend:$GITHUB_SHA"
 docker push "$image_namespace/frontend:$GITHUB_SHA"
-docker push "$image_namespace/runner-api:$GITHUB_SHA"
-docker push "$image_namespace/runner-worker:$GITHUB_SHA"
+docker push "$image_namespace/go-judge:$GITHUB_SHA"

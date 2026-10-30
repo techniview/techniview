@@ -52,10 +52,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
       MYSQL_DB: ${MYSQL_DB:?Set MYSQL_DB}
-      RUNNER_GROUP_PROFILE: "1"
-      RUNNER_GROUP_SECRET_FILE: /run/secrets/runner_group_secret
-      JUDGE0_URL: http://${RUNNER_PRIVATE_HOST:?Set RUNNER_PRIVATE_HOST}:2358
-      JUDGE0_CALLBACK_BASE_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}/api/internal/judge0/callbacks
+      DIRECT_GO_JUDGE: "1"
+      GO_JUDGE_URL: http://${RUNNER_PRIVATE_HOST:?Set RUNNER_PRIVATE_HOST}:5050
       COOKIE_SECURE: "true"
       CORS_ORIGINS: https://${PUBLIC_HOST}
       PUBLIC_APP_URL: https://${PUBLIC_HOST}
@@ -63,6 +61,7 @@ services:
       EMAIL_SIGNING_KEY_FILE: /run/secrets/email_signing_key
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
       RESEND_API_KEY_FILE: /run/secrets/resend_api_key
+      DIRECT_WORKER_PROCESSES: ${DIRECT_WORKER_PROCESSES:-4}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
@@ -72,7 +71,6 @@ services:
       WORKER_RETRY_AFTER_MAX_SECONDS: ${WORKER_RETRY_AFTER_MAX_SECONDS:-60}
     secrets:
       - mysql_password
-      - runner_group_secret
       - email_signing_key
       - resend_api_key
     networks:
@@ -119,10 +117,12 @@ services:
   app_worker:
     logging: *default-logging
     image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
-    environment: *application_environment
+    environment:
+      <<: *application_environment
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
     secrets:
       - mysql_password
-      - runner_group_secret
       - email_signing_key
       - resend_api_key
     networks:
@@ -138,7 +138,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    command: python -m app.worker
+    command: python -m app.worker.direct_supervisor
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
@@ -146,8 +146,8 @@ services:
       replicas: ${APP_WORKER_REPLICAS:-4}
       resources:
         limits:
-          cpus: "1.0"
-          memory: 1G
+          cpus: "2.0"
+          memory: 2G
 
   mysql:
     logging: *default-logging
@@ -191,8 +191,6 @@ secrets:
     file: ${SECRET_DIR:?Set SECRET_DIR}/mysql_root_password
   mysql_password:
     file: ${SECRET_DIR:?Set SECRET_DIR}/mysql_password
-  runner_group_secret:
-    file: ${SECRET_DIR:?Set SECRET_DIR}/runner_group_secret
   email_signing_key:
     file: ${SECRET_DIR:?Set SECRET_DIR}/email_signing_key
   resend_api_key:
