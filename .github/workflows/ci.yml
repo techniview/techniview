@@ -38,8 +38,8 @@ jobs:
       - run: uv python install 3.14
       - run: uv sync --locked
       - run: uv export --locked --no-default-groups --no-emit-project --format requirements.txt --no-header --output-file /tmp/backend-requirements.lock && cmp backend/requirements.lock /tmp/backend-requirements.lock
-      - run: uv run ruff check backend scripts/tests
-      - run: uv run ruff format --check backend scripts/tests
+      - run: uv run ruff check backend scripts/tests scripts/probe-runner-network.py
+      - run: uv run ruff format --check backend scripts/tests scripts/probe-runner-network.py
       - run: uv run python -m pytest backend/tests -q --cov=backend/app --cov-branch --cov-report=term-missing
       - run: uv run pip-audit
 
