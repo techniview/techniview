@@ -33,10 +33,17 @@ Use encrypted campus storage for both VMs. TechniView stores submission code and
 results in MySQL. The execution service does not keep a second submission database.
 
 The runner needs Linux kernel 6.1 or newer and cgroup v2. Its worker requires
-privileged mode for go-judge, with a private cgroup namespace and no host
-cgroup bind mount. Keep it on the
-dedicated runner VM, patch the VM promptly, restrict SSH to campus administrators,
-and never give application users access to the Docker daemon. Expose the go-judge port only on the private app-to-runner interface.
+privileged mode for go-judge, with a private cgroup namespace and no host cgroup
+bind mount. Compose gives the runner a read-only root filesystem, a tmpfs at
+`/tmp`, and `no-new-privileges:true`. Student processes run with UID and GID
+1536, no effective capabilities, and go-judge's built-in seccomp filter. Their
+network namespace cannot reach the application API, MySQL, the runner API, or a
+peer on a separate Docker bridge. The runner container itself remains
+privileged and can make outbound connections. Keep the VM dedicated to code
+execution, patch it promptly, restrict SSH to campus administrators, and never
+give application users access to the Docker daemon. Expose port 5050 only on the
+runner's private interface. The campus firewall must allow that port only from
+the application VM.
 
 ## Configure each VM
 
@@ -196,10 +203,15 @@ are required.
 
 ## Launch gates
 
-The runner image pins go-judge 1.13.3 and Python 3.14.8. Run the real execution,
-resource-limit, and worker-restart tests on the target VM before accepting student
-code. The runner requires privileged mode for its private cgroup namespace;
-restrict its port to the application VM.
+The runner image pins go-judge 1.13.3 and Python 3.14.8. Run the full real
+execution suite on the target VM before accepting student code. From the
+reviewed checkout on that VM, run `make integration` and
+`./scripts/verify-direct-runner.sh`. The suite checks host files and secrets,
+Docker socket access, service and separate-bridge peer access from sandboxed
+code, UID and capabilities, cgroup limits, and worker restart recovery. From the
+application VM, confirm `/version` responds. Confirm the campus firewall blocks
+port 5050 from other sources. The runner requires privileged mode for its
+private cgroup namespace.
 
 Before enrolling participants, confirm DNS and firewall rules, email delivery,
 research data handling, a successful backup restore, and a load test on the

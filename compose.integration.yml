@@ -31,16 +31,36 @@ services:
   go-judge:
     build: ./go-judge
     image: techniview-go-judge:integration
+    networks:
+      - default
+      - runner-egress
     privileged: true
     cgroup: private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     init: true
     cpus: ${RUNNER_CPU_LIMIT:-4}
     mem_limit: 8g
     memswap_limit: 8g
     environment:
       GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-4}
+      RUNNER_SECRET_PROBE: runner-only-sentinel
     healthcheck:
       test: [CMD, /opt/python/bin/python3.14, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:5050/version")']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  network-probe:
+    image: python:3.14-slim
+    command: [python, -m, http.server, "9090", --bind, 0.0.0.0]
+    networks:
+      - runner-egress
+    healthcheck:
+      test:
+        [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:9090", timeout=2)']
       interval: 2s
       timeout: 3s
       retries: 30
@@ -84,3 +104,6 @@ services:
         condition: service_healthy
       go-judge:
         condition: service_healthy
+
+networks:
+  runner-egress:

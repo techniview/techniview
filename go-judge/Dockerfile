@@ -34,4 +34,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=python-build /opt/python /opt/python
 COPY --from=go-judge-build /go-judge /usr/local/bin/go-judge
 COPY go-judge-mount.yaml /etc/go-judge-mount.yaml
-CMD ["sh", "-c", "exec go-judge -http-addr 0.0.0.0:5050 -no-fallback -mount-conf /etc/go-judge-mount.yaml -parallelism ${GO_JUDGE_PARALLELISM:-16} -output-limit 4m -copy-out-limit 4m -src-prefix /opt/python"]
+CMD ["sh", "-c", "exec go-judge -http-addr 0.0.0.0:5050 -no-fallback -container-cred-start 1536 -mount-conf /etc/go-judge-mount.yaml -parallelism ${GO_JUDGE_PARALLELISM:-16} -output-limit 4m -copy-out-limit 4m -src-prefix /opt/python"]

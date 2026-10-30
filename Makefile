@@ -19,13 +19,13 @@ hooks:
 	@echo "No pre-commit install needed, .githooks/pre-commit is versioned"
 
 fmt:
-	uv run ruff check backend --fix
-	uv run ruff format backend
+	uv run ruff check backend scripts/probe-runner-network.py --fix
+	uv run ruff format backend scripts/probe-runner-network.py
 	cd frontend && npx prettier --write .
 
 lint:
-	uv run ruff check backend
-	uv run ruff format --check backend
+	uv run ruff check backend scripts/probe-runner-network.py
+	uv run ruff format --check backend scripts/probe-runner-network.py
 	cd frontend && npx tsc --noEmit
 	cd frontend && npx eslint .
 	cd frontend && npx prettier --check .
@@ -42,9 +42,13 @@ build:
 verify: check build integration
 
 integration:
-	@cleanup() { status=$$?; if [ $$status -ne 0 ]; then docker compose --env-file /dev/null -f compose.integration.yml logs --tail=100 backend app_worker || true; fi; docker compose --env-file /dev/null -f compose.integration.yml down --volumes --remove-orphans || true; exit $$status; }; \
+	@set -e; \
+	cleanup() { status=$$?; if [ $$status -ne 0 ]; then docker compose --env-file /dev/null -f compose.integration.yml logs --tail=100 backend app_worker || true; fi; docker compose --env-file /dev/null -f compose.integration.yml down --volumes --remove-orphans || true; exit $$status; }; \
 	trap cleanup EXIT; \
-	docker compose --env-file /dev/null -f compose.integration.yml up --build --attach tests --abort-on-container-exit --exit-code-from tests
+	docker compose --env-file /dev/null -f compose.integration.yml build tests; \
+	docker compose --env-file /dev/null -f compose.integration.yml up -d --build --wait --wait-timeout 180 mysql network-probe backend go-judge app_worker; \
+	network_targets=$$(docker compose --env-file /dev/null -f compose.integration.yml exec -T go-judge /opt/python/bin/python3.14 - < scripts/probe-runner-network.py); \
+	docker compose --env-file /dev/null -f compose.integration.yml run --rm --no-deps -e SANDBOX_NETWORK_PROBE_TARGETS="$$network_targets" tests python -m pytest -v integration --override-ini=pythonpath=.
 
 load-test:
 	@set -e; \
