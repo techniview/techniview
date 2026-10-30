@@ -712,6 +712,7 @@ def main() -> None:
         "go_judge_parallelism": _integer_setting("LOAD_GO_JUDGE_SLOTS", 4, 100),
         "runner_cpu_limit": os.getenv("LOAD_RUNNER_CPU_LIMIT", "unrecorded"),
         "runner_memory_limit": os.getenv("LOAD_RUNNER_MEMORY_LIMIT", "unrecorded"),
+        "go_judge_wall_seconds": int(os.getenv("GO_JUDGE_WALL_SECONDS", "5")),
     }
     report["database_pool_settings"] = {
         "api_pool_size": os.getenv("LOAD_API_DB_POOL_SIZE", "unrecorded"),

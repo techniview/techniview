@@ -213,6 +213,7 @@ def main() -> int:
     parser.add_argument("--api-db-pool-size", type=int, default=30)
     parser.add_argument("--worker-db-pool-size", type=int, default=3)
     parser.add_argument("--db-max-overflow", type=int, default=0)
+    parser.add_argument("--go-judge-wall-seconds", type=int, default=30)
     parser.add_argument("--warmup-students", type=int, default=5)
     parser.add_argument(
         "--workloads", nargs="+", choices=WORKLOADS, default=list(WORKLOADS)
@@ -221,6 +222,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.measured_runs < 1 or args.warmup_students < 1 or args.students < 1:
         parser.error("students, warmup-students, and measured-runs must be positive")
+    if not 0 < args.go_judge_wall_seconds < 40:
+        parser.error("go-judge wall limit must fit below the 60-second worker lease")
 
     head = Path(__file__).resolve().parents[2]
     base = args.base_path.resolve()
@@ -276,6 +279,7 @@ def main() -> int:
                     "LOAD_API_DB_POOL_SIZE": str(args.api_db_pool_size),
                     "LOAD_WORKER_DB_POOL_SIZE": str(args.worker_db_pool_size),
                     "LOAD_DB_MAX_OVERFLOW": str(args.db_max_overflow),
+                    "LOAD_GO_JUDGE_WALL_SECONDS": str(args.go_judge_wall_seconds),
                     "PERF_APPLICATION_BACKEND_CONTEXT": str(application_backend),
                     "PERF_TEST_BACKEND_CONTEXT": str(head / "backend"),
                 }

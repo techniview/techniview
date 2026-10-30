@@ -24,13 +24,22 @@ pre-commit hook runs local checks without rewriting files.
   and worker profile, completion and queue-wait percentiles, batch time,
   throughput, case counts, and p95 case CPU time as a fraction of its CPU
   limit. The CPU-heavy case sums 4,999-by-4,999 modular products with an
-  eight-second case limit. In CI run 41089874056, its five-student warm-up
+  eight-second CPU limit. The grader also has a separate wall-clock limit. The
+  benchmark sets that limit to 30 seconds on both revisions, below the
+  integration worker's 60-second lease constraint. Production keeps its
+  existing five-second wall-clock default.
+
+  In CI run 41089874056, the CPU-heavy workload's five-student warm-up
   measured 2.64 seconds p95 under the former three-second limit, or 88 percent
   of that limit. The following 100-student runs timed out many cases. With the
-  current eight-second limit, that same measured p95 would use 33 percent of
-  the limit. A local one-CPU smoke with the eight-second cap measured p95 case
-  CPU time of 1.03 seconds for base and 0.98 seconds for proposed, 13 and 12
-  percent of the cap. The next CI run must confirm the new limit on its host.
+  current eight-second CPU limit, that same measured p95 would use 33 percent
+  of the limit. The run used the default five-second wall-clock limit, which
+  remains independent of the CPU limit and can expire under contention. Reports
+  record both limits. A local 100-student run with four go-judge slots and the
+  30-second wall limit passed all 100 cases on both revisions. Batch times were
+  52.717 and 53.671 seconds; case CPU p95 was 3.089 and 2.415 seconds, or 38.6
+  and 30.2 percent of the eight-second CPU limit. The next CI run must confirm
+  both settings on its host.
   CI fails a workload only when median batch time
   is both more than 50 percent and more than two seconds slower than base. It
   compares each workload on its own and never combines results into one score.
@@ -47,9 +56,11 @@ pre-commit hook runs local checks without rewriting files.
   Reports go to `/tmp/techniview-performance` unless `PERF_OUTPUT_DIR` is set.
   Set `PERF_RUNNER_CPU_LIMIT`, `PERF_RUNNER_MEMORY_LIMIT`,
   `PERF_API_DB_POOL_SIZE`, `PERF_WORKER_DB_POOL_SIZE`, and
-  `PERF_DB_MAX_OVERFLOW` to match target service limits. This command builds and
-  removes uniquely named Compose projects; do not run it alongside another
-  benchmark on the same Docker daemon.
+  `PERF_DB_MAX_OVERFLOW` to match target service limits. The benchmark-only
+  wall limit defaults to 30 seconds and can be set with
+  `PERF_GO_JUDGE_WALL_SECONDS`; it must stay below 40 seconds under the default
+  60-second worker lease. This command builds and removes uniquely named Compose
+  projects; do not run it alongside another benchmark on the same Docker daemon.
 - `scripts/verify-direct-runner.sh` kills an application worker during execution
   and verifies that recovery records an unknown outcome without a second run.
 

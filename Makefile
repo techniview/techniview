@@ -20,6 +20,7 @@ PERF_RUNNER_MEMORY_LIMIT ?= 8g
 PERF_API_DB_POOL_SIZE ?= 30
 PERF_WORKER_DB_POOL_SIZE ?= 3
 PERF_DB_MAX_OVERFLOW ?= 0
+PERF_GO_JUDGE_WALL_SECONDS ?= 30
 PERF_WORKLOADS ?= short cpu-heavy multi-case
 PERF_MEASURED_RUNS ?= 3
 
@@ -92,6 +93,7 @@ performance-compare:
 	  --api-db-pool-size "$(PERF_API_DB_POOL_SIZE)" \
 	  --worker-db-pool-size "$(PERF_WORKER_DB_POOL_SIZE)" \
 	  --db-max-overflow "$(PERF_DB_MAX_OVERFLOW)" \
+	  --go-judge-wall-seconds "$(PERF_GO_JUDGE_WALL_SECONDS)" \
 	  --workloads $(PERF_WORKLOADS) \
 	  --measured-runs "$(PERF_MEASURED_RUNS)"
 
