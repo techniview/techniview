@@ -62,4 +62,4 @@ RUN mkdir -p /usr/lib/ssl \
     && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/lib/ssl/cert.pem \
     && ln -sf /etc/ssl/certs /usr/lib/ssl/certs
 COPY go-judge-mount.yaml /etc/go-judge-mount.yaml
-CMD ["sh", "-c", "exec go-judge -http-addr 0.0.0.0:5050 -no-fallback -mount-conf /etc/go-judge-mount.yaml -parallelism ${GO_JUDGE_PARALLELISM:-16} -output-limit 4m -copy-out-limit 4m -src-prefix /opt/python"]
+CMD ["sh", "-c", "exec go-judge -http-addr 0.0.0.0:5050 -no-fallback -container-cred-start 1536 -mount-conf /etc/go-judge-mount.yaml -parallelism ${GO_JUDGE_PARALLELISM:-16} -output-limit 4m -copy-out-limit 4m -src-prefix /opt/python"]
