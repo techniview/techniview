@@ -1,5 +1,6 @@
 """Small Prometheus text registry for app-level operational signals."""
 
+import fcntl
 import json
 import logging
 import os
@@ -40,6 +41,12 @@ class HttpMetrics:
         self._writer_thread = None
         self._pending_drops = 0
         if self.path is not None:
+            self._initialize_storage()
+
+    def _initialize_storage(self) -> None:
+        # SQLite cannot switch journal modes while another process initializes it.
+        with open(f"{self.path}.init.lock", "a+b") as startup_lock:
+            fcntl.flock(startup_lock, fcntl.LOCK_EX)
             with self._connect() as connection:
                 connection.execute("PRAGMA journal_mode = WAL")
                 bucket_columns = ", ".join(
