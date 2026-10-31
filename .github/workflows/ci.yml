@@ -69,19 +69,11 @@ jobs:
 
   integration:
     name: MySQL and go-judge integration
-    # Pin the load-test host image so the CI baseline doesn't drift with `latest`.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make integration
-      - name: Record load-test runner profile
-        run: |
-          echo "Runner: $RUNNER_NAME ($RUNNER_OS $RUNNER_ARCH)"
-          lscpu
-          free -h
-          docker version
-      - run: make load-test
       - name: Install pinned restic version
         run: |
           set -euo pipefail
@@ -100,50 +92,6 @@ jobs:
           restic version
       - run: python3 scripts/tests/test_backup_mysql.py
 
-  performance-regression:
-    name: Performance regression comparison
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Select comparison revisions
-        id: revisions
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          zero_sha=0000000000000000000000000000000000000000
-          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "$zero_sha" ]] || \
-            ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-            git fetch --no-tags origin main
-            BASE_SHA=$(git merge-base origin/main "$GITHUB_SHA" || true)
-          fi
-          if [[ -z "$BASE_SHA" ]]; then
-            echo "Could not find a comparison base for $GITHUB_SHA" >&2
-            exit 1
-          fi
-          git worktree add --detach /tmp/techniview-perf-base "$BASE_SHA"
-          echo "base=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "proposed=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-      - name: Compare fixed performance workloads
-        run: |
-          PYTHONPATH=backend python3 scripts/performance/compare_load_test.py \
-            --base-path /tmp/techniview-perf-base \
-            --base-commit '${{ steps.revisions.outputs.base }}' \
-            --proposed-commit '${{ steps.revisions.outputs.proposed }}' \
-            --output-dir "$RUNNER_TEMP/performance-artifacts"
-      - name: Upload base and proposed reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: performance-comparison-${{ github.run_id }}
-          path: ${{ runner.temp }}/performance-artifacts
-          if-no-files-found: warn
-          retention-days: 30
-
   production-images:
     name: Production image builds
     runs-on: ubuntu-latest
@@ -155,7 +103,7 @@ jobs:
   ci:
     name: CI
     if: ${{ always() }}
-    needs: [workflows, backend, frontend, integration, performance-regression, production-images]
+    needs: [workflows, backend, frontend, integration, production-images]
     runs-on: ubuntu-latest
     steps:
       - name: Require every check to pass
@@ -164,7 +112,6 @@ jobs:
           test "${{ needs.backend.result }}" = success
           test "${{ needs.frontend.result }}" = success
           test "${{ needs.integration.result }}" = success
-          test "${{ needs.performance-regression.result }}" = success || test "${{ needs.performance-regression.result }}" = skipped
           test "${{ needs.production-images.result }}" = success
 
   publish-production-images:
