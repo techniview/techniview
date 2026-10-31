@@ -9,6 +9,11 @@ services:
       GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-16}
     privileged: true
     cgroup: private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     init: true
     healthcheck:
       test: [CMD, /opt/python/bin/python3.14, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5050/version', timeout=2)"]
@@ -20,5 +25,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${RUNNER_CPU_LIMIT:-24}"
+          cpus: "${RUNNER_CPU_LIMIT:-8}"
           memory: ${JUDGE_WORKER_MEMORY_LIMIT:-8G}

@@ -22,6 +22,7 @@ curl http://localhost:8000/api/health | jq
 ## What is in here
 
 - docker-compose.yml - brings up go-judge, MySQL, the backend, and application workers
+- compose.production.yml - production app stack, including private Prometheus and Grafana monitoring
 - go-judge - pinned go-judge and Python sandbox image
 - backend - FastAPI on Python 3.14
   - main.py
@@ -52,7 +53,11 @@ go-judge executes Python 3.14 in a fresh sandbox for each case. The application
 worker records each case attempt in MySQL before execution and stores the result
 when go-judge returns. If a worker dies after dispatch, recovery records an
 unknown outcome instead of running the case again. The runner needs Linux cgroup
-v2 and privileged container access.
+v2 and a privileged container to create per-execution cgroups. go-judge uses
+`-no-fallback`, so it stops if cgroup setup fails. Sandboxed programs run with
+UID and GID 1536, no effective capabilities, the built-in seccomp filter, and
+an isolated network namespace. See [runner decision and evidence](docs/runner-decision.md)
+for the controls and the remaining privileged-container risk.
 
 ## Dev setup
 

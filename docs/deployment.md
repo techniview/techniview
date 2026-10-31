@@ -1,13 +1,16 @@
 # Campus deployment
 
 TechniView runs as two independent Docker Compose projects on separate campus
-Linux VMs. The application VM runs Caddy, FastAPI, the application worker, and
-MySQL. The runner VM runs standalone go-judge. The runner
+Linux VMs. The application VM runs Caddy, FastAPI, the application workers,
+MySQL, Prometheus, and Grafana. The runner VM runs standalone go-judge. The runner
 VM executes untrusted student code and must not share a host with student data.
 
 ## Campus network requirements
 
 - Publish ports 80 and 443 on the application VM for the website and HTTPS.
+- Grafana binds to the application VM's loopback address on port 3000. Reach it
+  through an SSH tunnel from an administrator workstation. Prometheus has no
+  published host port.
 - Bind go-judge to the runner VM's private address. Allow inbound port 5050
   only from the application VM's private address.
 - Do not publish MySQL or any other runner port.
@@ -33,10 +36,17 @@ Use encrypted campus storage for both VMs. TechniView stores submission code and
 results in MySQL. The execution service does not keep a second submission database.
 
 The runner needs Linux kernel 6.1 or newer and cgroup v2. Its worker requires
-privileged mode for go-judge, with a private cgroup namespace and no host
-cgroup bind mount. Keep it on the
-dedicated runner VM, patch the VM promptly, restrict SSH to campus administrators,
-and never give application users access to the Docker daemon. Expose the go-judge port only on the private app-to-runner interface.
+privileged mode for go-judge, with a private cgroup namespace and no host cgroup
+bind mount. Compose gives the runner a read-only root filesystem, a tmpfs at
+`/tmp`, and `no-new-privileges:true`. Student processes run with UID and GID
+1536, no effective capabilities, and go-judge's built-in seccomp filter. Their
+network namespace cannot reach the application API, MySQL, the runner API, or a
+peer on a separate Docker bridge. The runner container itself remains
+privileged and can make outbound connections. Keep the VM dedicated to code
+execution, patch it promptly, restrict SSH to campus administrators, and never
+give application users access to the Docker daemon. Expose port 5050 only on the
+runner's private interface. The campus firewall must allow that port only from
+the application VM.
 
 ## Configure each VM
 
@@ -180,10 +190,48 @@ minutes old.
 ## Operations signals
 
 The backend exposes Prometheus text metrics at `/api/metrics`, including API
-request latency, submission status, queue depth, and queue age. Scrape this
-endpoint from the app Docker network. The direct execution path does not expose
-Monitor go-judge through container health, CPU,
-memory, and restart counts.
+request latency, submission status, queue depth, and queue age. Prometheus
+scrapes this endpoint over the private monitoring network. The direct execution path
+does not expose go-judge through container health, CPU, memory, and restart
+counts.
+
+Prometheus keeps at most 15 days or 5 GB of samples. Its data and Grafana's
+provisioned dashboard use separate Docker volumes. The dashboard shows API
+scrape health, HTTP p95 latency, queue depth and age, execution phases,
+completion rate, and runner failures and retries. Completion rate is a rolling
+five-minute average. There are no configured alerts.
+
+Set `GRAFANA_ADMIN_PASSWORD` in `.env.production` to a long, unique password
+before starting the monitoring services. Keep the file mode at `0600`. Grafana
+binds only to `127.0.0.1:3000`; Prometheus has no published host port. From an
+administrator workstation, open the dashboard through an SSH tunnel:
+
+```sh
+ssh -N -L 3000:127.0.0.1:3000 administrator@app-vm.example.edu
+```
+
+Then visit `http://localhost:3000` and sign in with the configured Grafana
+admin credentials. Confirm the services start and load their configuration:
+
+```sh
+docker compose --env-file .env.production -f compose.production.yml ps
+docker compose --env-file .env.production -f compose.production.yml logs --tail=100 prometheus grafana
+```
+
+HTTP request observations enter a bounded queue in each API worker and a
+background thread writes them to a temporary SQLite database in the API
+container. All Uvicorn workers contribute to the same counters. The dropped
+observation counter is stored in SQLite and aggregated across API workers. It
+reports queue saturation or storage errors. Replacing the API container resets
+HTTP counters. Queue and runner metrics come from MySQL.
+Metric labels use only route templates, methods, status codes, submission
+states, and execution phases. They do not include user, submission, case, or
+runner identifiers.
+
+Student and authorized course staff submission views include `submitted_at`,
+`started_at`, `completed_at`, `wait_seconds`, and `execution_seconds`. Wait time
+ends when a worker first sends a case to go-judge. Execution time ends when
+grading completes. A running submission reports elapsed time so far.
 
 The Compose projects use Docker's rotating `local` log driver and retain the
 latest three 10 MiB files per service. The API and app worker write JSON events
@@ -196,10 +244,15 @@ are required.
 
 ## Launch gates
 
-The runner image pins go-judge 1.13.3 and Python 3.14.8. Run the real execution,
-resource-limit, and worker-restart tests on the target VM before accepting student
-code. The runner requires privileged mode for its private cgroup namespace;
-restrict its port to the application VM.
+The runner image pins go-judge 1.13.3 and Python 3.14.8. Run the full real
+execution suite on the target VM before accepting student code. From the
+reviewed checkout on that VM, run `make integration` and
+`./scripts/verify-direct-runner.sh`. The suite checks host files and secrets,
+Docker socket access, service and separate-bridge peer access from sandboxed
+code, UID and capabilities, cgroup limits, and worker restart recovery. From the
+application VM, confirm `/version` responds. Confirm the campus firewall blocks
+port 5050 from other sources. The runner requires privileged mode for its
+private cgroup namespace.
 
 Before enrolling participants, confirm DNS and firewall rules, email delivery,
 research data handling, a successful backup restore, and a load test on the

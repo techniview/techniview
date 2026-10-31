@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
@@ -104,7 +104,10 @@ def metrics():
             select(
                 func.count().label("count"),
                 func.min(Submission.submitted_at).label("oldest"),
-            ).where(Submission.status == SubmissionStatus.QUEUED)
+            ).where(
+                Submission.status == SubmissionStatus.QUEUED,
+                Submission.started_at.is_(None),
+            )
         ).one()
         oldest_age = (
             max(
@@ -122,6 +125,24 @@ def metrics():
                 "# HELP techniview_submission_queue_oldest_seconds Oldest queue age.",
                 "# TYPE techniview_submission_queue_oldest_seconds gauge",
                 f"techniview_submission_queue_oldest_seconds {oldest_age:.3f}",
+            ]
+        )
+
+        completion_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            minutes=5
+        )
+        completions = db.scalar(
+            select(func.count())
+            .select_from(Submission)
+            .where(Submission.completed_at >= completion_cutoff)
+        )
+        lines.extend(
+            [
+                "# HELP techniview_submission_completion_rate_per_minute "
+                "Completions per minute averaged over the last five minutes.",
+                "# TYPE techniview_submission_completion_rate_per_minute gauge",
+                "techniview_submission_completion_rate_per_minute "
+                f"{(completions or 0) / 5:.3f}",
             ]
         )
 

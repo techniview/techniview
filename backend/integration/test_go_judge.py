@@ -1,7 +1,9 @@
 """Real sandbox probes in the disposable integration stack."""
 
+import json
 import os
 import time
+from ipaddress import ip_address
 from uuid import uuid4
 
 import pytest
@@ -46,6 +48,17 @@ def test_direct_sandbox_limits(source, expected, code, cpu, memory):
     assert report["stdout"] != "bad\n"
 
 
+def test_direct_sandbox_loads_ca_bundle():
+    source = (
+        "import ssl; count = ssl.create_default_context().cert_store_stats()"
+        "['x509_ca']; print('ok' if count >= 100 else str(count))"
+    )
+    report = go_judge.execute(go_judge.Execution(source, "", "ok", 2, 128000))
+
+    assert report["status"]["id"] == 3, report
+    assert report["stdout"].strip() == "ok", report
+
+
 def test_direct_cases_are_fresh():
     first = (
         "import collections; collections.marker=True; "
@@ -65,6 +78,108 @@ def test_direct_cases_are_fresh():
         ]["id"]
         == 3
     )
+
+
+def test_sandbox_cannot_reach_parent_network_or_read_host_resources():
+    parent_targets = json.loads(os.environ["SANDBOX_NETWORK_PROBE_TARGETS"])
+    assert {target["name"] for target in parent_targets} == {
+        "application_api",
+        "database",
+        "external_peer",
+    }
+    for target in parent_targets:
+        ip_address(target["address"])
+
+    source = """
+import json
+import os
+import socket
+
+parent_targets = __PARENT_TARGETS__
+readable_paths = (
+    "/etc/shadow",
+    "/root/.ssh/authorized_keys",
+    "/proc/1/environ",
+    "/proc/1/root/etc/shadow",
+    "/sys/fs/cgroup/cgroup.procs",
+)
+socket_paths = ("/var/run/docker.sock", "/run/docker.sock")
+exposed = {
+        "readable_host_paths": [],
+    "reachable_unix_sockets": [],
+    "reachable_tcp_services": [],
+    "reachable_parent_services": [],
+    "effective_capabilities": None,
+    "sandbox_uid": os.geteuid(),
+    "sandbox_gid": os.getegid(),
+    "runner_env_secret_present": bool(os.environ.get("RUNNER_SECRET_PROBE")),
+    "visible_pid1_cmdline": None,
+}
+with open("/proc/1/cmdline", "rb") as pid1_cmdline:
+    exposed["visible_pid1_cmdline"] = " ".join(
+        filter(None, pid1_cmdline.read().decode().split("\\0"))
+    )
+with open("/proc/self/status", encoding="ascii") as status_file:
+    for line in status_file:
+        if line.startswith("CapEff:"):
+            exposed["effective_capabilities"] = line.split()[1]
+for path in readable_paths:
+    try:
+        with open(path, "rb") as resource:
+            resource.read(1)
+        exposed["readable_host_paths"].append(path)
+    except (OSError, PermissionError):
+        pass
+for path in socket_paths:
+    try:
+        connection = socket.socket(socket.AF_UNIX)
+        connection.settimeout(0.2)
+        connection.connect(path)
+        connection.close()
+        exposed["reachable_unix_sockets"].append(path)
+    except OSError:
+        pass
+for host, port, label in (("127.0.0.1", 5050, "runner_api"),):
+    try:
+        connection = socket.create_connection((host, port), timeout=0.3)
+        connection.close()
+        exposed["reachable_tcp_services"].append(label)
+    except OSError:
+        pass
+for target in parent_targets:
+    try:
+        connection = socket.create_connection(
+            (target["address"], target["port"]), timeout=0.3
+        )
+        connection.close()
+        exposed["reachable_parent_services"].append(target["name"])
+    except OSError:
+        pass
+print(json.dumps(exposed, sort_keys=True))
+"""
+    source = source.replace("__PARENT_TARGETS__", json.dumps(parent_targets))
+    expected = (
+        '{"effective_capabilities": "0000000000000000", '
+        '"reachable_parent_services": [], "reachable_tcp_services": [], '
+        '"reachable_unix_sockets": [], '
+        '"readable_host_paths": [], "runner_env_secret_present": false, '
+        '"sandbox_gid": 1536, "sandbox_uid": 1536, '
+        '"visible_pid1_cmdline": "/proc/self/exe container_init"}'
+    )
+    report = go_judge.execute(go_judge.Execution(source, "", expected, 2, 128000))
+    assert report["status"]["id"] == 3, report
+    exposed = json.loads(report["stdout"])
+    assert exposed == {
+        "effective_capabilities": "0000000000000000",
+        "reachable_parent_services": [],
+        "reachable_tcp_services": [],
+        "reachable_unix_sockets": [],
+        "readable_host_paths": [],
+        "runner_env_secret_present": False,
+        "sandbox_gid": 1536,
+        "sandbox_uid": 1536,
+        "visible_pid1_cmdline": "/proc/self/exe container_init",
+    }, exposed
 
 
 @pytest.mark.skipif(

@@ -71,7 +71,7 @@ class RequestObservabilityMiddleware:
         finally:
             route = getattr(scope.get("route"), "path", "unmatched")
             duration = time.perf_counter() - started
-            observe_request(scope["method"], route, status, started)
+            observe_request(scope["method"], route, status, duration)
             logger.info(
                 json.dumps(
                     {

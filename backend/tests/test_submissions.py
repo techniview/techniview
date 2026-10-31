@@ -1,14 +1,17 @@
+from contextlib import nullcontext
 from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from app.core.observability import HttpMetrics
 from app.models import (
     AssignmentItem,
     StudentPracticeProgress,
     Submission,
     SubmissionCaseResult,
 )
+from app.routers import metrics
 from app.routers.submissions import get_status_message
 from app.services.progress import utc_now
 from app.worker.submissions import process_next_submission
@@ -94,6 +97,41 @@ async def test_worker_runs_server_cases_and_redacts_hidden_case(
     assert "[[-2, 2]]" not in str(body)
     assert execute.call_count == 2
     assert [call.args[0].expected for call in execute.call_args_list] == ["6", "0"]
+
+
+async def test_running_worker_is_not_counted_in_submission_queue(
+    student_client, db_session, monkeypatch
+):
+    problem_id = await _problem_id(student_client, "Count Evens")
+    created = await student_client.post(
+        "/api/submissions",
+        json={"problem_id": problem_id, "source_code": "print(42)"},
+        headers={"Idempotency-Key": uuid4().hex},
+    )
+    assert created.status_code == 202
+    monkeypatch.setattr(metrics, "SessionLocal", lambda: nullcontext(db_session))
+    monkeypatch.setattr(metrics, "http_metrics", HttpMetrics())
+    observed = set()
+
+    def inspect_metrics(_execution):
+        payload = metrics.metrics().body.decode()
+        observed.update(
+            line
+            for line in payload.splitlines()
+            if line.startswith("techniview_submission_queue_depth ")
+            or line.startswith("techniview_submission_queue_oldest_seconds ")
+            or line.startswith(
+                'techniview_execution_cases{phase="running_on_go_judge"}'
+            )
+        )
+        return {"status": {"id": 3}, "stdout": "2\n", "time": 0.01}
+
+    with patch("app.core.go_judge.execute", side_effect=inspect_metrics):
+        assert process_next_submission(db_session, "test-worker") is True
+
+    assert "techniview_submission_queue_depth 0" in observed
+    assert "techniview_submission_queue_oldest_seconds 0.000" in observed
+    assert 'techniview_execution_cases{phase="running_on_go_judge"} 1' in observed
 
 
 async def test_direct_execution_updates_progress_once(student_client, db_session):

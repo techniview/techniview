@@ -1,6 +1,12 @@
+import asyncio
+import sqlite3
+import threading
+import time
 from datetime import UTC, datetime, timedelta
+from multiprocessing import get_context
 
 import pytest
+from app.core import observability
 from app.core.observability import HttpMetrics
 from app.models import (
     ProblemTestCase,
@@ -9,9 +15,40 @@ from app.models import (
     User,
 )
 from app.routers import metrics
+from app.routers.submissions import _submission_response
 from app.services.execution import snapshot_case_result
+from main import RequestObservabilityMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
+
+
+def _observe_http_requests(path, count):
+    worker_metrics = HttpMetrics(path)
+    for _ in range(count):
+        worker_metrics.observe("GET", "/api/health/ready", 200, 0.01)
+    worker_metrics._write_queue.join()
+
+
+def _saturate_http_metrics(path):
+    HttpMetrics.write_queue_capacity = 1
+    worker_metrics = HttpMetrics(path)
+    writer_entered = threading.Event()
+    release_writer = threading.Event()
+    persist = worker_metrics._write_observation
+
+    def hold_first_write(*observation):
+        if not writer_entered.is_set():
+            writer_entered.set()
+            release_writer.wait(timeout=5)
+        persist(*observation)
+
+    worker_metrics._write_observation = hold_first_write
+    worker_metrics.observe("GET", "/api/health/ready", 200, 0.01)
+    assert writer_entered.wait(timeout=5)
+    worker_metrics.observe("GET", "/api/health/ready", 200, 0.02)
+    worker_metrics.observe("GET", "/api/health/ready", 200, 0.03)
+    release_writer.set()
+    worker_metrics._write_queue.join()
 
 
 def samples(payload):
@@ -154,3 +191,168 @@ def test_empty_execution_queue_exports_numeric_zeroes(metrics_database):
     assert execution_values == [0] * 6
     assert values["techniview_submission_queue_depth"] == 0
     assert values["techniview_submission_queue_oldest_seconds"] == 0
+
+
+def test_http_metrics_aggregate_across_processes(tmp_path):
+    path = str(tmp_path / "http-metrics.sqlite3")
+    HttpMetrics(path)
+    context = get_context("spawn")
+    workers = [
+        context.Process(target=_observe_http_requests, args=(path, 25))
+        for _ in range(2)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert worker.exitcode == 0
+
+    payload = HttpMetrics(path).render()
+    values = samples(payload)
+    assert (
+        values[
+            'techniview_http_requests_total{method="GET",route="/api/health/ready",status="200"}'
+        ]
+        == 50
+    )
+    assert (
+        values[
+            'techniview_http_request_duration_seconds_count{method="GET",route="/api/health/ready",status="200"}'
+        ]
+        == 50
+    )
+
+
+@pytest.mark.anyio
+async def test_http_metric_writer_lock_does_not_block_event_loop(tmp_path, monkeypatch):
+    path = str(tmp_path / "http-metrics.sqlite3")
+    shared_metrics = HttpMetrics(path)
+    writer_lock = sqlite3.connect(path, timeout=5, check_same_thread=False)
+    writer_lock.execute("BEGIN IMMEDIATE")
+    writer_attempted = threading.Event()
+    persist = shared_metrics._write_observation
+
+    def mark_writer_attempt(*observation):
+        writer_attempted.set()
+        persist(*observation)
+
+    monkeypatch.setattr(shared_metrics, "_write_observation", mark_writer_attempt)
+    monkeypatch.setattr(observability, "http_metrics", shared_metrics)
+
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    async def send(_message):
+        return None
+
+    middleware = RequestObservabilityMiddleware(app)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "route": type("Route", (), {"path": "/contention"})(),
+    }
+    timer = threading.Timer(0.6, writer_lock.commit)
+    started = time.perf_counter()
+    timer.start()
+    try:
+        request = asyncio.create_task(middleware(scope, None, send))
+        await asyncio.sleep(0.05)
+        assert writer_attempted.is_set()
+        event_loop_delay = time.perf_counter() - started
+        scrape_started = time.perf_counter()
+        scrape_payload = shared_metrics.render()
+        scrape_duration = time.perf_counter() - scrape_started
+        await request
+        assert event_loop_delay < 0.3
+        assert scrape_duration < 0.3
+        assert samples(scrape_payload)["techniview_http_metrics_dropped_total"] == 0
+    finally:
+        timer.cancel()
+        writer_lock.close()
+        shared_metrics._write_queue.join()
+    values = samples(shared_metrics.render())
+    assert values["techniview_http_metrics_dropped_total"] == 0
+    assert (
+        values[
+            'techniview_http_requests_total{method="GET",route="/contention",status="200"}'
+        ]
+        == 1
+    )
+
+
+def test_dropped_http_metrics_aggregate_across_processes(tmp_path):
+    path = str(tmp_path / "http-metrics.sqlite3")
+    HttpMetrics(path)
+    context = get_context("spawn")
+    workers = [
+        context.Process(target=_saturate_http_metrics, args=(path,)) for _ in range(2)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert worker.exitcode == 0
+
+    values = samples(HttpMetrics(path).render())
+    assert values["techniview_http_metrics_dropped_total"] == 2
+    assert (
+        values[
+            'techniview_http_requests_total{method="GET",route="/api/health/ready",status="200"}'
+        ]
+        == 4
+    )
+
+
+def test_submission_view_reports_wait_and_execution_durations(metrics_database):
+    db = metrics_database
+    student = db.scalar(select(User).where(User.email == "student@techniview.local"))
+    case = db.scalar(select(ProblemTestCase).order_by(ProblemTestCase.id))
+    submitted_at = datetime(2026, 10, 30, 12, 0, 0)
+    started_at = submitted_at + timedelta(seconds=7)
+    completed_at = started_at + timedelta(seconds=25)
+    submission = Submission(
+        student_id=student.id,
+        problem_id=case.problem_id,
+        source_code="pass",
+        status=SubmissionStatus.PASSED,
+        submitted_at=submitted_at,
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+    db.add(submission)
+    db.flush()
+
+    response = _submission_response(submission)
+
+    assert response["submitted_at"] == submitted_at
+    assert response["started_at"] == started_at
+    assert response["completed_at"] == completed_at
+    assert response["wait_seconds"] == 7
+    assert response["execution_seconds"] == 25
+
+
+def test_completed_legacy_submission_without_start_time_has_unknown_wait(
+    metrics_database,
+):
+    db = metrics_database
+    student = db.scalar(select(User).where(User.email == "student@techniview.local"))
+    case = db.scalar(select(ProblemTestCase).order_by(ProblemTestCase.id))
+    submitted_at = datetime(2026, 10, 29, 12, 0, 0)
+    completed_at = submitted_at + timedelta(seconds=45)
+    submission = Submission(
+        student_id=student.id,
+        problem_id=case.problem_id,
+        source_code="pass",
+        status=SubmissionStatus.PASSED,
+        submitted_at=submitted_at,
+        completed_at=completed_at,
+    )
+    db.add(submission)
+    db.flush()
+
+    response = _submission_response(submission)
+
+    assert response["started_at"] is None
+    assert response["wait_seconds"] is None
+    assert response["execution_seconds"] is None

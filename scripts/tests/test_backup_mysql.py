@@ -50,6 +50,7 @@ def main():
             "MYSQL_DB": "backup_test",
             "RUNNER_PRIVATE_HOST": "127.0.0.1",
             "EMAIL_FROM": "test@test.invalid",
+            "GRAFANA_ADMIN_PASSWORD": "test-only-grafana-password",
             "SECRET_DIR": str(temporary),
             "RESTIC_REPOSITORY": str(temporary / "repository"),
             "RESTIC_PASSWORD": "test-only-restic-password",
