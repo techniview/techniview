@@ -39,6 +39,9 @@ curl http://localhost:8000/api/health | jq
 - pyproject.toml - backend dependencies and Ruff/pytest settings
 - uv.lock - reproducible Python dependency lockfile
 
+The [pilot participation form](docs/pilot_participation_form.md) also has a
+[printable PDF](docs/pilot_participation_form.pdf).
+
 ## Config
 
 Secrets live in `.env`, which is gitignored. Copy the template and change values:
