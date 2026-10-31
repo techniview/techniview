@@ -29,6 +29,11 @@ def _observe_http_requests(path, count):
     worker_metrics._write_queue.join()
 
 
+def _initialize_http_metrics(path, start_gate):
+    start_gate.wait()
+    HttpMetrics(path)
+
+
 def _saturate_http_metrics(path):
     HttpMetrics.write_queue_capacity = 1
     worker_metrics = HttpMetrics(path)
@@ -221,6 +226,28 @@ def test_http_metrics_aggregate_across_processes(tmp_path):
         ]
         == 50
     )
+
+
+def test_http_metrics_initialize_concurrently(tmp_path):
+    path = str(tmp_path / "http-metrics.sqlite3")
+    context = get_context("spawn")
+    worker_count = 16
+    start_gate = context.Barrier(worker_count)
+    workers = [
+        context.Process(target=_initialize_http_metrics, args=(path, start_gate))
+        for _ in range(worker_count)
+    ]
+    for worker in workers:
+        worker.start()
+    deadline = time.monotonic() + 15
+    for worker in workers:
+        worker.join(timeout=max(0, deadline - time.monotonic()))
+    for worker in workers:
+        if worker.is_alive():
+            worker.terminate()
+            worker.join()
+        assert worker.exitcode == 0
+    assert "techniview_http_requests_total" in HttpMetrics(path).render()
 
 
 @pytest.mark.anyio
