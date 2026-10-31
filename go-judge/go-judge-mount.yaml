@@ -4,6 +4,7 @@ mount:
   - {type: bind, source: /lib64, target: /lib64, readonly: true}
   - {type: bind, source: /usr/lib, target: /usr/lib, readonly: true}
   - {type: bind, source: /usr/lib64, target: /usr/lib64, readonly: true}
+  - {type: bind, source: /etc/ssl/certs, target: /etc/ssl/certs, readonly: true}
   - {type: bind, source: /opt/python, target: /opt/python, readonly: true}
   - {type: bind, source: /dev/null, target: /dev/null}
   - {type: bind, source: /dev/urandom, target: /dev/urandom}
