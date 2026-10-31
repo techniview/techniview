@@ -22,6 +22,7 @@ curl http://localhost:8000/api/health | jq
 ## What is in here
 
 - docker-compose.yml - brings up go-judge, MySQL, the backend, and application workers
+- compose.production.yml - production app stack, including private Prometheus and Grafana monitoring
 - go-judge - pinned go-judge and Python sandbox image
 - backend - FastAPI on Python 3.14
   - main.py

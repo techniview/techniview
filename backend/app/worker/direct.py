@@ -34,6 +34,7 @@ def process_submission(db, submission_id: int, owner: str) -> None:
             continue
         if case.dispatch_started_at is not None:
             # A previous owner recorded dispatch but never durably saved a result.
+            row.started_at = row.started_at or case.dispatch_started_at
             _mark_infrastructure_failure(row, case, "runner_outcome_unknown")
             results._finalize_submission(db, row)
             db.commit()
@@ -41,6 +42,7 @@ def process_submission(db, submission_id: int, owner: str) -> None:
         attempt = str(uuid4())
         case.judge0_token = attempt
         case.dispatch_started_at = utc_now()
+        row.started_at = row.started_at or case.dispatch_started_at
         case.dispatch_attempt_count += 1
         case.judge0_status_id = 2
         row.claimed_at = utc_now()

@@ -41,7 +41,10 @@ export type Submission = {
     primary_error: string | null;
     python_exception_type: string | null;
     submitted_at: string;
+    started_at: string | null;
     completed_at: string | null;
+    wait_seconds: number | null;
+    execution_seconds: number | null;
     poll_url: string;
     source_code?: string;
 };

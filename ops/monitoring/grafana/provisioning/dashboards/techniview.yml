@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: TechniView operations
+    orgId: 1
+    folder: TechniView
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

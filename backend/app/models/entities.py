@@ -421,6 +421,7 @@ class Submission(Base):
     __tablename__ = "submissions"
     __table_args__ = (
         Index("idx_submissions_student_problem", "student_id", "problem_id"),
+        Index("idx_submissions_completed_at", "completed_at"),
         UniqueConstraint("id", "problem_id", name="uq_submissions_id_problem"),
         ForeignKeyConstraint(
             ["assignment_item_id", "problem_id"],
@@ -450,6 +451,9 @@ class Submission(Base):
         DateTime(timezone=False).with_variant(mysql.DATETIME(fsp=6), "mysql"),
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         server_default=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False).with_variant(mysql.DATETIME(fsp=6), "mysql")
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=False).with_variant(mysql.DATETIME(fsp=6), "mysql")

@@ -71,7 +71,10 @@ const submission = {
     primary_error: null,
     python_exception_type: null,
     submitted_at: "2026-10-28T12:00:00Z",
+    started_at: "2026-10-28T12:00:00.500Z",
     completed_at: "2026-10-28T12:00:01Z",
+    wait_seconds: 0.5,
+    execution_seconds: 0.5,
     poll_url: "/api/submissions/29",
 };
 
