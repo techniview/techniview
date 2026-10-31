@@ -1,4 +1,4 @@
-# TechniView Pilot Participation and Data Consent Form
+# TechniView Pilot Data Consent Form
 
 **Pilot Dates:** February 15 to March 14, 2027
 
@@ -26,13 +26,9 @@ We use this information to provide the coding practice service, show you your pr
 
 ## Who Can Access the Information
 
-You can see your own progress and submission results. Course instructors and authorized course staff can see assignment submissions and course analytics for their students. Authorized members of the TechniView pilot team may access identifiable information to operate, maintain, secure, troubleshoot, and evaluate the platform. Other participants cannot see your individual results through TechniView.
+You can see your own progress and submission results. Authorized members of the TechniView pilot team may access identifiable information to operate, maintain, secure, troubleshoot, and evaluate the platform. Other participants cannot see your individual results through TechniView.
 
 TechniView is hosted on systems operated within the University of Cincinnati. Resend processes email used for account-related messages. UC Qualtrics hosts the pilot survey. Submitted code is run by the TechniView code-execution service.
-
-## Risks and Benefits
-
-You may get coding practice and feedback, but participation does not guarantee an improvement in grades or learning outcomes. A data breach or a recognizable pattern in shared results could reveal information about your work. The team will restrict access and review any proposed public dataset, but cannot promise zero privacy risk.
 
 ## Research Data and Public Sharing
 
