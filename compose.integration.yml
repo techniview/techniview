@@ -7,12 +7,13 @@ x-app: &app
   environment: &app-environment
     DATABASE_URL: mysql+pymysql://integration:p%40ss%25word@mysql/integration
     GO_JUDGE_URL: http://go-judge:5050
+    GO_JUDGE_WALL_SECONDS: ${LOAD_GO_JUDGE_WALL_SECONDS:-5}
     INTEGRATION_TESTS: "1"
     EMAIL_DELIVERY_MODE: capture
     EMAIL_SIGNING_KEY: techniview-integration-only-email-key-2026
     EMAIL_FROM: TechniView <noreply@example.test>
-    DB_POOL_SIZE: "30"
-    DB_MAX_OVERFLOW: "0"
+    DB_POOL_SIZE: ${LOAD_API_DB_POOL_SIZE:-30}
+    DB_MAX_OVERFLOW: ${LOAD_DB_MAX_OVERFLOW:-0}
 
 services:
   mysql:
@@ -43,8 +44,8 @@ services:
       - no-new-privileges:true
     init: true
     cpus: ${RUNNER_CPU_LIMIT:-4}
-    mem_limit: 8g
-    memswap_limit: 8g
+    mem_limit: ${RUNNER_MEMORY_LIMIT:-8g}
+    memswap_limit: ${RUNNER_MEMORY_LIMIT:-8g}
     environment:
       GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-4}
       RUNNER_SECRET_PROBE: runner-only-sentinel
@@ -95,8 +96,8 @@ services:
     <<: *app
     environment:
       <<: *app-environment
-      DB_POOL_SIZE: "3"
-      DB_MAX_OVERFLOW: "0"
+      DB_POOL_SIZE: ${LOAD_WORKER_DB_POOL_SIZE:-3}
+      DB_MAX_OVERFLOW: ${LOAD_DB_MAX_OVERFLOW:-0}
       DIRECT_WORKER_PROCESSES: ${DIRECT_WORKER_PROCESSES:-4}
     command: python -m app.worker.direct_supervisor
     depends_on:

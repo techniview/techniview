@@ -1,4 +1,4 @@
-.PHONY: install hooks fmt lint test check verify integration load-test build up down clean
+.PHONY: install hooks fmt lint test check verify integration load-test performance-compare build up down clean
 
 LOAD_STUDENTS ?= 100
 LOAD_CONCURRENCY ?= $(LOAD_STUDENTS)
@@ -7,6 +7,22 @@ LOAD_APP_WORKERS ?= 4
 GO_JUDGE_PARALLELISM ?= 4
 DIRECT_WORKER_PROCESSES ?= 1
 LOAD_CASES_PER_SUBMISSION ?= 1
+PERF_BASE_PATH ?=
+PERF_BASE_COMMIT ?= unknown
+PERF_PROPOSED_COMMIT ?= HEAD
+PERF_OUTPUT_DIR ?= /tmp/techniview-performance
+PERF_STUDENTS ?= 100
+PERF_APP_WORKERS ?= 4
+PERF_WORKER_PROCESSES ?= 1
+PERF_JUDGE_SLOTS ?= 4
+PERF_RUNNER_CPU_LIMIT ?= 4
+PERF_RUNNER_MEMORY_LIMIT ?= 8g
+PERF_API_DB_POOL_SIZE ?= 30
+PERF_WORKER_DB_POOL_SIZE ?= 3
+PERF_DB_MAX_OVERFLOW ?= 0
+PERF_GO_JUDGE_WALL_SECONDS ?= 30
+PERF_WORKLOADS ?= short cpu-heavy multi-case
+PERF_MEASURED_RUNS ?= 3
 
 install: hooks
 	@uv sync --locked
@@ -64,6 +80,26 @@ load-test:
 	  -e LOAD_GO_JUDGE_SLOTS=$(GO_JUDGE_PARALLELISM) \
 	  -e LOAD_COMPLETION_TIMEOUT_SECONDS=$(LOAD_COMPLETION_TIMEOUT_SECONDS) \
 	  tests python -m performance.load_test
+
+performance-compare:
+	@test -n "$(PERF_BASE_PATH)" || (echo "Set PERF_BASE_PATH to a base checkout" >&2; exit 2)
+	PYTHONPATH=backend python3 scripts/performance/compare_load_test.py \
+	  --base-path "$(PERF_BASE_PATH)" \
+	  --base-commit "$(PERF_BASE_COMMIT)" \
+	  --proposed-commit "$(PERF_PROPOSED_COMMIT)" \
+	  --output-dir "$(PERF_OUTPUT_DIR)" \
+	  --students "$(PERF_STUDENTS)" \
+	  --app-workers "$(PERF_APP_WORKERS)" \
+	  --worker-processes "$(PERF_WORKER_PROCESSES)" \
+	  --judge-slots "$(PERF_JUDGE_SLOTS)" \
+	  --runner-cpu-limit "$(PERF_RUNNER_CPU_LIMIT)" \
+	  --runner-memory-limit "$(PERF_RUNNER_MEMORY_LIMIT)" \
+	  --api-db-pool-size "$(PERF_API_DB_POOL_SIZE)" \
+	  --worker-db-pool-size "$(PERF_WORKER_DB_POOL_SIZE)" \
+	  --db-max-overflow "$(PERF_DB_MAX_OVERFLOW)" \
+	  --go-judge-wall-seconds "$(PERF_GO_JUDGE_WALL_SECONDS)" \
+	  --workloads $(PERF_WORKLOADS) \
+	  --measured-runs "$(PERF_MEASURED_RUNS)"
 
 up:
 	docker compose up -d --build
