@@ -1,5 +1,21 @@
 # TechniView Pilot Data Consent Form
 
+<style>
+body,
+body * {
+  color: #000 !important;
+  font-family: "Times New Roman", Times, serif !important;
+}
+.write-line {
+  display: inline-block;
+  height: 1em;
+  border-bottom: 1px solid #000;
+  vertical-align: bottom;
+}
+.write-line-short { width: 18em; }
+.write-line-long { width: 24em; }
+</style>
+
 **Pilot Dates:** February 15 to March 14, 2027
 
 ## About the Pilot

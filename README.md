@@ -39,8 +39,8 @@ curl http://localhost:8000/api/health | jq
 - pyproject.toml - backend dependencies and Ruff/pytest settings
 - uv.lock - reproducible Python dependency lockfile
 
-The [pilot participation form](docs/pilot_participation_form.md) also has a
-[printable PDF](docs/pilot_participation_form.pdf).
+The [pilot participation form](docs/TECHNIVIEW_CONSENT_FORM.md) also has a
+[printable PDF](docs/TECHNIVIEW_CONSENT_FORM.pdf).
 
 ## Config
 
