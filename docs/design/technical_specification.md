@@ -8,6 +8,7 @@
 | Version | Date | Change | Author |
 | :--- | :--- | :--- | :--- |
 | 1.0 | 2026-10-30 | Initial Technical Specification Document creation | Team (Ryan Sippy, Jason Bellerjeau, Derek Corniello) |
+| 1.1 | 2026-11-04 | Expanded test-case links for the test plan; current requirement and design decisions unchanged | Derek Corniello |
 
 ## Architecture Summary
 
@@ -57,16 +58,16 @@ The browser calls the backend over HTTPS. `POST /api/submissions` reserves a sub
 
 | Req ID | Description | Design Component (D0/D1/D2) | Status | Test Case |
 | :--- | :--- | :--- | :--- | :--- |
-| REQ-01 | Accept Python submissions asynchronously and return authorized case results when complete. | API, worker, go-judge, SubmissionCaseResult | Implemented; latency target unverified | TC-01 |
-| REQ-02 | Compute and update a student's `best_score` and valid attempt counts. | StudentAssignmentProgress (D1/D2) | Designed | TC-02 |
-| REQ-03 | Allow professors to create draft problems and publish canonical solutions. | Problem, ProblemTestCase (D1/D2) | Designed | TC-03 |
-| REQ-04 | Assign published problem sets to course rosters with distinct dates. | Assignment, AssignmentItem (D1/D2) | Designed | TC-04 |
-| REQ-05 | Enforce role-based access for test cases and metrics. | CourseMembership (D1/D2) | Designed | TC-05 |
+| REQ-01 | Accept Python submissions asynchronously and return authorized case results when complete. | API, worker, go-judge, SubmissionCaseResult | Implemented; latency target unverified | TC-01.1 to TC-01.3 |
+| REQ-02 | Compute and update a student's `best_score` and valid attempt counts. | StudentAssignmentProgress (D1/D2) | Designed | TC-02.1 to TC-02.4 |
+| REQ-03 | Allow professors to create draft problems and publish canonical solutions. | Problem, ProblemTestCase (D1/D2) | Designed | TC-03.1 to TC-03.3 |
+| REQ-04 | Assign published problem sets to course rosters with distinct dates. | Assignment, AssignmentItem (D1/D2) | Designed | TC-04.1 to TC-04.3 |
+| REQ-05 | Enforce role-based access for test cases and metrics. | CourseMembership (D1/D2) | Designed | TC-05.1 to TC-05.3 |
 | REQ-06 | Allow soft withdrawal of course memberships retaining history. | CourseMembership | Implemented | TC-06 |
-| NFR-01 | Measure throughput and queue delay for the expected problem mix on the target VMs. | API queue, workers, go-judge | Capacity assessment pending | TC-07 |
-| NFR-02 | Isolate student jobs and enforce each problem's CPU and memory limits. | go-judge on dedicated runner VM | Local integration passed; target VM check pending | TC-08 |
+| NFR-01 | Measure throughput and queue delay for the expected problem mix on the target VMs. | API queue, workers, go-judge | Capacity assessment pending | TC-07.1 to TC-07.3 |
+| NFR-02 | Isolate student jobs and enforce each problem's CPU and memory limits. | go-judge on dedicated runner VM | Local integration passed; target VM check pending | TC-08.1 to TC-08.3 |
 | NFR-03 | Web UI complies with WCAG 2.1 AA accessibility. | Web UI (D0/D2) | Planned | TC-09 |
-| NFR-04 | Measure API and database availability against an approved target. | Health routes, operations monitoring | Target and baseline pending | TC-10 |
+| NFR-04 | Measure API and database availability against an approved target. | Health routes, operations monitoring | Target and baseline pending | TC-10.1 to TC-10.3 |
 | CON-01 | UC and AWS budget limits. | Two-VM deployment | Cost validation pending | TC-11 |
 | CON-02 | Student-data security and privacy. | HTTPS, sessions, role checks, backups | Institutional review pending | TC-11 |
 | CON-03 | Research approval and consent. | Study process outside the application | Institutional determination pending | TC-12 |

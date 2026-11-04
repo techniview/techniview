@@ -42,6 +42,12 @@ curl http://localhost:8000/api/health | jq
 The [pilot participation form](docs/TECHNIVIEW_CONSENT_FORM.md) also has a
 [printable PDF](docs/TECHNIVIEW_CONSENT_FORM.pdf).
 
+## Section 3: Design and test documents
+
+- [Week 9 requirements draft](docs/design/requirements_document.md)
+- [Week 9 technical specification draft](docs/design/technical_specification.md)
+- [Test plan](Test_Plan.md) ([PDF submission copy](Test_Plan.pdf))
+
 ## Config
 
 Secrets live in `.env`, which is gitignored. Copy the template and change values:
@@ -226,3 +232,8 @@ failure and never silently reruns it. The student can start a new submission.
 
 See [runner decision and evidence](docs/runner-decision.md) for the benchmark
 history and [testing](docs/testing.md) for integration checks.
+
+## Appendix
+
+The [test plan](Test_Plan.md) maps the Week 9 requirements to runnable cases,
+staging conditions, acceptance thresholds, and the spring pilot gates.
