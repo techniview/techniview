@@ -1,6 +1,6 @@
 # TechniView test and validation plan
 
-**QA lead:** Derek Corniello. **Case owners:** Derek (submissions, scoring, runner and capacity); Ryan Sippy (authoring and UI); Jason Bellerjeau (assignments, access and data); full team (pilot and institutional gates). **Execution window:** CS 5002, spring 2027. **Basis:** [Week 9 requirements](docs/design/requirements_document.md), [technical specification](docs/design/technical_specification.md), [current testing guide](docs/testing.md), and [campus deployment guide](docs/deployment.md). This plan describes acceptance checks; a `Not Run` case has no claimed result.
+**QA lead:** Derek Corniello. **Case owners:** Derek (submissions, scoring, runner and capacity); Ryan Sippy (authoring and UI); Jason Bellerjeau (assignments, access and data); full team (pilot and institutional gates). **Execution window:** CS 5002, spring 2027. **Basis:** [Week 9 requirements](design/requirements_document.md), [technical specification](design/technical_specification.md), [current testing guide](testing.md), and [campus deployment guide](deployment.md). This plan describes acceptance checks; a `Not Run` case has no claimed result.
 
 ## 1. Scope of testing
 
