@@ -46,7 +46,7 @@ The [pilot participation form](docs/TECHNIVIEW_CONSENT_FORM.md) also has a
 
 - [Week 9 requirements draft](docs/design/requirements_document.md)
 - [Week 9 technical specification draft](docs/design/technical_specification.md)
-- [Test plan](Test_Plan.md) ([PDF submission copy](Test_Plan.pdf))
+- [Test plan](docs/Test_Plan.md) ([PDF submission copy](docs/Test_Plan.pdf))
 
 ## Config
 
@@ -235,5 +235,5 @@ history and [testing](docs/testing.md) for integration checks.
 
 ## Appendix
 
-The [test plan](Test_Plan.md) maps the Week 9 requirements to runnable cases,
+The [test plan](docs/Test_Plan.md) maps the Week 9 requirements to runnable cases,
 staging conditions, acceptance thresholds, and the spring pilot gates.
