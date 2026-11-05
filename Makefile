@@ -24,6 +24,7 @@ PERF_GO_JUDGE_WALL_SECONDS ?= 30
 PERF_WORKLOADS ?= short cpu-heavy multi-case
 PERF_MEASURED_RUNS ?= 3
 GO_JUDGE_IMAGE ?= $(shell cat go-judge/runner-image.ref 2>/dev/null || true)
+export GO_JUDGE_IMAGE
 
 install: hooks
 	@uv sync --locked
