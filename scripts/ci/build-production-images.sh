@@ -6,5 +6,4 @@ cd "$repository_root"
 
 docker build -f backend/Dockerfile.prod -t techniview-backend:ci backend
 docker build -f frontend/Dockerfile.prod -t techniview-frontend:ci frontend
-docker build -t techniview-go-judge:ci go-judge
-./scripts/ci/check-go-judge-image.sh techniview-go-judge:ci
+./scripts/ci/build-go-judge-image.sh techniview-go-judge:ci
