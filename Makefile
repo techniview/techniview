@@ -24,6 +24,7 @@ PERF_GO_JUDGE_WALL_SECONDS ?= 30
 PERF_WORKLOADS ?= short cpu-heavy multi-case
 PERF_MEASURED_RUNS ?= 3
 GO_JUDGE_IMAGE ?= $(shell cat go-judge/runner-image.ref 2>/dev/null || true)
+export GO_JUDGE_IMAGE
 
 install: hooks
 	@uv sync --locked
@@ -65,6 +66,10 @@ integration:
 	if [ -n "$$GO_JUDGE_IMAGE" ] && docker pull "$$GO_JUDGE_IMAGE" >/dev/null 2>&1; then \
 		override_args="-f compose.baked-go-judge.yml"; \
 		echo "using the baked go-judge image $$GO_JUDGE_IMAGE"; \
+	elif [ "$${REQUIRE_BAKED_GO_JUDGE:-0}" = 1 ]; then \
+		echo "cannot pull required go-judge image $$GO_JUDGE_IMAGE" >&2; \
+		docker pull "$$GO_JUDGE_IMAGE" >&2 || true; \
+		exit 1; \
 	else \
 		override_args=""; \
 		echo "building the go-judge image from source"; \
