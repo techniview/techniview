@@ -134,7 +134,7 @@ jobs:
           test "${{ needs.workflows.result }}" = success
           test "${{ needs.backend.result }}" = success
           test "${{ needs.frontend.result }}" = success
-          test "${{ needs.integration.result }}" != failure
+          test "${{ needs.integration.result }}" = success
           test "${{ needs.production-images.result }}" != failure
 
   publish-production-images:
