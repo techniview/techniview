@@ -42,6 +42,25 @@ without relying on an internet endpoint. The probe found no Docker socket. A
 sentinel environment variable set only on the runner container was absent from
 the student process.
 
+## Runner image lifecycle
+
+The image is not built from source on every CI run.
+The `Bake runner image` workflow is a manual dispatch that builds the image from
+the pinned Dockerfile, runs the sandbox verification probe, pushes it to GitHub
+Container Registry as `go-judge:runner-<runnumber>` plus a rolling
+`go-judge:runner-latest` tag, and writes the pushed digest ref into
+`go-judge/runner-image.ref` on main. CI and local `make integration` and
+`make up` pull that ref through `compose.baked-go-judge.yml` and fall back to a
+source build only when the pull fails. The runner VM consumes the same digest
+ref through `GO_JUDGE_IMAGE`. PRs that change the image recipe or the CI
+build scripts still build and verify all production images from source in the
+`Production image builds` check.
+
+Because snapshot.debian.org throttles heavy fetches, the image build retries
+`apt-get update` and `apt-get install` against the pinned snapshot with
+exponential backoff and treats partial index downloads as failures; the retry
+helper streams output to a log file instead of buffering it in memory.
+
 The sandbox uses go-judge's built-in Moby seccomp filter. Its `/config` response
 reported `seccomp: true`. Its filesystem contains only the configured read-only
 library and Python binds, `/dev/null`, `/dev/urandom`, temporary filesystems for

@@ -122,11 +122,17 @@ does not log submitted code or model responses.
 
 ## Image releases, updates, and rollback
 
-Push a reviewed `v*` tag to run CI and publish the backend, frontend, and
-go-judge images to GitHub Container Registry. Each image is tagged with the source commit
-SHA. Set that same SHA as `IMAGE_TAG` in both VM environment files. Give each VM
-read-only access to the packages, then pull and start the runner first. Confirm `/version` on the runner private port works from the application VM, then pull and start the app. The host
-does not build images.
+Push a reviewed `v*` tag to run CI and publish the backend and frontend
+images to GitHub Container Registry. Each image is tagged with the source commit
+SHA. Set that same SHA as `IMAGE_TAG` in the application VM environment file.
+
+The go-judge runner image is built and published by the bake workflow
+(`Bake runner image`, a manual dispatch). The bake run records the pushed
+digest in `go-judge/runner-image.ref`; set that same digest ref as
+`GO_JUDGE_IMAGE` in the runner VM environment file. Give each VM read-only
+access to the packages, then pull and start the runner first. Confirm `/version`
+on the runner private port works from the application VM, then pull and start
+the app. The hosts do not build images.
 
 Back up MySQL and the application secrets before each update. The API applies
 database migrations at startup, so run one backend replica during updates. If

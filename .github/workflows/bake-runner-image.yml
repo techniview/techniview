@@ -1,0 +1,56 @@
+name: Bake runner image
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: bake-runner-image
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  bake:
+    name: Bake and publish the go-judge runner image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and verify the runner image
+        run: ./scripts/ci/build-go-judge-image.sh techniview-go-judge:bake
+      - name: Publish baked tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "techniview-go-judge:bake" "$image_namespace/go-judge:runner-latest"
+          docker tag "techniview-go-judge:bake" "$image_namespace/go-judge:runner-${GITHUB_RUN_NUMBER}"
+          docker push "$image_namespace/go-judge:runner-latest"
+          docker push "$image_namespace/go-judge:runner-${GITHUB_RUN_NUMBER}"
+      - name: Pin the digest on main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image_namespace/go-judge:runner-${RUN_NUMBER}")
+          printf '%s\n' "$digest" > go-judge/runner-image.ref
+          git config user.name "techniview-bake"
+          git config user.email "techniview-bake@users.noreply.github.com"
+          git add go-judge/runner-image.ref
+          git commit -m "Pin the go-judge runner to $digest"
+          git push origin HEAD:main
+      - name: Record the bake outcome
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
+          {
+            echo "baked and pushed $image_namespace/go-judge:runner-${RUN_NUMBER}"
+            echo "pinned digest: $(cat go-judge/runner-image.ref)"
+          } >> "$GITHUB_STEP_SUMMARY"

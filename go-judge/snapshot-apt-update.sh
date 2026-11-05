@@ -3,33 +3,44 @@ set -eu
 
 attempts=5
 backoff=20
+timeout_seconds=240
+log=/tmp/snapshot-apt.log
+patterns='Failed to fetch|Some index files failed|Connection failed|Gateway Timeout|TooManyRequests|No healthy backends|Hash Sum mismatch|Segmentation fault|Killed'
 
-check_output() {
-    case "$1" in
-        *"Failed to fetch"* | *"Some index files failed"* | *"Connection failed"* | *"Gateway Timeout"* | *"TooManyRequests"* | *"No healthy backends"* | *"E: "*) return 1 ;;
-        *) return 0 ;;
-    esac
+run_update() {
+    set +e
+    timeout -k 30 "$timeout_seconds" apt-get update >"$log" 2>&1
+    rc=$?
+    set -e
+    if [ "$rc" -eq 0 ] && ! grep -Eq "$patterns" "$log"; then
+        tail -n 50 "$log"
+        return 0
+    fi
+    grep -E "$patterns" "$log" | tail -n 20 >&2 || true
+    return 1
 }
 
-apt_retry_update() {
-    output=$(apt-get update 2>&1 || true)
-    printf '%s\n' "$output"
-    check_output "$output"
+run_install() {
+    set +e
+    timeout -k 30 "$timeout_seconds" apt-get install -y --no-install-recommends "$@" >"$log" 2>&1
+    rc=$?
+    set -e
+    if [ "$rc" -eq 0 ] && ! grep -Eq "$patterns" "$log"; then
+        tail -n 50 "$log"
+        return 0
+    fi
+    grep -E "$patterns" "$log" | tail -n 20 >&2 || true
+    return 1
 }
 
-apt_retry_install() {
-    output=$(apt-get install -y --no-install-recommends "$@" 2>&1 || true)
-    printf '%s\n' "$output"
-    check_output "$output"
-}
-
-run_with_retries() {
+retry() {
     attempt=1
     until "$@"; do
         if [ "$attempt" -ge "$attempts" ]; then
             printf 'snapshot.debian.org sources still failing after %s attempts\n' "$attempts" >&2
             exit 1
         fi
+        printf '%s: attempt %s failed, retrying in %ss\n' "$1" "$attempt" "$backoff" >&2
         sleep "$backoff"
         backoff=$((backoff * 2))
         attempt=$((attempt + 1))
@@ -37,11 +48,11 @@ run_with_retries() {
 }
 
 rm -f /etc/apt/sources.list.d/debian.sources
-run_with_retries apt_retry_update
+retry run_update
 if [ "${1:-}" = "install" ]; then
     shift
 fi
 if [ "$#" -gt 0 ]; then
-    run_with_retries apt_retry_install "$@"
+    retry run_install "$@"
 fi
-rm -rf /var/lib/apt/lists/*
+rm -f "$log"
