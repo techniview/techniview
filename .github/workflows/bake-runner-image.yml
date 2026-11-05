@@ -18,19 +18,38 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build and verify the runner image
-        run: ./scripts/ci/build-go-judge-image.sh techniview-go-judge:bake
-      - name: Publish baked tags
+      - name: Log in to the container registry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Probe package write access
         run: |
           set -euo pipefail
           image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
-          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker tag "techniview-go-judge:bake" "$image_namespace/go-judge:runner-latest"
-          docker tag "techniview-go-judge:bake" "$image_namespace/go-judge:runner-${GITHUB_RUN_NUMBER}"
-          docker push "$image_namespace/go-judge:runner-latest"
-          docker push "$image_namespace/go-judge:runner-${GITHUB_RUN_NUMBER}"
+          mkdir -p /tmp/ghcr-probe
+          printf 'FROM scratch\nCOPY flag.txt /flag.txt\n' > /tmp/ghcr-probe/Dockerfile
+          echo turned > /tmp/ghcr-probe/flag.txt
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            -t "$image_namespace/go-judge:probe-deleteme" --push /tmp/ghcr-probe
+      - name: Build and push the runner image
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            -t "$image_namespace/go-judge:runner-latest" \
+            -t "$image_namespace/go-judge:runner-${RUN_NUMBER}" \
+            --push ./go-judge
+      - name: Verify the pushed image
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
+          image="$image_namespace/go-judge:runner-${RUN_NUMBER}"
+          docker pull --quiet "$image"
+          ./scripts/ci/check-go-judge-image.sh "$image"
       - name: Pin the digest on main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,8 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           image_namespace="ghcr.io/${GITHUB_REPOSITORY,,}"
-          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image_namespace/go-judge:runner-${RUN_NUMBER}")
-          printf '%s\n' "$digest" > go-judge/runner-image.ref
+          digest=$(docker buildx imagetools inspect --format '{{.Manifest.Digest.Body}}' "$image_namespace/go-judge:runner-${RUN_NUMBER}")
+          printf '%s\n' "$image_namespace/go-judge@$digest" > go-judge/runner-image.ref
           git config user.name "techniview-bake"
           git config user.email "techniview-bake@users.noreply.github.com"
           git add go-judge/runner-image.ref
