@@ -2,7 +2,7 @@ name: techniview-runner
 
 services:
   go-judge:
-    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/go-judge:${IMAGE_TAG:?Set IMAGE_TAG}
+    image: ${GO_JUDGE_IMAGE:?Set GO_JUDGE_IMAGE to the pinned runner image ref}
     ports:
       - "${RUNNER_PRIVATE_BIND_IP:?Set RUNNER_PRIVATE_BIND_IP}:5050:5050"
     environment:
