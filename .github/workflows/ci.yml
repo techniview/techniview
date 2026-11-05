@@ -83,14 +83,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_REPOSITORY" --password-stdin
-      - name: Pull the baked runner image
-        run: |
-          image=$(cat go-judge/runner-image.ref)
-          if ! docker pull "$image" > pull.log 2>&1; then
-            tail --lines=5 pull.log
-            echo "no baked runner image for $image; integration builds it from source"
-          fi
-      - run: make integration
+      - run: REQUIRE_BAKED_GO_JUDGE=1 make integration
       - name: Install pinned restic version
         run: |
           set -euo pipefail

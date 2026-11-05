@@ -46,12 +46,12 @@ the student process.
 
 The image is not built from source on every CI run.
 The `Bake runner image` workflow is a manual dispatch that builds the image from
-the pinned Dockerfile, runs the sandbox verification probe, pushes it to GitHub
-Container Registry as `go-judge:runner-<runnumber>` plus a rolling
-`go-judge:runner-latest` tag, and writes the pushed digest ref into
-`go-judge/runner-image.ref` on main. CI and local `make integration` and
-`make up` pull that ref through `compose.baked-go-judge.yml` and fall back to a
-source build only when the pull fails. The runner VM consumes the same digest
+the pinned Dockerfile, pushes it to GitHub Container Registry as
+`go-judge:runner-<runnumber>` plus a rolling `go-judge:runner-latest` tag,
+pulls and verifies the published image, then reports its digest for a reviewed
+PR updating `go-judge/runner-image.ref`. CI requires that image and fails if
+it cannot pull it. Local `make integration` and `make up` fall back to a source
+build when the pull fails. The runner VM consumes the same digest
 ref through `GO_JUDGE_IMAGE`. PRs that change the image recipe or the CI
 build scripts still build and verify all production images from source in the
 `Production image builds` check.

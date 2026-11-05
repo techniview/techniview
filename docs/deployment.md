@@ -127,8 +127,9 @@ images to GitHub Container Registry. Each image is tagged with the source commit
 SHA. Set that same SHA as `IMAGE_TAG` in the application VM environment file.
 
 The go-judge runner image is built and published by the bake workflow
-(`Bake runner image`, a manual dispatch). The bake run records the pushed
-digest in `go-judge/runner-image.ref`; set that same digest ref as
+(`Bake runner image`, a manual dispatch). Put the verified digest reported by
+the bake run into `go-judge/runner-image.ref` through a PR. After it merges,
+set that ref as
 `GO_JUDGE_IMAGE` in the runner VM environment file. Give each VM read-only
 access to the packages, then pull and start the runner first. Confirm `/version`
 on the runner private port works from the application VM, then pull and start
