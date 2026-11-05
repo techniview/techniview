@@ -69,6 +69,9 @@ jobs:
 
   integration:
     name: MySQL and go-judge integration
+    # PR branches duplicate the pull_request run, so only run the pull
+    # request event and pushes to main, not both for the same commit.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -108,6 +111,7 @@ jobs:
 
   production-images:
     name: Production image builds
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -130,7 +134,7 @@ jobs:
           test "${{ needs.workflows.result }}" = success
           test "${{ needs.backend.result }}" = success
           test "${{ needs.frontend.result }}" = success
-          test "${{ needs.integration.result }}" = success
+          test "${{ needs.integration.result }}" != failure
           test "${{ needs.production-images.result }}" != failure
 
   publish-production-images:
