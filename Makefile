@@ -23,6 +23,7 @@ PERF_DB_MAX_OVERFLOW ?= 0
 PERF_GO_JUDGE_WALL_SECONDS ?= 30
 PERF_WORKLOADS ?= short cpu-heavy multi-case
 PERF_MEASURED_RUNS ?= 3
+GO_JUDGE_IMAGE ?= $(shell cat go-judge/runner-image.ref 2>/dev/null || true)
 
 install: hooks
 	@uv sync --locked
@@ -61,10 +62,17 @@ integration:
 	@set -e; \
 	cleanup() { status=$$?; if [ $$status -ne 0 ]; then docker compose --env-file /dev/null -f compose.integration.yml logs --tail=100 backend app_worker || true; fi; docker compose --env-file /dev/null -f compose.integration.yml down --volumes --remove-orphans || true; exit $$status; }; \
 	trap cleanup EXIT; \
-	docker compose --env-file /dev/null -f compose.integration.yml build tests; \
-	docker compose --env-file /dev/null -f compose.integration.yml up -d --build --wait --wait-timeout 180 mysql network-probe backend go-judge app_worker; \
-	network_targets=$$(docker compose --env-file /dev/null -f compose.integration.yml exec -T go-judge /opt/python/bin/python3.14 - < scripts/probe-runner-network.py); \
-	docker compose --env-file /dev/null -f compose.integration.yml run --rm --no-deps -e SANDBOX_NETWORK_PROBE_TARGETS="$$network_targets" tests python -m pytest -v integration --override-ini=pythonpath=.
+	if [ -n "$$GO_JUDGE_IMAGE" ] && docker pull "$$GO_JUDGE_IMAGE" >/dev/null 2>&1; then \
+		override_args="-f compose.baked-go-judge.yml"; \
+		echo "using the baked go-judge image $$GO_JUDGE_IMAGE"; \
+	else \
+		override_args=""; \
+		echo "building the go-judge image from source"; \
+	fi; \
+	docker compose --env-file /dev/null -f compose.integration.yml $$override_args build tests; \
+	docker compose --env-file /dev/null -f compose.integration.yml $$override_args up -d --build --wait --wait-timeout 180 mysql network-probe backend go-judge app_worker; \
+	network_targets=$$(docker compose --env-file /dev/null -f compose.integration.yml $$override_args exec -T go-judge /opt/python/bin/python3.14 - < scripts/probe-runner-network.py); \
+	docker compose --env-file /dev/null -f compose.integration.yml $$override_args run --rm --no-deps -e SANDBOX_NETWORK_PROBE_TARGETS="$$network_targets" tests python -m pytest -v integration --override-ini=pythonpath=.
 
 load-test:
 	@set -e; \
@@ -102,7 +110,15 @@ performance-compare:
 	  --measured-runs "$(PERF_MEASURED_RUNS)"
 
 up:
-	docker compose up -d --build
+	@set -e; \
+	if [ -n "$$GO_JUDGE_IMAGE" ] && docker pull "$$GO_JUDGE_IMAGE" >/dev/null 2>&1; then \
+		override_args="-f compose.baked-go-judge.yml"; \
+		echo "using the baked go-judge image $$GO_JUDGE_IMAGE"; \
+	else \
+		override_args=""; \
+		echo "building the go-judge image from source"; \
+	fi; \
+	docker compose $$override_args up -d --build
 
 down:
 	docker compose down

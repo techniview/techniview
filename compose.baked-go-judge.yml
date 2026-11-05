@@ -1,0 +1,5 @@
+services:
+  go-judge:
+    build: !reset null
+    image: ${GO_JUDGE_IMAGE:?Set GO_JUDGE_IMAGE to the baked runner image}
+    pull_policy: missing

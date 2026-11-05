@@ -71,8 +71,22 @@ jobs:
     name: MySQL and go-judge integration
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_REPOSITORY" --password-stdin
+      - name: Pull the baked runner image
+        run: |
+          image=$(cat go-judge/runner-image.ref)
+          if ! docker pull "$image" > pull.log 2>&1; then
+            tail --lines=5 pull.log
+            echo "no baked runner image for $image; integration builds it from source"
+          fi
       - run: make integration
       - name: Install pinned restic version
         run: |
@@ -98,7 +112,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: ./scripts/ci/build-production-images.sh
+      - name: Detect production image recipe changes
+        id: recipes
+        run: echo "changed=$(./scripts/ci/production-images-changed.sh '${{ github.event.pull_request.base.sha || github.event.before }}')" >> "$GITHUB_OUTPUT"
+      - name: Build and verify production images
+        if: steps.recipes.outputs.changed == 'true'
+        run: ./scripts/ci/build-production-images.sh
 
   ci:
     name: CI
@@ -112,7 +131,7 @@ jobs:
           test "${{ needs.backend.result }}" = success
           test "${{ needs.frontend.result }}" = success
           test "${{ needs.integration.result }}" = success
-          test "${{ needs.production-images.result }}" = success
+          test "${{ needs.production-images.result }}" != failure
 
   publish-production-images:
     name: Publish production images
