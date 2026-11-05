@@ -313,7 +313,8 @@ async def _submit_once(
 
 
 async def _monitor_metrics(stop: asyncio.Event, samples: dict[str, float]) -> None:
-    async with httpx.AsyncClient(base_url="http://backend:8000", timeout=10) as api:
+    base_url = os.getenv("LOAD_METRICS_BASE_URL", "http://backend:8000")
+    async with httpx.AsyncClient(base_url=base_url, timeout=10) as api:
         while not stop.is_set():
             try:
                 response = await api.get("/api/metrics")
@@ -431,8 +432,9 @@ async def _run_burst(
 
     observations: list[dict] = []
     try:
+        base_url = os.getenv("LOAD_API_BASE_URL", "http://backend:8000")
         async with httpx.AsyncClient(
-            base_url="http://backend:8000", limits=limits, timeout=timeout
+            base_url=base_url, limits=limits, timeout=timeout
         ) as api:
             start_gate = asyncio.Event()
             tasks = [
@@ -628,6 +630,7 @@ async def _run_burst(
             "count": len(queue_waits),
             "p50": round(statistics.median(queue_waits), 3),
             "p95": round(_percentile(queue_waits, 0.95), 3),
+            "p99": round(_percentile(queue_waits, 0.99), 3),
             "max": round(max(queue_waits), 3),
         },
         "case_cpu_seconds": {
