@@ -1,15 +1,14 @@
 #!/bin/sh
 set -eu
 
-attempts=5
-backoff=20
-timeout_seconds=240
+attempts=6
+backoff=30
 log=/tmp/snapshot-apt.log
 patterns='Failed to fetch|Some index files failed|Connection failed|Gateway Timeout|TooManyRequests|No healthy backends|Hash Sum mismatch|Segmentation fault|Killed'
 
 run_update() {
     set +e
-    timeout -k 30 "$timeout_seconds" apt-get update >"$log" 2>&1
+    apt-get update >"$log" 2>&1
     rc=$?
     set -e
     if [ "$rc" -eq 0 ] && ! grep -Eq "$patterns" "$log"; then
@@ -22,7 +21,7 @@ run_update() {
 
 run_install() {
     set +e
-    timeout -k 30 "$timeout_seconds" apt-get install -y --no-install-recommends "$@" >"$log" 2>&1
+    apt-get install -y --no-install-recommends "$@" >"$log" 2>&1
     rc=$?
     set -e
     if [ "$rc" -eq 0 ] && ! grep -Eq "$patterns" "$log"; then
