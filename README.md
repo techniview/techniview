@@ -48,6 +48,53 @@ The [pilot participation form](docs/TECHNIVIEW_CONSENT_FORM.md) also has a
 - [Week 9 technical specification draft](docs/design/technical_specification.md)
 - [Test plan](docs/Test_Plan.md) ([PDF submission copy](docs/Test_Plan.pdf))
 
+## Section 5: Ethics and attribution
+
+- [Ethics statement](docs/Ethics_Statement.md) ([PDF submission copy](docs/Ethics_Statement.pdf))
+- [Revised Assignment #7 constraints essay](docs/Assignment_7_Constraints_Essay.md) ([PDF](docs/Assignment_7_Constraints_Essay.pdf))
+
+TechniView's code and team-created logo are [MIT licensed](LICENSE). The logo at
+the top of this README was made by the TechniView team. No generated concept art
+ships in the app. The interface uses system fonts and no separate icon pack.
+The six D0-D2 diagrams in `docs/design/images/` are TechniView team documentation
+assets under the project MIT license.
+The team reports no tutorial or other-repository code snippets adapted into the
+application beyond the attributed problem catalog.
+
+The 500-problem catalog derives from [APPS](https://github.com/hendrycks/apps)
+and [APPS+](https://github.com/Ablustrund/APPS_Plus). Those repositories identify
+their datasets as MIT licensed. They collected coding problems from public
+challenge sources. TechniView removed duplicate statements, selected problems,
+reviewed tests, and retains source metadata and attribution per problem in
+`backend/data/problem_catalog.json`. The raw curation scripts are not in this
+repository. Source links inside problem statements may point to external media;
+those links do not grant a license to redistribute the media.
+
+Directly declared software dependencies and source links follow. Versions are
+the ones pinned in `uv.lock` and `frontend/package-lock.json` as of this ethics
+statement; production image versions are documented in [runner execution](#runner-execution).
+Application libraries are permissively licensed. The separately deployed MySQL
+and Grafana services are copyleft and remain under their own licenses. MIT and
+BSD-3-Clause require notices to be retained; Apache-2.0 also requires notices
+and change marking when applicable. Dependency license text remains with the
+installed packages.
+
+| Software and source | Version | SPDX license |
+|---|---:|---|
+| [FastAPI](https://github.com/fastapi/fastapi), [Alembic](https://github.com/sqlalchemy/alembic), [PyMySQL](https://github.com/PyMySQL/PyMySQL), [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | 0.141.1; 1.16.5; 1.2.0; 2.0.52 | MIT |
+| [HTTPX](https://github.com/encode/httpx), [Uvicorn](https://github.com/encode/uvicorn) | 0.28.1; 0.52.4 | BSD-3-Clause |
+| [React](https://github.com/facebook/react), [React DOM](https://github.com/facebook/react), [React Router](https://github.com/remix-run/react-router), [Monaco React](https://github.com/suren-atoyan/monaco-react) | 18.3.1; 18.3.1; 7.18.4; 4.7.0 | MIT |
+| [ESLint JS](https://github.com/eslint/eslint), [ESLint](https://github.com/eslint/eslint), [ESLint Config Prettier](https://github.com/prettier/eslint-config-prettier) | 10.0.1; 10.10.0; 10.1.8 | MIT |
+| [React Hooks ESLint](https://github.com/facebook/react), [React Refresh ESLint](https://github.com/ArnaudBarre/eslint-plugin-react-refresh) | 7.1.1; 0.5.6 | MIT |
+| [Testing Library React](https://github.com/testing-library/react-testing-library), [React types](https://github.com/DefinitelyTyped/DefinitelyTyped), [React DOM types](https://github.com/DefinitelyTyped/DefinitelyTyped) | 16.3.3; 18.3.31; 18.3.7 | MIT |
+| [Vite React plugin](https://github.com/vitejs/vite-plugin-react), [Vite](https://github.com/vitejs/vite), [Vitest](https://github.com/vitest-dev/vitest) | 5.2.0; 8.3.5; 5.0.5 | MIT |
+| [jsdom](https://github.com/jsdom/jsdom), [Prettier](https://github.com/prettier/prettier), [globals](https://github.com/sindresorhus/globals), [typescript-eslint](https://github.com/typescript-eslint/typescript-eslint) | 27.4.0; 3.9.6; 17.12.0; 8.69.0 | MIT |
+| [TypeScript](https://github.com/microsoft/TypeScript) | 6.0.3 | Apache-2.0 |
+| [pip-audit](https://github.com/pypa/pip-audit), [pre-commit](https://github.com/pre-commit/pre-commit), [pytest](https://github.com/pytest-dev/pytest), [pytest-cov](https://github.com/pytest-dev/pytest-cov), [Ruff](https://github.com/astral-sh/ruff) | 2.10.1; 4.6.2; 9.1.1; 7.1.0; 0.13.3 | Apache-2.0; MIT; MIT; MIT; MIT |
+| [go-judge](https://github.com/criyle/go-judge), [Caddy](https://github.com/caddyserver/caddy), [Prometheus](https://github.com/prometheus/prometheus) | 1.13.3; pinned image digest; 3.3.1 | MIT; Apache-2.0; Apache-2.0 |
+| [MySQL Community](https://www.mysql.com/products/community/), [Grafana](https://github.com/grafana/grafana) | 8.0; 11.6.0 | GPL-2.0-only; AGPL-3.0-only |
+| [Python](https://github.com/python/cpython), [Node.js](https://github.com/nodejs/node) | 3.14; pinned image digest | PSF-2.0; MIT |
+
 ## Config
 
 Secrets live in `.env`, which is gitignored. Copy the template and change values:
