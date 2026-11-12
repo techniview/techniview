@@ -33,6 +33,10 @@ During the pilot, you may complete assigned coding problems and explore other pr
 
 Taking part is voluntary. You may decline or withdraw at any time without penalty. See “Your Choices and Questions” for what happens to data already collected.
 
+Participants at TechniView working sessions will be offered free food. Food is
+provided only to pilot participants who attend a session. You do not need to
+finish any problem or remain in the pilot afterward to keep food already received.
+
 ---
 
 ## Information TechniView Collects
@@ -78,6 +82,9 @@ TechniView stores account, activity, submission, and execution information on sy
 ## Your Choices and Questions
 
 You may withdraw at any time by contacting Derek Corniello at corniedj@mail.uc.edu. Your pilot access will end, and TechniView will stop collecting new activity data about you. Data already collected will not be removed. We will retain survey responses and data already included in grouped summaries. Other existing pilot data will be de-identified at the end of the pilot, in accordance with applicable UC IRB requirements.
+
+If you withdraw after attending a working session, you keep any food already
+provided. There is no repayment or other penalty.
 
 For questions about the pilot or this form, contact Derek Corniello at corniedj@mail.uc.edu.
 
