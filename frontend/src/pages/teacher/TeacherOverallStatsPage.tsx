@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
     getClassAnalytics,
     getProblemTypes,
-    getActiveStaffCourse,
+    getStaffCourses,
     type Course,
     type CurriculumPool,
 } from "../../api/analytics";
@@ -62,7 +62,8 @@ function SummaryMetrics({ metrics }: { metrics: AnalyticsMetrics }) {
 }
 
 export default function TeacherOverallStatsPage() {
-    const [course, setCourse] = useState<Course | null>(null);
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [selectedCourseId, setSelectedCourseId] = useState("");
     const [problemTypes, setProblemTypes] = useState<CurriculumPool[]>([]);
     const [difficulty, setDifficulty] = useState<Difficulty | "">("");
     const [problemType, setProblemType] = useState("");
@@ -73,15 +74,20 @@ export default function TeacherOverallStatsPage() {
     useEffect(() => {
         let isCurrent = true;
 
-        Promise.all([getActiveStaffCourse(), getProblemTypes()])
-            .then(([teacherCourse, types]) => {
+        Promise.all([getStaffCourses(), getProblemTypes()])
+            .then(([staffCourses, types]) => {
                 if (!isCurrent) {
                     return;
                 }
-                if (!teacherCourse) {
-                    throw new Error("No course found.");
+                if (staffCourses.length === 0) {
+                    throw new Error("No active classes found.");
                 }
-                setCourse(teacherCourse);
+                const firstCourse = staffCourses[0];
+                if (!firstCourse) {
+                    throw new Error("No active classes found.");
+                }
+                setCourses(staffCourses);
+                setSelectedCourseId(String(firstCourse.id));
                 setProblemTypes(types);
             })
             .catch(() => {
@@ -97,7 +103,7 @@ export default function TeacherOverallStatsPage() {
     }, []);
 
     useEffect(() => {
-        if (!course) {
+        if (!selectedCourseId) {
             return;
         }
 
@@ -113,7 +119,10 @@ export default function TeacherOverallStatsPage() {
             params.set("tag", problemType);
         }
 
-        getClassAnalytics(course.id, params.toString() ? `?${params.toString()}` : "")
+        getClassAnalytics(
+            Number(selectedCourseId),
+            params.toString() ? `?${params.toString()}` : "",
+        )
             .then((response) => {
                 if (isCurrent) {
                     setMetrics(response.summary);
@@ -134,27 +143,47 @@ export default function TeacherOverallStatsPage() {
         return () => {
             isCurrent = false;
         };
-    }, [course, difficulty, problemType]);
+    }, [selectedCourseId, difficulty, problemType]);
 
     function clearFilters() {
         setDifficulty("");
         setProblemType("");
     }
 
+    const selectedCourse = courses.find((item) => String(item.id) === selectedCourseId);
+
     return (
         <div className="teacher-overall-stats-page">
             <header className="page-header">
                 <p className="eyebrow">Teacher dashboard</p>
                 <h1>Overall Class Statistics</h1>
-                <p>View class performance for {course?.name ?? "your course"}.</p>
+                <p>
+                    View class performance for {selectedCourse?.name ?? "your class"}.
+                </p>
             </header>
 
             <section aria-labelledby="filters-heading" className="filter-panel">
                 <div>
                     <h2 id="filters-heading">Filter statistics</h2>
-                    <p>Choose either filter or combine both.</p>
+                    <p>Choose a class and filter its results.</p>
                 </div>
                 <div className="filter-controls">
+                    <label>
+                        Class
+                        <select
+                            aria-label="Class"
+                            onChange={(event) =>
+                                setSelectedCourseId(event.target.value)
+                            }
+                            value={selectedCourseId}
+                        >
+                            {courses.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                    {item.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
                     <label>
                         Difficulty
                         <select

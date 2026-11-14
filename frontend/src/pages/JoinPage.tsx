@@ -60,14 +60,15 @@ export default function JoinPage() {
         setIsSubmitting(true);
         try {
             if (mode === "signup") {
-                const response = await joinSignup(
+                await joinSignup(
                     token,
                     name.trim(),
                     email.trim(),
                     password,
                     passwordConfirm,
                 );
-                setMessage(response.message);
+                await refreshUser();
+                navigate(`/student/courses/${preview.course_id}`, { replace: true });
             } else {
                 const response = await joinLogin(token, email.trim(), password);
                 if ("message" in response) {

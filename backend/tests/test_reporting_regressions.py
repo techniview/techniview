@@ -31,12 +31,20 @@ from sqlalchemy import event, select
 from sqlalchemy.dialects import mysql
 
 
-@pytest.mark.parametrize("source", ["a" * 65535, "é" * 32767 + "a"])
+@pytest.mark.parametrize(
+    "source",
+    ["a" * 65535, "é" * 32767 + "a"],
+    ids=["ascii_boundary", "utf8_boundary"],
+)
 def test_source_accepts_utf8_byte_boundary(source):
     assert SubmissionCreate(source_code=source, problem_id=1).source_code == source
 
 
-@pytest.mark.parametrize("source", ["a" * 65536, "é" * 32768])
+@pytest.mark.parametrize(
+    "source",
+    ["a" * 65536, "é" * 32768],
+    ids=["ascii_overflow", "utf8_overflow"],
+)
 def test_source_rejects_utf8_byte_overflow(source):
     from pydantic import ValidationError
 

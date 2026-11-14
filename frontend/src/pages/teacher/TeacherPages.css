@@ -1,0 +1,305 @@
+.teacher-class-page,
+.teacher-problem-page,
+.teacher-overall-stats-page {
+    width: min(100%, 1120px);
+    margin: 0 auto;
+    color: #17242c;
+}
+
+.teacher-classes-page {
+    width: min(100%, 900px);
+    margin: 0 auto;
+}
+
+.teacher-classes-page .page-header {
+    margin-bottom: 26px;
+}
+
+.teacher-classes-page .page-header .eyebrow {
+    margin: 0 0 8px;
+    color: #087bb9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.teacher-classes-page .page-header h1 {
+    margin: 0;
+    color: #101820;
+    font-size: clamp(28px, 4vw, 36px);
+    letter-spacing: -0.035em;
+}
+
+.teacher-classes-page .page-header > p:last-child {
+    margin: 9px 0 0;
+    color: #667783;
+    line-height: 1.55;
+}
+
+.teacher-course-list {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.teacher-course-list > li {
+    padding: 18px 20px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.teacher-course-list a,
+.teacher-course-archived {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    color: #17242c;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.teacher-course-list a:hover {
+    color: #075f91;
+}
+
+.teacher-course-list a > span:last-child {
+    color: #087bb9;
+    font-size: 20px;
+}
+
+.teacher-course-list p,
+.teacher-classes-empty {
+    margin: 8px 0 0;
+    color: #667783;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.teacher-course-archived > span:last-child {
+    color: #667783;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.teacher-class-page .page-header,
+.teacher-problem-page .page-header,
+.teacher-overall-stats-page .page-header {
+    margin-bottom: 28px;
+}
+
+.teacher-class-page .page-header .eyebrow,
+.teacher-problem-page .page-header .eyebrow,
+.teacher-overall-stats-page .page-header .eyebrow {
+    margin: 0 0 8px;
+    color: #087bb9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.teacher-class-page .page-header h1,
+.teacher-problem-page .page-header h1,
+.teacher-overall-stats-page .page-header h1 {
+    margin: 0;
+    color: #101820;
+    font-size: clamp(28px, 4vw, 36px);
+    letter-spacing: -0.035em;
+}
+
+.teacher-class-page .page-header > p:last-child,
+.teacher-problem-page .page-header > p:last-child,
+.teacher-overall-stats-page .page-header > p:last-child {
+    margin: 9px 0 0;
+    color: #667783;
+    line-height: 1.55;
+}
+
+.teacher-class-page .filter-panel,
+.teacher-problem-page .filter-panel,
+.teacher-overall-stats-page .filter-panel {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 20px;
+    padding: 20px 22px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.teacher-class-page .filter-panel h2,
+.teacher-problem-page .filter-panel h2,
+.teacher-overall-stats-page .filter-panel h2,
+.teacher-overall-stats-page section > h2 {
+    margin: 0;
+    color: #17242c;
+    font-size: 17px;
+}
+
+.teacher-class-page .filter-panel p,
+.teacher-problem-page .filter-panel p,
+.teacher-overall-stats-page .filter-panel p {
+    margin: 6px 0 0;
+    color: #667783;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.teacher-class-page .filter-panel label,
+.teacher-problem-page .filter-panel label,
+.teacher-overall-stats-page .filter-controls label {
+    display: grid;
+    gap: 7px;
+    min-width: min(260px, 100%);
+    color: #40515c;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.teacher-class-page select,
+.teacher-problem-page select,
+.teacher-overall-stats-page select {
+    min-height: 40px;
+    padding: 0 34px 0 11px;
+    border: 1px solid #cbd7de;
+    border-radius: 5px;
+    background: #fff;
+    color: #17242c;
+}
+
+.teacher-overall-stats-page .filter-controls,
+.teacher-problem-page .filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+}
+
+.teacher-overall-stats-page .filter-controls button {
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #cbd7de;
+    border-radius: 5px;
+    background: #fff;
+    color: #40515c;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.teacher-overall-stats-page .filter-controls button:hover {
+    border-color: #087bb9;
+    color: #075f91;
+}
+
+.teacher-class-page > p,
+.teacher-problem-page > p {
+    margin: 0 0 12px;
+    color: #536670;
+    font-size: 13px;
+}
+
+.teacher-class-page .table-wrapper,
+.teacher-problem-page .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.teacher-class-page table,
+.teacher-problem-page table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 13px;
+}
+
+.teacher-class-page thead,
+.teacher-problem-page thead {
+    background: #f5f8fa;
+    color: #536670;
+}
+
+.teacher-class-page th,
+.teacher-class-page td,
+.teacher-problem-page th,
+.teacher-problem-page td {
+    padding: 13px 16px;
+    border-bottom: 1px solid #e8eef1;
+    white-space: nowrap;
+}
+
+.teacher-class-page tbody tr:last-child > *,
+.teacher-problem-page tbody tr:last-child > * {
+    border-bottom: 0;
+}
+
+.teacher-class-page tbody th,
+.teacher-problem-page tbody th {
+    color: #17242c;
+    font-weight: 600;
+}
+
+.teacher-class-page tbody tr:hover,
+.teacher-problem-page tbody tr:hover {
+    background: #f8fbfc;
+}
+
+.teacher-overall-stats-page .stat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.teacher-overall-stats-page .stat-card {
+    min-height: 100px;
+    padding: 18px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.teacher-overall-stats-page .stat-card-label {
+    margin: 0;
+    color: #667783;
+    font-size: 12px;
+}
+
+.teacher-overall-stats-page .stat-card-value {
+    margin: 12px 0 0;
+    color: #101820;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+@media (max-width: 640px) {
+    .teacher-class-page .filter-panel,
+    .teacher-problem-page .filter-panel,
+    .teacher-overall-stats-page .filter-panel {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 17px;
+    }
+
+    .teacher-class-page .filter-panel label,
+    .teacher-problem-page .filter-panel label,
+    .teacher-overall-stats-page .filter-controls label {
+        min-width: 0;
+    }
+
+    .teacher-overall-stats-page .filter-controls,
+    .teacher-problem-page .filter-controls {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

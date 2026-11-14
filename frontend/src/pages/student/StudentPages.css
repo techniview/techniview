@@ -1,0 +1,480 @@
+.student-courses-page,
+.student-course-page,
+.student-curriculum-page,
+.student-problems-page,
+.student-statistics-page {
+    width: min(100%, 1120px);
+    margin: 0 auto;
+    color: #17242c;
+}
+
+.student-courses-page .page-header,
+.student-course-page .page-header,
+.student-curriculum-page .page-header,
+.student-problems-page .page-header,
+.student-statistics-page .page-header {
+    margin-bottom: 26px;
+}
+
+.student-courses-page .page-header .eyebrow,
+.student-course-page .page-header .eyebrow,
+.student-curriculum-page .page-header .eyebrow,
+.student-problems-page .page-header .eyebrow,
+.student-statistics-page .page-header .eyebrow {
+    margin: 0 0 8px;
+    color: #087bb9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.student-courses-page .page-header h1,
+.student-course-page .page-header h1,
+.student-curriculum-page .page-header h1,
+.student-problems-page .page-header h1,
+.student-statistics-page .page-header h1 {
+    margin: 0;
+    color: #101820;
+    font-size: clamp(28px, 4vw, 36px);
+    letter-spacing: -0.035em;
+}
+
+.student-courses-page .page-header > p:last-child,
+.student-course-page .page-header > p:last-child,
+.student-curriculum-page .page-header > p:last-child,
+.student-problems-page .page-header > p:last-child,
+.student-statistics-page .page-header > p:last-child {
+    max-width: 680px;
+    margin: 9px 0 0;
+    color: #667783;
+    line-height: 1.55;
+}
+
+.student-courses-page > ul {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.student-courses-page > ul > li {
+    padding: 18px 20px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.student-courses-page > ul > li > a,
+.student-course-page a {
+    color: #075f91;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.student-courses-page > ul > li > a:hover,
+.student-course-page a:hover {
+    color: #087bb9;
+    text-decoration: underline;
+}
+
+.student-courses-page > p,
+.student-course-page > p,
+.student-curriculum-page p {
+    color: #667783;
+    line-height: 1.55;
+}
+
+.student-course-page > section[aria-labelledby="assignments-heading"] > h2,
+.student-curriculum-page > section > h2,
+.student-statistics-page section > h2 {
+    margin: 0 0 14px;
+    color: #17242c;
+    font-size: 20px;
+}
+
+.student-course-page > section[aria-labelledby="assignments-heading"] > section {
+    margin: 0 0 12px;
+    padding: 19px 20px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.student-course-page > section[aria-labelledby="assignments-heading"] > section h3 {
+    margin: 0 0 8px;
+    color: #17242c;
+    font-size: 16px;
+}
+
+.student-course-page ul,
+.student-curriculum-page ul {
+    display: grid;
+    gap: 9px;
+    margin: 12px 0 0;
+    padding-left: 20px;
+    color: #667783;
+}
+
+.student-curriculum-page > section {
+    margin: 0 0 18px;
+    padding: 20px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.student-curriculum-page > section > h2 {
+    padding-bottom: 13px;
+    border-bottom: 1px solid #e8eef1;
+}
+
+.student-curriculum-page > section > section {
+    padding: 15px 0 4px;
+}
+
+.student-curriculum-page > section > section + section {
+    border-top: 1px solid #e8eef1;
+}
+
+.student-curriculum-page h3 {
+    margin: 0;
+    color: #17242c;
+    font-size: 15px;
+}
+
+.student-curriculum-page li span {
+    display: inline-block;
+    margin-left: 6px;
+    color: #667783;
+    font-size: 12px;
+}
+
+.student-curriculum-page li span:last-child:not(:first-child) {
+    color: #075f91;
+    font-weight: 600;
+}
+
+.student-statistics-page .filter-panel {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 24px;
+    padding: 20px 22px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.student-statistics-page .filter-panel h2 {
+    margin: 0;
+    color: #17242c;
+    font-size: 17px;
+}
+
+.student-statistics-page .filter-panel p {
+    margin: 6px 0 0;
+    color: #667783;
+    font-size: 13px;
+}
+
+.student-statistics-page .filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+}
+
+.student-statistics-page .filter-controls label {
+    display: grid;
+    gap: 7px;
+    min-width: min(200px, 100%);
+    color: #40515c;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.student-statistics-page select,
+.student-statistics-page .filter-controls button {
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid #cbd7de;
+    border-radius: 5px;
+    background: #fff;
+    color: #17242c;
+}
+
+.student-statistics-page .filter-controls button {
+    color: #40515c;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.student-statistics-page .filter-controls button:hover {
+    border-color: #087bb9;
+    color: #075f91;
+}
+
+.student-statistics-page .stat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.student-statistics-page .stat-card {
+    min-height: 100px;
+    padding: 18px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.student-statistics-page .stat-card-label {
+    margin: 0;
+    color: #667783;
+    font-size: 12px;
+}
+
+.student-statistics-page .stat-card-value {
+    margin: 12px 0 0;
+    color: #101820;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.student-problems-page .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.student-problems-page table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 13px;
+}
+
+.student-problems-page thead {
+    background: #f5f8fa;
+    color: #536670;
+}
+
+.student-problems-page th,
+.student-problems-page td {
+    padding: 13px 16px;
+    border-bottom: 1px solid #e8eef1;
+    white-space: nowrap;
+}
+
+.student-problems-page tbody tr:last-child > * {
+    border-bottom: 0;
+}
+
+.student-problems-page tbody th {
+    color: #17242c;
+    font-weight: 600;
+}
+
+.student-problems-page tbody tr:hover {
+    background: #f8fbfc;
+}
+
+.student-problems-page a {
+    color: #075f91;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.student-problems-page a:hover {
+    color: #087bb9;
+    text-decoration: underline;
+}
+
+.problem-page {
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    color: #17242c;
+}
+
+.problem-page > p:first-child {
+    margin: 0 0 18px;
+    font-size: 13px;
+}
+
+.problem-page > p:first-child a {
+    color: #075f91;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.problem-page > p:first-child a:hover {
+    text-decoration: underline;
+}
+
+.problem-page .page-header {
+    margin-bottom: 22px;
+}
+
+.problem-page .page-header .eyebrow {
+    margin: 0 0 8px;
+    color: #087bb9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.problem-page .page-header h1 {
+    margin: 0;
+    color: #101820;
+    font-size: clamp(28px, 4vw, 36px);
+    letter-spacing: -0.035em;
+}
+
+.problem-page .page-header > p:last-child {
+    margin: 9px 0 0;
+    color: #667783;
+    font-size: 13px;
+}
+
+.problem-page > label {
+    display: inline-grid;
+    gap: 7px;
+    margin-bottom: 18px;
+    color: #40515c;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.problem-page select {
+    min-height: 40px;
+    max-width: 100%;
+    padding: 0 34px 0 11px;
+    border: 1px solid #cbd7de;
+    border-radius: 5px;
+    background: #fff;
+    color: #17242c;
+}
+
+.problem-workspace {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+    gap: 16px;
+}
+
+.problem-description,
+.problem-editor {
+    min-width: 0;
+    padding: 20px;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.problem-description h2,
+.problem-editor h2 {
+    margin: 0 0 12px;
+    color: #17242c;
+    font-size: 17px;
+}
+
+.problem-description {
+    color: #40515c;
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.problem-description h3,
+.problem-editor h3 {
+    margin: 20px 0 10px;
+    color: #17242c;
+    font-size: 14px;
+}
+
+.problem-description h3 ~ div {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid #e8eef1;
+    border-radius: 5px;
+    background: #f8fbfc;
+    overflow-wrap: anywhere;
+}
+
+.problem-description h3 ~ div p {
+    margin: 4px 0;
+}
+
+.problem-editor > div:first-child p {
+    margin: -5px 0 14px;
+    color: #667783;
+    font-size: 13px;
+}
+
+.problem-editor > section {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border: 1px solid #dce5ea;
+    border-radius: 6px;
+    background: #f8fbfc;
+}
+
+.problem-editor button {
+    min-height: 40px;
+    margin: 12px 8px 0 0;
+    padding: 0 15px;
+    border: 1px solid #087bb9;
+    border-radius: 5px;
+    background: #087bb9;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.problem-editor button:hover:not(:disabled) {
+    border-color: #075f91;
+    background: #075f91;
+}
+
+.problem-editor button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+    .student-statistics-page .filter-panel {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 17px;
+    }
+
+    .student-statistics-page .filter-controls {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .student-statistics-page .filter-controls label {
+        min-width: 0;
+    }
+
+    .student-course-page > section[aria-labelledby="assignments-heading"] > section,
+    .student-curriculum-page > section,
+    .student-courses-page > ul > li {
+        padding: 16px;
+    }
+
+    .problem-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .problem-description,
+    .problem-editor {
+        padding: 16px;
+    }
+}

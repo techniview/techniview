@@ -59,18 +59,15 @@ export function joinSignup(
     password: string,
     passwordConfirm: string,
 ) {
-    return apiRequest<{ message: string }>(
-        `/api/join/${encodeURIComponent(token)}/signup`,
-        {
-            method: "POST",
-            body: JSON.stringify({
-                name,
-                email,
-                password,
-                password_confirm: passwordConfirm,
-            }),
-        },
-    );
+    return apiRequest<User>(`/api/join/${encodeURIComponent(token)}/signup`, {
+        method: "POST",
+        body: JSON.stringify({
+            name,
+            email,
+            password,
+            password_confirm: passwordConfirm,
+        }),
+    });
 }
 
 export function joinLogin(token: string, email: string, password: string) {

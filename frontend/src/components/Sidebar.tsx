@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { getActiveStaffCourse } from "../api/analytics";
 import { useAuth } from "../auth/useAuth";
+import logo from "../assets/TechniView_Logo_No_Title.png";
+import "./AppBrand.css";
 
 type NavigationItem = {
     label: string;
@@ -16,7 +18,7 @@ const studentNavigation: NavigationItem[] = [
 ];
 
 const professorNavigation: NavigationItem[] = [
-    { label: "Class Overview", to: "/teacher/class" },
+    { label: "My Classes", to: "/teacher/classes" },
     { label: "Overall Statistics", to: "/teacher/statistics" },
     { label: "Problems", to: "/teacher/problems" },
 ];
@@ -73,7 +75,7 @@ export default function Sidebar() {
         <aside className="sidebar" aria-label="Primary navigation">
             <div className="sidebar-header">
                 <NavLink className="sidebar-brand" to="/">
-                    TechniView
+                    <img src={logo} alt="TechniView" />
                 </NavLink>
                 <p className="sidebar-user">{user.name}</p>
             </div>

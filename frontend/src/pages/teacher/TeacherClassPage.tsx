@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
     getAllClassAnalytics,
     getAllClassMembers,
@@ -7,6 +8,7 @@ import {
     type ClassMember,
     type Course,
 } from "../../api/analytics";
+import { getCourse } from "../../api/courses";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
 import type { AnalyticsMetrics, ProblemAnalytics } from "../../types/analytics";
@@ -42,6 +44,7 @@ function emptyStudentRow(member: ClassMember): StudentRow {
 }
 
 export default function TeacherClassPage() {
+    const { courseId } = useParams();
     const [course, setCourse] = useState<Course | null>(null);
     const [members, setMembers] = useState<ClassMember[]>([]);
     const [problems, setProblems] = useState<ProblemAnalytics[]>([]);
@@ -56,9 +59,18 @@ export default function TeacherClassPage() {
 
         async function loadClass() {
             try {
-                const teacherCourse = await getActiveStaffCourse();
+                const teacherCourse = courseId
+                    ? await getCourse(Number(courseId))
+                    : await getActiveStaffCourse();
                 if (!teacherCourse) {
                     throw new Error("No course found.");
+                }
+                if (
+                    !Number.isInteger(teacherCourse.id) ||
+                    teacherCourse.membership_role === "student" ||
+                    teacherCourse.withdrawn_at !== null
+                ) {
+                    throw new Error("Course unavailable.");
                 }
 
                 const [members, problems] = await Promise.all([
@@ -90,7 +102,7 @@ export default function TeacherClassPage() {
         return () => {
             isCurrent = false;
         };
-    }, []);
+    }, [courseId]);
 
     useEffect(() => {
         if (!course || !selectedProblemId) {

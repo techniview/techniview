@@ -192,6 +192,28 @@ export async function getActiveStaffCourse(): Promise<Course | null> {
     }
 }
 
+export async function getStaffCourses(): Promise<Course[]> {
+    const courses: Course[] = [];
+    let offset = 0;
+    while (true) {
+        const page = await apiRequest<CourseList>(
+            `/api/courses?limit=100&offset=${offset}`,
+        );
+        courses.push(
+            ...page.items.filter(
+                (course) =>
+                    course.withdrawn_at === null &&
+                    course.archived_at === null &&
+                    course.membership_role !== "student",
+            ),
+        );
+        offset += page.items.length;
+        if (page.items.length === 0 || offset >= page.total) {
+            return courses;
+        }
+    }
+}
+
 export async function getAllClassMembers(courseId: number) {
     const items: ClassMember[] = [];
     while (true) {
