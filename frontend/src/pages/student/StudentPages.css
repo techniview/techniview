@@ -401,18 +401,23 @@
 
 .trail-map {
     display: grid;
-    gap: 30px;
+    gap: 20px;
 }
 .trail-tier {
     min-width: 0;
+    box-sizing: border-box;
+    padding: 22px 24px 24px;
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 12px;
+    background: var(--tv-brand-white);
 }
 .trail-tier > h2 {
-    margin: 0 0 13px;
+    margin: 0 0 16px;
     font-size: 20px;
 }
 .trail-steps {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
     gap: 14px;
     margin: 0;
     padding: 0;
@@ -420,10 +425,11 @@
 }
 .trail-card {
     box-sizing: border-box;
+    min-width: 0;
     padding: 17px 20px;
     border: 1px solid var(--tv-brand-line);
-    border-radius: 10px;
-    background: var(--tv-brand-white);
+    border-radius: 8px;
+    background: var(--tv-surface-muted);
 }
 .trail-card-heading {
     display: flex;
@@ -482,6 +488,9 @@
     background: var(--tv-brand-white);
     color: var(--tv-brand-ink);
 }
+html:has(.trail-dialog[open]) {
+    overflow: hidden;
+}
 .trail-dialog::backdrop {
     background: rgb(0 0 0 / 65%);
 }
@@ -529,6 +538,9 @@
     text-transform: capitalize;
 }
 @media (max-width: 560px) {
+    .trail-tier {
+        padding: 16px;
+    }
     .trail-card {
         padding: 14px;
     }
