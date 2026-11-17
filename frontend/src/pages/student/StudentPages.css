@@ -73,6 +73,77 @@
     line-height: 1.55;
 }
 
+.recommendations-section {
+    margin: 0 0 24px;
+    padding: 22px 24px;
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 12px;
+    background: var(--tv-brand-white);
+}
+.student-courses-page > .recommendations-section {
+    margin-top: 28px;
+}
+.recommendations-heading h2 {
+    margin: 0;
+    font-size: 20px;
+}
+.recommendations-heading p,
+.recommendations-section > p {
+    margin: 6px 0 0;
+    color: var(--tv-brand-muted);
+    line-height: 1.5;
+}
+.recommendations-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin: 20px 0 0;
+    padding: 18px 0 0;
+    border-top: 1px solid var(--tv-brand-line);
+    list-style: none;
+}
+.recommendations-list li {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 20px;
+}
+.recommendations-list li:first-child {
+    padding-left: 0;
+}
+.recommendations-list li + li {
+    border-left: 1px solid var(--tv-brand-line);
+}
+.recommendation-technique {
+    color: var(--tv-brand-muted);
+    font-size: 12px;
+}
+.recommendations-list a {
+    color: var(--tv-brand-blue-dark);
+    font-weight: 700;
+    text-decoration: none;
+}
+.recommendations-list a:hover {
+    text-decoration: underline;
+}
+@media (max-width: 700px) {
+    .recommendations-list {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    .recommendations-list li,
+    .recommendations-list li:first-child {
+        padding: 0;
+    }
+    .recommendations-list li + li {
+        padding-top: 16px;
+        border-top: 1px solid var(--tv-brand-line);
+        border-left: 0;
+    }
+}
+
 .student-course-page > section[aria-labelledby="assignments-heading"] > h2,
 .student-curriculum-page > section > h2,
 .student-statistics-page section > h2 {
@@ -460,10 +531,6 @@
     border-radius: inherit;
     background: var(--tv-brand-blue);
 }
-.trail-next {
-    margin: 12px 0 0;
-}
-.trail-next a,
 .trail-dialog li a {
     color: var(--tv-brand-blue-dark);
     font-weight: 600;

@@ -3,13 +3,13 @@ import { Link } from "react-router-dom";
 import { getCurriculum, type CurriculumPool } from "../../api/curriculum";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
+import RecommendationsSection from "./RecommendationsSection";
 
 function TrailPoolCard({ pool }: { pool: CurriculumPool }) {
     const dialogRef = useRef<HTMLDialogElement>(null);
     const completed = pool.problems.filter(
         (item) => item.status === "completed",
     ).length;
-    const recommended = pool.problems.find((item) => item.recommended);
     const percent = pool.problems.length ? (completed / pool.problems.length) * 100 : 0;
 
     return (
@@ -30,14 +30,6 @@ function TrailPoolCard({ pool }: { pool: CurriculumPool }) {
             >
                 <span style={{ width: `${percent}%` }} />
             </div>
-            {recommended && (
-                <p className="trail-next">
-                    Suggested problem:{" "}
-                    <Link to={`/student/problems/${recommended.problem.id}`}>
-                        {recommended.problem.title}
-                    </Link>
-                </p>
-            )}
             <button
                 className="trail-open"
                 onClick={() => dialogRef.current?.showModal()}
@@ -124,6 +116,7 @@ export default function StudentCurriculumPage() {
                     completed; suggestions help you choose what to try next.
                 </p>
             </header>
+            <RecommendationsSection />
             <div className="trail-map">
                 {[...tiers].map(([tierName, group]) => (
                     <section

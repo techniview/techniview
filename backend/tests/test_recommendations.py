@@ -79,6 +79,21 @@ def test_suggestion_slots_follow_trail_and_spread_pools():
     assert len({item["pool_slug"] for item in result}) == len(result)
 
 
+def test_new_student_gets_three_distinct_foundation_problems():
+    slug = "arrays-and-hashing"
+    result = _select_ranked(
+        {slug: _pool(slug)},
+        {slug: [_fake_candidate(index, f"Problem {index}") for index in range(1, 5)]},
+        {},
+        {},
+        {},
+        {},
+        datetime.now(UTC).replace(tzinfo=None),
+    )
+    assert [item["problem"]["id"] for item in result] == [1, 2, 3]
+    assert [item["rank"] for item in result] == [1, 2, 3]
+
+
 def test_progression_advances_to_untouched_ready_tier_after_foundation_pass():
     pools = {
         slug: _pool(slug) for slug in ("arrays-and-hashing", "two-pointers", "stack")

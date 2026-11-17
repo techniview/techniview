@@ -139,9 +139,21 @@ def _select_ranked(
     }
     selected: list[dict] = []
     selected_pools: set[str] = set()
+    selected_problem_ids: set[int] = set()
+
+    def next_candidate(slug: str) -> Candidate | None:
+        return next(
+            (
+                item
+                for item in sorted(candidates_by_pool[slug], key=_candidate_sort_key)
+                if item.problem.id not in selected_problem_ids
+            ),
+            None,
+        )
 
     def append(slug: str, candidate: Candidate, reason: str) -> None:
         selected_pools.add(slug)
+        selected_problem_ids.add(candidate.problem.id)
         selected.append(
             {
                 "rank": len(selected) + 1,
@@ -220,8 +232,9 @@ def _select_ranked(
                 pool_order.get(item, 999),
             ),
         )
-        candidate = min(candidates_by_pool[slug], key=_candidate_sort_key)
-        append(slug, candidate, "next_trail_step")
+        candidate = next_candidate(slug)
+        if candidate is not None:
+            append(slug, candidate, "next_trail_step")
 
     # Spread the final slot to the least-covered ready pool.
     available = [slug for slug in ready if slug not in selected_pools]
@@ -234,8 +247,26 @@ def _select_ranked(
             return coverage, tier, pool_order.get(slug, 999)
 
         slug = min(available, key=coverage_key)
-        candidate = min(candidates_by_pool[slug], key=_candidate_sort_key)
-        append(slug, candidate, "low_completion_coverage")
+        candidate = next_candidate(slug)
+        if candidate is not None:
+            append(slug, candidate, "low_completion_coverage")
+
+    # A new student may have only one unlocked pool. Fill the remaining spots
+    # from that pool before suggesting problems whose prerequisites are unmet.
+    while len(selected) < MAX_RECOMMENDATIONS:
+        available = [slug for slug in ready if next_candidate(slug) is not None]
+        if not available:
+            break
+        slug = min(
+            available,
+            key=lambda item: (
+                pools[item]["tier"] if pools[item]["tier"] is not None else 999,
+                pool_order.get(item, 999),
+            ),
+        )
+        candidate = next_candidate(slug)
+        if candidate is not None:
+            append(slug, candidate, "next_trail_step")
 
     return selected
 

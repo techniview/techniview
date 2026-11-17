@@ -4,6 +4,7 @@ import type { Course } from "../../api/analytics";
 import { listCourses } from "../../api/courses";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
+import RecommendationsSection from "./RecommendationsSection";
 
 async function studentCourses(): Promise<Course[]> {
     const courses: Course[] = [];
@@ -78,6 +79,7 @@ export default function StudentCoursesPage() {
                     ))}
                 </ul>
             )}
+            <RecommendationsSection />
         </div>
     );
 }

@@ -237,6 +237,12 @@ Trail progression is defined by the technique pools and their tiers. Individual
 problems do not have prerequisites; students can open any published practice
 problem even when another pool is currently recommended.
 
+`GET /api/recommendations` returns up to three distinct practice problems for
+the student. It favors recent struggles, the next reachable Trail technique,
+and techniques with little completed work. When only one technique is unlocked,
+it fills the remaining spots with other problems from that technique. The same
+recommendations appear on My Classes and at the top of the TechniView Trail.
+
 ## Runner execution
 
 The [go-judge image](go-judge/Dockerfile) pins go-judge 1.13.3 and Python 3.14.8.
