@@ -58,7 +58,6 @@ export default function StudentCoursesPage() {
     return (
         <div className="student-courses-page">
             <header className="page-header">
-                <p className="eyebrow">Student dashboard</p>
                 <h1>My Classes</h1>
             </header>
             {courses.length === 0 ? (

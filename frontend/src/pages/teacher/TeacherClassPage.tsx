@@ -158,7 +158,6 @@ export default function TeacherClassPage() {
     return (
         <div className="teacher-class-page">
             <header className="page-header">
-                <p className="eyebrow">Teacher dashboard</p>
                 <h1>{course?.name ?? "Class Overview"}</h1>
                 <p>Review student progress for each assigned problem.</p>
             </header>

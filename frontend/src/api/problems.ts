@@ -46,9 +46,12 @@ export type ProblemDetail = {
     license: string | null;
     assignment_contexts: Array<{
         assignment_item_id: number;
+        assignment_id: number;
+        item_order: number;
         assignment_title: string;
         course_id: number;
         course_name: string;
+        due_at: string | null;
     }>;
 };
 
@@ -76,6 +79,22 @@ export function runPublicCases(
     });
 }
 
-export function getAvailableProblems(offset = 0) {
-    return apiRequest<ProblemListResponse>(`/api/problems?limit=100&offset=${offset}`);
+export function getAvailableProblems(
+    offset = 0,
+    limit = 25,
+    filters: {
+        search?: string;
+        difficulty?: string;
+        tag?: string;
+        sort?: "trail" | "title" | "title_desc" | "difficulty_asc" | "difficulty_desc";
+    } = {},
+) {
+    const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+    });
+    for (const [key, value] of Object.entries(filters)) {
+        if (value) params.set(key, value);
+    }
+    return apiRequest<ProblemListResponse>(`/api/problems?${params}`);
 }

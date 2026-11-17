@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "./LoginPage.css";
-import logo from "../assets/TechniView_Logo_No_Title.png";
+import BrandLogo from "../components/BrandLogo";
 import { login } from "../api/auth";
 import { useAuth } from "../auth/useAuth";
 
@@ -38,23 +38,34 @@ export default function LoginPage() {
     }
 
     return (
-        <main className="tv-login tv-minimal">
+        <main className="tv-login tv-minimal login-main">
             <header className="design-picker">
                 <a className="login-logo" href="/login" aria-label="TechniView home">
-                    <img src={logo} alt="TechniView" />
+                    <BrandLogo />
                 </a>
             </header>
 
             <div className="login-stage">
                 <section className="login-art" aria-label="TechniView introduction">
+                    <div className="login-art-top">
+                        <a
+                            className="login-logo"
+                            href="/login"
+                            aria-label="TechniView home"
+                        >
+                            <BrandLogo />
+                        </a>
+                    </div>
                     <div className="art-copy">
-                        <span className="eyebrow">LEARN. BUILD. SEE CLEARLY.</span>
                         <h2>
-                            Make your
+                            Solve problems.
                             <br />
-                            next idea <em>work.</em>
+                            See your <em>progress.</em>
                         </h2>
-                        <p>A clearer view of your progress starts here.</p>
+                        <p>
+                            Practice technical interviewing in Python through your
+                            coursework.
+                        </p>
                     </div>
                     <div className="art-visual" aria-hidden="true">
                         <div className="orbit orbit-one" />
@@ -72,29 +83,22 @@ export default function LoginPage() {
                                 <i />
                                 <i />
                             </div>
-                            <span className="visual-caption">PROGRESS, IN FOCUS</span>
+                            <span className="visual-caption">PROBLEM PROGRESS</span>
                         </div>
                         <span className="visual-tag tag-top">10101</span>
                         <span className="visual-tag tag-bottom">
-                            &lt; learn by doing /&gt;
+                            &lt; solve, test, learn /&gt;
                         </span>
-                    </div>
-                    <div className="art-footer">
-                        <span>YOUR WORKSPACE FOR WHAT’S NEXT</span>
-                        <span>01 — 05</span>
                     </div>
                 </section>
 
                 <section className="login-form-side" aria-labelledby="login-heading">
                     <div className="form-wrap">
-                        <div className="form-kicker">
-                            <span className="status-dot" /> YOUR LEARNING SPACE
-                        </div>
                         <h1 id="login-heading">
                             Welcome back<span className="title-period">.</span>
                         </h1>
                         <p className="form-intro">
-                            Sign in to pick up where you left off.
+                            Sign in to continue your coding practice.
                         </p>
                         <form onSubmit={(event) => void handleSubmit(event)}>
                             <div className="tv-field">
@@ -112,10 +116,7 @@ export default function LoginPage() {
                                 />
                             </div>
                             <div className="tv-field">
-                                <div className="field-label-row">
-                                    <label htmlFor="password">Password</label>
-                                    <Link to="/forgot-password">Forgot password?</Link>
-                                </div>
+                                <label htmlFor="password">Password</label>
                                 <input
                                     autoComplete="current-password"
                                     disabled={isSubmitting}
@@ -139,30 +140,29 @@ export default function LoginPage() {
                                     {error}
                                 </p>
                             )}
-                            <button
-                                className="submit-login"
-                                disabled={isSubmitting}
-                                type="submit"
-                            >
-                                <span>
+                            <div className="login-actions">
+                                <button
+                                    className="submit-login"
+                                    disabled={isSubmitting}
+                                    type="submit"
+                                >
                                     {isSubmitting ? "Signing in..." : "Sign in"}
-                                </span>
-                                <span aria-hidden="true">↗</span>
-                            </button>
+                                </button>
+                                <Link
+                                    className="auth-secondary-link"
+                                    to="/forgot-password"
+                                >
+                                    Forgot Password?
+                                </Link>
+                            </div>
                         </form>
                         <p className="auth-switch">
                             New to TechniView?{" "}
                             <Link to="/signup">Create an account</Link>
                         </p>
-                        <div className="form-bottom">
-                            <span className="bottom-rule" />{" "}
-                            <span>SECURE ACCESS TO TECHNIVIEW</span>{" "}
-                            <span className="bottom-rule" />
-                        </div>
                     </div>
                     <footer className="login-footer">
                         <span>© 2026 TechniView</span>
-                        <span>Built for curious minds.</span>
                     </footer>
                 </section>
             </div>

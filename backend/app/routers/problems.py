@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Header, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import case, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..core.dependencies import CurrentUser, DbSession
@@ -14,6 +15,7 @@ from ..models import (
     AssignmentState,
     Course,
     CourseMembership,
+    CurriculumNode,
     Difficulty,
     MembershipRole,
     Problem,
@@ -68,6 +70,9 @@ def _assignment_contexts(db: Session, user_id: int, problem_id: int | None = Non
             Assignment.title,
             Course.id,
             Course.name,
+            Assignment.id,
+            AssignmentItem.item_order,
+            Assignment.due_at,
         )
         .join(Assignment, Assignment.id == AssignmentItem.assignment_id)
         .join(Course, Course.id == Assignment.course_id)
@@ -150,6 +155,10 @@ def list_problems(
     user: CurrentUser,
     difficulty: Difficulty | None = None,
     tag: str | None = None,
+    search: str | None = Query(None, max_length=100),
+    sort: Literal[
+        "trail", "title", "title_desc", "difficulty_asc", "difficulty_desc"
+    ] = "trail",
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -166,31 +175,53 @@ def list_problems(
         visibility.append(Problem.id.in_(assigned_ids))
     if staffed_ids:
         visibility.append(Problem.id.in_(staffed_ids))
-    query = (
-        select(Problem)
-        .options(selectinload(Problem.tags))
-        .where(or_(*visibility))
-        .order_by(Problem.title, Problem.id)
-    )
+    filters = [or_(*visibility), Problem.state != ProblemState.ARCHIVED]
     if difficulty is not None:
-        query = query.where(Problem.difficulty == difficulty)
+        filters.append(Problem.difficulty == difficulty)
     if tag:
-        query = query.where(
+        filters.append(
             exists()
             .where(problem_tag_assignments.c.problem_id == Problem.id)
             .where(problem_tag_assignments.c.tag_id == ProblemTag.id)
             .where(ProblemTag.slug == tag)
         )
-    problems = list(db.scalars(query).unique().all())
+    if search and search.strip():
+        filters.append(Problem.title.ilike(f"%{search.strip()}%"))
+    total = db.scalar(select(func.count(Problem.id)).where(*filters)) or 0
+    difficulty_rank = case(
+        (Problem.difficulty == Difficulty.EASY, 1),
+        (Problem.difficulty == Difficulty.MEDIUM, 2),
+        else_=3,
+    )
+    ordering = {
+        "trail": (
+            func.coalesce(CurriculumNode.priority, 1_000_000),
+            Problem.title,
+            Problem.id,
+        ),
+        "title": (Problem.title, Problem.id),
+        "title_desc": (Problem.title.desc(), Problem.id.desc()),
+        "difficulty_asc": (difficulty_rank, Problem.title, Problem.id),
+        "difficulty_desc": (difficulty_rank.desc(), Problem.title, Problem.id),
+    }[sort]
+    problems = db.scalars(
+        select(Problem)
+        .options(selectinload(Problem.tags))
+        .outerjoin(CurriculumNode, CurriculumNode.problem_id == Problem.id)
+        .where(*filters)
+        .order_by(*ordering)
+        .offset(offset)
+        .limit(limit)
+    ).all()
     return {
         "items": [
             {
                 **problem_summary(item),
                 "available_assignment_item_id": assignment_items.get(item.id),
             }
-            for item in problems[offset : offset + limit]
+            for item in problems
         ],
-        "total": len(problems),
+        "total": total,
         "limit": limit,
         "offset": offset,
     }
@@ -203,17 +234,30 @@ def get_problem(
     user: CurrentUser,
 ):
     detail = problem_detail(_visible_problem(db, problem_id, user))
-    detail["assignment_contexts"] = [
-        {
-            "assignment_item_id": item_id,
-            "assignment_title": title,
-            "course_id": course_id,
-            "course_name": course_name,
-        }
-        for item_id, _problem_id, title, course_id, course_name in _assignment_contexts(
-            db, user.id, problem_id
+    contexts = []
+    for row in _assignment_contexts(db, user.id, problem_id):
+        (
+            item_id,
+            _problem_id,
+            title,
+            course_id,
+            course_name,
+            assignment_id,
+            item_order,
+            due_at,
+        ) = row
+        contexts.append(
+            {
+                "assignment_item_id": item_id,
+                "assignment_id": assignment_id,
+                "item_order": item_order,
+                "assignment_title": title,
+                "course_id": course_id,
+                "course_name": course_name,
+                "due_at": due_at,
+            }
         )
-    ]
+    detail["assignment_contexts"] = contexts
     return detail
 
 

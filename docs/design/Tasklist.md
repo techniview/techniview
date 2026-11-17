@@ -1,6 +1,6 @@
 # Tasklist.md
 
-T1. Design the student and teacher interaction interfaces for the Web UI as outlined in the Consolidated_Design_Diagrams.pdf. Owner: Ryan Sippy.
+T1. Design the student and teacher interaction interfaces for the Web UI as outlined in the [Consolidated Design Diagrams](Consolidated_Design_Diagrams.pdf). Owner: Ryan Sippy.
 
 T2. Develop the frontend React routes for course management within the Web UI. Owner: Ryan Sippy.
 

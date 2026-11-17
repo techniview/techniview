@@ -1,5 +1,13 @@
 import Editor from "@monaco-editor/react";
-import { useEffect, useRef, useState } from "react";
+import {
+    useEffect,
+    useRef,
+    useState,
+    type ComponentProps,
+    type CSSProperties,
+    type KeyboardEvent,
+    type PointerEvent,
+} from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import {
     getProblem,
@@ -16,8 +24,62 @@ import {
 } from "../api/submissions";
 import ErrorState from "../components/ErrorState";
 import LoadingState from "../components/LoadingState";
+import { ApiRequestError } from "../api/client";
+import { useTheme } from "../theme";
 
 const POLL_INTERVAL_MS = 2000;
+const MIN_PROMPT_WIDTH = 28;
+const MAX_PROMPT_WIDTH = 62;
+
+function defineEditorThemes(
+    monaco: Parameters<NonNullable<ComponentProps<typeof Editor>["beforeMount"]>>[0],
+) {
+    monaco.editor.defineTheme("techniview-light", {
+        base: "vs",
+        inherit: true,
+        rules: [{ token: "keyword", foreground: "006EAF" }],
+        colors: {
+            "editor.background": "#F8FBFC",
+            "editor.foreground": "#101820",
+            "editorLineNumber.foreground": "#667783",
+            "editorCursor.foreground": "#006EAF",
+            "editor.selectionBackground": "#CDE8F7",
+            "editor.lineHighlightBackground": "#F5F8FA",
+        },
+    });
+    monaco.editor.defineTheme("techniview-dark", {
+        base: "vs-dark",
+        inherit: true,
+        rules: [{ token: "keyword", foreground: "80CFFF" }],
+        colors: {
+            "editor.background": "#14232E",
+            "editor.foreground": "#EDF5F9",
+            "editorLineNumber.foreground": "#A9BDCA",
+            "editorCursor.foreground": "#80CFFF",
+            "editor.selectionBackground": "#344B5B",
+            "editor.lineHighlightBackground": "#253746",
+        },
+    });
+}
+
+function formatDueDate(value: string) {
+    const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}Z`;
+    return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(new Date(timestamp));
+}
+
+function newRequestKey(): string {
+    if (typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+    const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 function formatDifficulty(difficulty: ProblemDetail["difficulty"]) {
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
@@ -66,6 +128,7 @@ function submissionMessage(submission: Submission): string {
 }
 
 export default function ProblemPage() {
+    const theme = useTheme();
     const { problemId } = useParams();
     const location = useLocation();
     const parsedProblemId = Number(problemId);
@@ -78,13 +141,61 @@ export default function ProblemPage() {
     const [isRunning, setIsRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const pendingAction = useRef<{ signature: string; key: string } | null>(null);
+    const workspaceRef = useRef<HTMLDivElement>(null);
+    const draggingPointer = useRef<number | null>(null);
+    const [promptWidth, setPromptWidth] = useState(32);
+
+    function resizeFromPointer(clientX: number) {
+        const bounds = workspaceRef.current?.getBoundingClientRect();
+        if (!bounds || bounds.width === 0) return;
+        const percentage = ((clientX - bounds.left) / bounds.width) * 100;
+        setPromptWidth(
+            Math.round(
+                Math.min(MAX_PROMPT_WIDTH, Math.max(MIN_PROMPT_WIDTH, percentage)),
+            ),
+        );
+    }
+
+    function handleDividerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+        const change =
+            event.key === "ArrowLeft" ? -2 : event.key === "ArrowRight" ? 2 : 0;
+        if (change) {
+            event.preventDefault();
+            setPromptWidth((width) =>
+                Math.min(MAX_PROMPT_WIDTH, Math.max(MIN_PROMPT_WIDTH, width + change)),
+            );
+        } else if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            setPromptWidth(event.key === "Home" ? MIN_PROMPT_WIDTH : MAX_PROMPT_WIDTH);
+        }
+    }
+
+    function handleDividerPointerDown(event: PointerEvent<HTMLDivElement>) {
+        if (event.button !== 0) return;
+        draggingPointer.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        resizeFromPointer(event.clientX);
+    }
+
+    function handleDividerPointerMove(event: PointerEvent<HTMLDivElement>) {
+        if (draggingPointer.current === event.pointerId)
+            resizeFromPointer(event.clientX);
+    }
+
+    function stopDividerDrag(event: PointerEvent<HTMLDivElement>) {
+        if (draggingPointer.current !== event.pointerId) return;
+        draggingPointer.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+    }
 
     function requestKey(operation: string, payload: Record<string, unknown>) {
         const signature = JSON.stringify({ operation, payload });
         if (pendingAction.current?.signature === signature) {
             return pendingAction.current;
         }
-        const action = { signature, key: crypto.randomUUID() };
+        const action = { signature, key: newRequestKey() };
         pendingAction.current = action;
         return action;
     }
@@ -218,11 +329,18 @@ export default function ProblemPage() {
             source_code: sourceCode,
         });
         try {
-            setSubmission(await runPublicCases(problem.id, sourceCode, action.key));
+            const createdRun = await runPublicCases(problem.id, sourceCode, action.key);
+            setSubmission(createdRun);
             completeRequest(action);
-        } catch {
-            setError("We could not run the public cases. Please try again.");
-        } finally {
+            if (createdRun.done) {
+                setIsRunning(false);
+            }
+        } catch (error) {
+            setError(
+                error instanceof ApiRequestError
+                    ? error.message
+                    : "We could not run the public cases. Please try again.",
+            );
             setIsRunning(false);
         }
     }
@@ -253,9 +371,13 @@ export default function ProblemPage() {
             if (createdSubmission.done) {
                 setIsRunning(false);
             }
-        } catch {
+        } catch (error) {
             setIsRunning(false);
-            setError("We could not submit your code. Please try again.");
+            setError(
+                error instanceof ApiRequestError
+                    ? error.message
+                    : "We could not submit your code. Please try again.",
+            );
         }
     }
 
@@ -271,7 +393,10 @@ export default function ProblemPage() {
 
     const backPath = location.pathname.startsWith("/teacher/")
         ? "/teacher/problems"
-        : "/student/statistics";
+        : "/student/problems";
+    const selectedContext = problem.assignment_contexts.find(
+        (item) => item.assignment_item_id === assignmentItemId,
+    );
 
     return (
         <div className="problem-page">
@@ -279,11 +404,10 @@ export default function ProblemPage() {
                 <Link to={backPath}>
                     {backPath === "/teacher/problems"
                         ? "← Back to problems"
-                        : "← Back to statistics"}
+                        : "← Back to all problems"}
                 </Link>
             </p>
             <header className="page-header">
-                <p className="eyebrow">Practice problem</p>
                 <h1>{problem.title}</h1>
                 <p>
                     <strong>{formatDifficulty(problem.difficulty)}</strong>
@@ -293,44 +417,54 @@ export default function ProblemPage() {
             </header>
 
             {problem.assignment_contexts.length > 0 && (
-                <label>
-                    Work for
-                    <select
-                        disabled={isRunning}
-                        value={assignmentItemId ?? ""}
-                        onChange={(event) => {
-                            const selected = event.target.value
-                                ? Number(event.target.value)
-                                : null;
-                            setAssignmentItemId(selected);
-                            setSubmission(null);
-                            setError(null);
-                            void startProblem(problem.id, selected ?? undefined).catch(
-                                () => setError("We could not start this assignment."),
-                            );
-                        }}
-                    >
-                        {problem.origin !== "custom" && (
-                            <option value="">Independent practice</option>
-                        )}
-                        {problem.assignment_contexts.map((context) => (
-                            <option
-                                key={context.assignment_item_id}
-                                value={context.assignment_item_id}
-                            >
-                                {context.course_name}: {context.assignment_title}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <div className="problem-context-select">
+                    <label>
+                        Work for
+                        <select
+                            disabled={isRunning}
+                            value={assignmentItemId ?? ""}
+                            onChange={(event) => {
+                                const selected = event.target.value
+                                    ? Number(event.target.value)
+                                    : null;
+                                setAssignmentItemId(selected);
+                                setSubmission(null);
+                                setError(null);
+                                void startProblem(
+                                    problem.id,
+                                    selected ?? undefined,
+                                ).catch(() =>
+                                    setError("We could not start this assignment."),
+                                );
+                            }}
+                        >
+                            {problem.origin !== "custom" && (
+                                <option value="">Independent practice</option>
+                            )}
+                            {problem.assignment_contexts.map((context) => (
+                                <option
+                                    key={context.assignment_item_id}
+                                    value={context.assignment_item_id}
+                                >
+                                    {context.course_name}: {context.assignment_title}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
             )}
 
             {error && <ErrorState message={error} />}
 
-            <div className="problem-workspace">
+            <div
+                className="problem-workspace"
+                ref={workspaceRef}
+                style={{ "--prompt-width": `${promptWidth}%` } as CSSProperties}
+            >
                 <section
                     aria-labelledby="prompt-heading"
                     className="problem-description"
+                    id="problem-description-panel"
                 >
                     <h2 id="prompt-heading">Problem</h2>
                     <div style={{ whiteSpace: "pre-wrap" }}>{problem.prompt}</div>
@@ -352,26 +486,89 @@ export default function ProblemPage() {
                     )}
                 </section>
 
-                <section aria-labelledby="editor-heading" className="problem-editor">
+                <div
+                    aria-controls="problem-description-panel problem-solution-panel"
+                    aria-label="Resize problem and solution panels"
+                    aria-orientation="vertical"
+                    aria-valuemax={MAX_PROMPT_WIDTH}
+                    aria-valuemin={MIN_PROMPT_WIDTH}
+                    aria-valuenow={promptWidth}
+                    className="problem-divider"
+                    onKeyDown={handleDividerKeyDown}
+                    onPointerCancel={stopDividerDrag}
+                    onPointerDown={handleDividerPointerDown}
+                    onPointerMove={handleDividerPointerMove}
+                    onPointerUp={stopDividerDrag}
+                    role="separator"
+                    tabIndex={0}
+                >
+                    <span aria-hidden="true" />
+                </div>
+
+                <section
+                    aria-labelledby="editor-heading"
+                    className="problem-editor"
+                    id="problem-solution-panel"
+                >
                     <div>
                         <h2 id="editor-heading">Your solution</h2>
                         <p>Write Python 3 code, then run it against all test cases.</p>
                     </div>
-                    <Editor
-                        defaultLanguage="python"
-                        height="min(60vh, 560px)"
-                        onChange={(value: string | undefined) =>
-                            setSourceCode(value ?? "")
-                        }
-                        options={{
-                            minimap: { enabled: false },
-                            fontSize: 14,
-                            automaticLayout: true,
-                            scrollBeyondLastLine: false,
-                        }}
-                        theme="vs-dark"
-                        value={sourceCode}
-                    />
+                    <div className="submission-context">
+                        {selectedContext ? (
+                            <>
+                                <strong>
+                                    Assignment #{selectedContext.assignment_id}:{" "}
+                                    {selectedContext.assignment_title}
+                                </strong>
+                                <span>
+                                    {selectedContext.course_name} · Question{" "}
+                                    {selectedContext.item_order}
+                                </span>
+                                <span>
+                                    {selectedContext.due_at
+                                        ? `Due ${formatDueDate(selectedContext.due_at)} (your time)`
+                                        : "No due date"}
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <strong>Independent practice</strong>
+                                <span>No assignment or due date</span>
+                            </>
+                        )}
+                    </div>
+                    <div className="code-editor-frame">
+                        <Editor
+                            beforeMount={defineEditorThemes}
+                            defaultLanguage="python"
+                            height="min(60vh, 560px)"
+                            onChange={(value: string | undefined) =>
+                                setSourceCode(value ?? "")
+                            }
+                            options={{
+                                minimap: { enabled: false },
+                                fontSize: 14,
+                                automaticLayout: true,
+                                scrollBeyondLastLine: false,
+                                scrollbar: {
+                                    vertical: "hidden",
+                                    horizontal: "hidden",
+                                    verticalScrollbarSize: 0,
+                                    horizontalScrollbarSize: 0,
+                                    useShadows: false,
+                                },
+                                overviewRulerLanes: 0,
+                                overviewRulerBorder: false,
+                            }}
+                            theme={
+                                theme === "dark"
+                                    ? "techniview-dark"
+                                    : "techniview-light"
+                            }
+                            value={sourceCode}
+                        />
+                    </div>
                     <button
                         disabled={isRunning || !sourceCode.trim()}
                         onClick={() => void handleRun()}
@@ -387,7 +584,11 @@ export default function ProblemPage() {
                         Submit for grading
                     </button>
                     {submission && (
-                        <section aria-live="polite" aria-labelledby="result-heading">
+                        <section
+                            aria-live="polite"
+                            aria-labelledby="result-heading"
+                            className="submission-results"
+                        >
                             <h3 id="result-heading">
                                 {submission.is_practice_run
                                     ? "Public case results"

@@ -33,14 +33,30 @@ curl http://localhost:8000/api/health | jq
   - app/models - SQLAlchemy application schema
   - migrations - Alembic schema revisions
   - app/worker - durable go-judge execution, recovery, and email delivery
-- frontend - Vite + React + strict TypeScript, with login, student problem/statistics, and teacher class/problem/analytics routes
-- docs - research notes and tests; the design set is in [docs/design](docs/design/), with D0, D1, D2, user stories, and review notes
+- frontend - Vite + React + strict TypeScript, with login, student
+  problem/statistics, and teacher class/problem/analytics routes. The problem list
+  is paginated, statistics have charts, and the theme toggle saves your light or
+  dark preference.
+- [docs](docs/README.md) - technical, design, and test documentation
+- [presentation](presentation/) - the edited TechniView slide deck and its PDF copy
 - .githooks - versioned pre-commit hook
 - pyproject.toml - backend dependencies and Ruff/pytest settings
 - uv.lock - reproducible Python dependency lockfile
 
 The [pilot participation form](docs/TECHNIVIEW_CONSENT_FORM.md) also has a
 [printable PDF](docs/TECHNIVIEW_CONSENT_FORM.pdf).
+
+### Student pages
+
+- **TechniView Trail:** Technique pools are open in any order. Open a pool's
+  problem list in a dialog; progress and suggestions update from completed work.
+- **All Problems:** Search the active catalog by title, filter by difficulty or
+  technique, and sort by Trail order, title, or difficulty. Titles open problems.
+- **Assignments:** Open a class to see published assignments, question numbers,
+  due dates in your local time, and links to each problem. The problem page also
+  shows its assignment context above the editor.
+- **My Statistics:** Filter by difficulty and problem type to update the summary
+  and charts. The theme toggle sits in the sidebar and the editor follows it.
 
 ## Section 3: Design and test documents
 
@@ -183,6 +199,10 @@ After applying migrations, import the reviewed catalog JSON with:
 cd backend
 uv run python -m scripts.import_problem_catalog data/problem_catalog.json
 ```
+
+Run the importer again after catalog corrections. It refreshes the problem title,
+statement, starter code, reference solution, and test cases on previously imported
+problems without replacing their submissions or assignments.
 
 When this replaces the earlier APPS+ catalog, the importer archives its old
 problems and the seeded demo problems, then removes them from the active

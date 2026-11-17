@@ -52,7 +52,6 @@ export default function TeacherClassesPage() {
     return (
         <div className="teacher-classes-page">
             <header className="page-header">
-                <p className="eyebrow">Teacher dashboard</p>
                 <h1>My Classes</h1>
                 <p>Choose a class to review student progress.</p>
             </header>

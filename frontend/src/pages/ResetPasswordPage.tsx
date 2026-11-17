@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { resetPassword } from "../api/auth";
 import { useAuth } from "../auth/useAuth";
-import logo from "../assets/TechniView_Logo_No_Title.png";
+import BrandLogo from "../components/BrandLogo";
 import "./LoginPage.css";
 
 export default function ResetPasswordPage() {
@@ -39,13 +39,12 @@ export default function ResetPasswordPage() {
         <main className="tv-login tv-minimal">
             <header className="design-picker">
                 <Link className="login-logo" to="/login" aria-label="TechniView home">
-                    <img src={logo} alt="TechniView" />
+                    <BrandLogo />
                 </Link>
             </header>
             <div className="login-stage">
                 <section className="login-art" aria-label="TechniView introduction">
                     <div className="art-copy">
-                        <span className="eyebrow">ACCOUNT SECURITY</span>
                         <h2>
                             A fresh
                             <br />
@@ -53,15 +52,9 @@ export default function ResetPasswordPage() {
                         </h2>
                         <p>Choose a new password to get back to your work.</p>
                     </div>
-                    <div className="art-footer">
-                        <span>YOUR WORKSPACE FOR WHAT&apos;S NEXT</span>
-                    </div>
                 </section>
                 <section className="login-form-side" aria-labelledby="reset-heading">
                     <div className="form-wrap">
-                        <div className="form-kicker">
-                            <span className="status-dot" /> SECURE ACCOUNT RECOVERY
-                        </div>
                         <h1 id="reset-heading">
                             Choose a new password<span className="title-period">.</span>
                         </h1>
@@ -129,12 +122,9 @@ export default function ResetPasswordPage() {
                                         disabled={isSubmitting}
                                         type="submit"
                                     >
-                                        <span>
-                                            {isSubmitting
-                                                ? "Changing password..."
-                                                : "Change password"}
-                                        </span>
-                                        <span aria-hidden="true">↗</span>
+                                        {isSubmitting
+                                            ? "Changing password..."
+                                            : "Change password"}
                                     </button>
                                 </form>
                                 <p className="auth-switch">

@@ -1,1197 +1,492 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
-
 .tv-login {
-    --ink: #182322;
-    --muted: #78817c;
-    --paper: #f5f5f0;
-    --accent: #c9f36a;
-    --panel: #fff;
+    --auth-art: #e9f3f8;
+    --auth-input: #fff;
+    --auth-button-text: #fff;
     min-height: 100vh;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: "DM Sans", sans-serif;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 26px 36px 30px;
-    box-sizing: border-box;
-    transition:
-        background 0.35s,
-        color 0.35s;
+    background: var(--tv-brand-paper);
+    color: var(--tv-brand-ink);
+    font-family: Helvetica, Arial, sans-serif;
 }
+
 .tv-login * {
     box-sizing: border-box;
 }
-.design-picker {
+
+.tv-login .design-picker {
     width: min(1180px, 100%);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 21px;
-    margin-bottom: 20px;
-}
-.picker-label,
-.design-option > span {
-    font:
-        500 10px "DM Mono",
-        monospace;
-    letter-spacing: 0.08em;
-}
-.picker-label {
-    color: var(--muted);
-}
-.picker-options {
-    display: flex;
-    gap: 5px;
-    padding: 4px;
-    background: rgba(20, 30, 26, 0.06);
-    border-radius: 999px;
-}
-.design-option {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    border-radius: 999px;
-    padding: 8px 12px;
-    color: var(--muted);
-    font:
-        600 11px "DM Sans",
-        sans-serif;
-    cursor: pointer;
-    transition: 0.2s;
-}
-.design-option > span {
-    margin-right: 6px;
-    opacity: 0.62;
-}
-.design-option[aria-pressed="true"] {
-    color: var(--ink);
-    background: var(--panel);
-    box-shadow: 0 2px 8px #18232212;
-}
-.design-option:focus-visible {
-    outline: 2px solid var(--ink);
-    outline-offset: 2px;
-}
-.login-stage {
-    width: min(1180px, 100%);
-    min-height: min(710px, calc(100vh - 100px));
+    min-height: 142px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    border-radius: 18px;
-    overflow: hidden;
-    background: var(--panel);
-    box-shadow: 0 28px 80px #17221b12;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    margin-bottom: 15px;
 }
-.login-art {
+
+.tv-login .login-logo {
+    grid-column: 2;
+    display: block;
+    width: 116px;
+    line-height: 0;
+}
+
+.tv-login .login-logo img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.tv-login .design-picker .theme-toggle {
+    grid-column: 3;
+    justify-self: end;
+}
+.tv-login.login-main > .design-picker {
+    display: none;
+}
+.tv-login .login-art-top {
     position: relative;
-    min-height: 620px;
-    padding: 39px 44px;
-    background: #193b35;
-    color: #f4f3eb;
-    overflow: hidden;
+    z-index: 2;
     display: flex;
-    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.tv-login .login-art-top .login-logo {
+    width: min(116px, 60%);
+}
+.tv-login.login-main .login-art {
     justify-content: space-between;
 }
-.tv-brand {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    color: inherit;
-    text-decoration: none;
-    font:
-        700 15px Manrope,
-        sans-serif;
-    letter-spacing: -0.03em;
-}
-.brand-symbol {
-    width: 30px;
-    height: 30px;
-    border: 1px solid #ffffff70;
+
+.tv-login .login-stage {
+    width: min(1180px, 100%);
+    min-height: min(710px, calc(100vh - 200px));
     display: grid;
-    place-items: center;
-    font:
-        800 17px Manrope,
-        sans-serif;
-    letter-spacing: -0.1em;
+    grid-template-columns: 27% minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 6px;
+    background: var(--tv-brand-white);
 }
-.brand-symbol > span {
-    color: #c9f36a;
+
+.tv-login .login-art {
+    position: relative;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    padding: 35px;
+    background: var(--auth-art);
+    color: var(--tv-brand-ink);
 }
-.art-copy {
+
+.tv-login .art-copy {
     position: relative;
     z-index: 1;
-    margin-top: auto;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
 }
-.eyebrow,
-.art-footer,
-.visual-caption,
-.visual-tag,
-.form-kicker,
-.form-bottom {
-    font:
-        500 9px "DM Mono",
-        monospace;
-    letter-spacing: 0.13em;
+
+.tv-login .art-copy h2 {
+    margin: 0 0 16px;
+    font-size: clamp(30px, 3.5vw, 42px);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.05em;
 }
-.eyebrow {
-    color: #c9f36a;
+
+.tv-login .art-copy h2 em {
+    color: var(--tv-brand-blue);
+    font-style: normal;
 }
-.art-copy h2 {
-    font:
-        600 clamp(38px, 5vw, 64px)/1.07 Manrope,
-        sans-serif;
-    letter-spacing: -0.065em;
-    margin: 19px 0 15px;
-}
-.art-copy h2 em {
-    font-family: Georgia, serif;
-    font-weight: 400;
-    color: #c9f36a;
-}
-.art-copy p {
+
+.tv-login .art-copy p {
     margin: 0;
-    color: #bdcbc4;
+    color: var(--tv-text-secondary);
     font-size: 13px;
+    line-height: 1.55;
 }
-.art-visual {
+
+.tv-login .art-visual {
     position: absolute;
-    right: 10%;
-    top: 19%;
+    top: 27%;
+    left: 10%;
     width: 290px;
     height: 260px;
-    opacity: 0.86;
+    opacity: 0.45;
+    transform: scale(0.75);
+    transform-origin: top left;
 }
-.orbit {
+
+.tv-login .orbit {
     position: absolute;
-    border: 1px solid #d9edca25;
+    border: 1px solid var(--tv-brand-blue);
     border-radius: 50%;
     transform: rotate(-25deg);
 }
-.orbit-one {
+
+.tv-login .orbit-one {
     inset: 5px 20px 18px -20px;
 }
-.orbit-two {
+
+.tv-login .orbit-two {
     inset: 35px -8px -4px 8px;
 }
-.visual-card {
+
+.tv-login .visual-card {
     position: absolute;
-    left: 38px;
     top: 37px;
+    left: 38px;
     width: 200px;
     height: 176px;
     padding: 21px;
-    background: #e9eee1;
-    color: #1f3934;
-    box-shadow: 15px 20px 38px #0a201d55;
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 6px;
+    background: var(--tv-brand-white);
+    box-shadow: 15px 20px 38px rgb(0 0 0 / 12%);
     transform: rotate(5deg);
 }
-.visual-dot {
+
+.tv-login .visual-dot {
     display: block;
     width: 7px;
     height: 7px;
-    border-radius: 50%;
-    background: #8dba56;
     margin-bottom: 13px;
+    border-radius: 50%;
+    background: var(--tv-brand-blue);
 }
-.visual-line {
+
+.tv-login .visual-line {
     display: block;
     width: 80px;
     height: 5px;
-    background: #ced7c8;
     margin-top: 7px;
+    background: var(--tv-brand-line);
 }
-.line-long {
+
+.tv-login .line-long {
     width: 125px;
-    background: #b7c8af;
 }
-.visual-chart {
+
+.tv-login .visual-chart {
     height: 53px;
-    margin-top: 20px;
-    border-bottom: 1px solid #aebaaa;
     display: flex;
     align-items: end;
     gap: 8px;
+    margin-top: 20px;
+    border-bottom: 1px solid var(--tv-brand-line);
 }
-.visual-chart i {
+
+.tv-login .visual-chart i {
     width: 12px;
-    background: #7ca171;
     border-radius: 2px 2px 0 0;
+    background: var(--tv-brand-blue);
 }
-.visual-chart i:nth-child(1) {
+
+.tv-login .visual-chart i:nth-child(1) {
     height: 18%;
 }
-.visual-chart i:nth-child(2) {
+.tv-login .visual-chart i:nth-child(2) {
     height: 34%;
 }
-.visual-chart i:nth-child(3) {
+.tv-login .visual-chart i:nth-child(3) {
     height: 27%;
 }
-.visual-chart i:nth-child(4) {
+.tv-login .visual-chart i:nth-child(4) {
     height: 56%;
 }
-.visual-chart i:nth-child(5) {
+.tv-login .visual-chart i:nth-child(5) {
     height: 47%;
 }
-.visual-chart i:nth-child(6) {
+.tv-login .visual-chart i:nth-child(6) {
     height: 77%;
 }
-.visual-chart i:nth-child(7) {
+.tv-login .visual-chart i:nth-child(7) {
     height: 100%;
-    background: #b4d779;
 }
-.visual-caption {
+
+.tv-login .visual-caption,
+.tv-login .visual-tag {
+    color: var(--tv-brand-muted);
+    font-size: 8px;
+    letter-spacing: 0.08em;
+}
+
+.tv-login .visual-caption {
     display: block;
-    font-size: 7px;
     margin-top: 10px;
-    color: #657b6a;
 }
-.visual-tag {
+
+.tv-login .visual-tag {
     position: absolute;
-    color: #d7e7d5;
-    font-size: 8px;
 }
-.tag-top {
-    right: 0;
+
+.tv-login .tag-top {
     top: 18px;
+    right: 0;
 }
-.tag-bottom {
-    left: 0;
+
+.tv-login .tag-bottom {
     bottom: 0;
+    left: 0;
 }
-.art-footer {
-    display: flex;
-    justify-content: space-between;
-    color: #9bb1a8;
-    font-size: 8px;
-}
-.login-form-side {
-    position: relative;
-    padding: 45px clamp(36px, 6vw, 82px) 25px;
+
+.tv-login .login-form-side {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    background: var(--panel);
-}
-.form-wrap {
-    width: 100%;
-    max-width: 370px;
-    margin: auto;
-}
-.form-kicker {
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 9px;
-}
-.status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #99bf5a;
-    box-shadow: 0 0 0 3px #99bf5a22;
-}
-.form-wrap h1 {
-    font:
-        700 clamp(29px, 3.2vw, 40px)/1.12 Manrope,
-        sans-serif;
-    letter-spacing: -0.055em;
-    margin: 18px 0 8px;
-}
-.title-period {
-    color: #88a95d;
-}
-.form-intro {
-    font-size: 13px;
-    color: var(--muted);
-    margin: 0 0 34px;
-}
-.tv-field {
-    margin-bottom: 20px;
-}
-.tv-field label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    margin-bottom: 8px;
-}
-.field-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.field-label-row a {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--muted);
-    text-decoration: none;
-}
-.field-label-row a:hover {
-    text-decoration: underline;
-    color: var(--ink);
-}
-.tv-field input {
-    width: 100%;
-    height: 48px;
-    border: 1px solid #e3e6df;
-    border-radius: 5px;
-    background: var(--panel);
-    padding: 0 14px;
-    color: var(--ink);
-    font:
-        13px "DM Sans",
-        sans-serif;
-    outline: none;
-    transition: 0.2s;
-}
-.tv-field input::placeholder {
-    color: #a8afaa;
-}
-.tv-field input:focus {
-    border-color: #789755;
-    box-shadow: 0 0 0 3px #8bae5b20;
-}
-.tv-field input:disabled {
-    opacity: 0.65;
-}
-.submit-login {
-    width: 100%;
-    height: 49px;
-    padding: 0 16px;
-    border: 0;
-    border-radius: 5px;
-    background: #193b35;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font:
-        600 12px "DM Sans",
-        sans-serif;
-    cursor: pointer;
-    transition:
-        transform 0.15s,
-        background 0.2s;
-}
-.submit-login:hover {
-    background: #28574e;
-    transform: translateY(-1px);
-}
-.submit-login > span:last-child {
-    font-size: 17px;
-}
-.submit-login:disabled {
-    opacity: 0.65;
-    cursor: wait;
-}
-.tv-error {
-    color: #a13d32;
-    font-size: 12px;
-    margin: -7px 0 15px;
-}
-.form-bottom {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 28px;
-    color: #99a19c;
-    white-space: nowrap;
-    font-size: 8px;
-}
-.bottom-rule {
-    height: 1px;
-    background: #e8eae5;
-    flex: 1;
-}
-.login-footer {
-    display: flex;
-    justify-content: space-between;
-    color: #a1a8a2;
-    font-size: 9px;
-}
-.mobile-brand {
-    display: none;
+    padding: 40px 8%;
 }
 
-/* 02 — quiet, paper-like centered layout */
-.tv-minimal {
-    --paper: #f8f8f6;
-    --panel: #f8f8f6;
-    --accent: #242b28;
-}
-.tv-minimal .login-stage {
-    display: block;
-    min-height: min(710px, calc(100vh - 100px));
-    background: var(--paper);
-    box-shadow: none;
-    border: 1px solid #e7e8e2;
-    border-radius: 4px;
-    position: relative;
-}
-.tv-minimal .login-art {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 27%;
-    min-height: 0;
-    padding: 35px;
-    background: #f1f1ed;
-    color: #303a35;
-}
-.tv-minimal .art-copy h2 {
-    font-size: 42px;
-}
-.tv-minimal .art-copy h2 em {
-    color: #7c9272;
-}
-.tv-minimal .art-copy p,
-.tv-minimal .eyebrow {
-    color: #7e8980;
-}
-.tv-minimal .eyebrow {
-    color: #70866b;
-}
-.tv-minimal .art-visual {
-    opacity: 0.35;
-    transform: scale(0.75);
-    transform-origin: top left;
-    top: 38%;
-    left: 10%;
-    right: auto;
-}
-.tv-minimal .art-footer {
-    color: #929991;
-}
-.tv-minimal .login-form-side {
-    margin-left: 27%;
-    height: 100%;
-    padding: 40px 8%;
-    background: transparent;
-}
-.tv-minimal .form-wrap {
+.tv-login .form-wrap {
+    width: 100%;
     max-width: 380px;
+    margin: auto;
 }
-.tv-minimal .tv-field input {
-    border-radius: 2px;
-    background: transparent;
+
+.tv-login .form-wrap h1 {
+    margin: 0 0 10px;
+    font-size: clamp(29px, 3.2vw, 40px);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.05em;
 }
-.tv-minimal .submit-login {
-    background: #26312c;
-    border-radius: 2px;
+
+.tv-login .title-period {
+    color: var(--tv-brand-blue);
 }
-.tv-minimal .title-period {
-    color: #879381;
+
+.tv-login .form-intro {
+    margin: 0 0 30px;
+    color: var(--tv-brand-muted);
+    font-size: 13px;
+    line-height: 1.5;
 }
-/* 03 — focused dark developer-console treatment */
-.tv-terminal {
-    --paper: #101714;
-    --panel: #151e1a;
-    --ink: #e6eee7;
-    --muted: #92a198;
-    --accent: #a6f078;
+
+.tv-login .tv-field {
+    margin-bottom: 20px;
 }
-.tv-terminal .login-stage {
-    border: 1px solid #314039;
-    box-shadow: 0 28px 90px #0005;
+
+.tv-login .tv-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
 }
-.tv-terminal .login-art {
-    background: #101714;
-    border-right: 1px solid #293630;
+
+.tv-login .auth-switch a,
+.tv-login .login-footer a {
+    color: var(--tv-brand-blue);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
-.tv-terminal .brand-symbol {
-    border-color: #85ac7c;
+
+.tv-login .tv-field input {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 5px;
+    outline: none;
+    background: var(--auth-input);
+    color: var(--tv-brand-ink);
+    font-size: 13px;
 }
-.tv-terminal .art-copy h2 em {
-    color: #a6f078;
+
+.tv-login .tv-field input::placeholder {
+    color: var(--tv-brand-muted);
 }
-.tv-terminal .eyebrow {
-    color: #a6f078;
+
+.tv-login .tv-field input:focus {
+    border-color: var(--tv-brand-blue);
+    box-shadow: 0 0 0 3px var(--tv-focus-ring);
 }
-.tv-terminal .art-visual {
-    opacity: 0.8;
-}
-.tv-terminal .visual-card {
-    background: #1d2b24;
-    color: #c5e1c6;
-    box-shadow: 15px 20px 38px #0008;
-}
-.tv-terminal .visual-line {
-    background: #365346;
-}
-.tv-terminal .line-long {
-    background: #51765b;
-}
-.tv-terminal .visual-caption {
-    color: #a6c6aa;
-}
-.tv-terminal .visual-tag {
-    color: #8ba992;
-}
-.tv-terminal .art-footer {
-    color: #71857a;
-}
-.tv-terminal .status-dot {
-    background: #a6f078;
-    box-shadow: 0 0 0 3px #a6f07822;
-}
-.tv-terminal .title-period {
-    color: #a6f078;
-}
-.tv-terminal .tv-field input {
-    border-color: #33433a;
-    background: #111915;
-    color: #e6eee7;
-    border-radius: 3px;
-}
-.tv-terminal .tv-field input:focus {
-    border-color: #9bcc7b;
-    box-shadow: 0 0 0 3px #a6f07820;
-}
-.tv-terminal .submit-login {
-    background: #a6f078;
-    color: #142119;
-    border-radius: 3px;
-}
-.tv-terminal .submit-login:hover {
-    background: #b8ff89;
-}
-.tv-terminal .form-bottom .bottom-rule {
-    background: #303e36;
-}
-.tv-terminal .login-footer {
-    color: #718077;
-}
-/* 04 — warm gradient with softly elevated glass card */
-.tv-aurora {
-    --paper: #eae4f8;
-    --panel: #fffdfb;
-    --ink: #2c2441;
-    --muted: #817b8f;
-    --accent: #a294e8;
-}
-.tv-aurora .login-stage {
-    background: transparent;
-    box-shadow: none;
-    gap: 22px;
-}
-.tv-aurora .login-art {
-    border-radius: 18px;
-    background:
-        radial-gradient(ellipse at 78% 22%, #a892df 0, transparent 40%),
-        linear-gradient(145deg, #39315e, #6e5993 55%, #c08f9b);
-    padding: 39px 44px;
-}
-.tv-aurora .art-copy h2 em {
-    color: #f2cbba;
-}
-.tv-aurora .eyebrow {
-    color: #f3d7bd;
-}
-.tv-aurora .art-visual {
+
+.tv-login .tv-field input:disabled,
+.tv-login .submit-login:disabled {
     opacity: 0.65;
 }
-.tv-aurora .visual-card {
-    border-radius: 9px;
-    transform: rotate(5deg);
-    background: #fff8f1e8;
-    backdrop-filter: blur(10px);
+
+.tv-login .submit-login,
+.tv-login .auth-primary-link {
+    min-height: 48px;
+    padding: 0 16px;
+    border: 1px solid var(--tv-brand-blue);
+    border-radius: 5px;
+    background: var(--tv-brand-blue);
+    color: var(--auth-button-text);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
 }
-.tv-aurora .login-form-side {
-    border-radius: 18px;
-    box-shadow: 0 20px 60px #54457614;
+
+.tv-login .submit-login {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
 }
-.tv-aurora .status-dot {
-    background: #9a82d0;
-    box-shadow: 0 0 0 3px #9a82d022;
+
+.tv-login .auth-primary-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
-.tv-aurora .title-period {
-    color: #9a82d0;
+
+.tv-login .submit-login:hover:not(:disabled),
+.tv-login .auth-primary-link:hover {
+    box-shadow: 0 0 0 3px var(--tv-brand-soft);
+    color: var(--auth-button-text);
 }
-.tv-aurora .tv-field input {
-    background: #fff;
-    border-color: #e9e4ee;
-    border-radius: 9px;
+
+.tv-login .login-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
 }
-.tv-aurora .tv-field input:focus {
-    border-color: #9a82d0;
-    box-shadow: 0 0 0 3px #9a82d020;
+
+.tv-login .auth-secondary-link {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    border: 1px solid var(--tv-brand-blue);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--tv-brand-blue);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
 }
-.tv-aurora .submit-login {
-    background: #544576;
-    border-radius: 9px;
+
+.tv-login .auth-secondary-link:hover {
+    background: var(--tv-brand-soft);
 }
-.tv-aurora .submit-login:hover {
-    background: #6b5a91;
+
+.tv-login .submit-login:disabled {
+    cursor: wait;
 }
-/* 05 — confident campus identity in a classic blue palette */
-.tv-campus {
-    --paper: #edf3f9;
-    --panel: #fff;
-    --ink: #142b48;
-    --muted: #74849a;
-    --accent: #efbd55;
+
+.tv-login .auth-switch {
+    margin: 18px 0 0;
+    color: var(--tv-brand-muted);
+    font-size: 12px;
+    text-align: center;
 }
-.tv-campus .login-stage {
-    border-radius: 8px;
-    grid-template-columns: 1fr 1fr;
-    box-shadow: 0 20px 70px #16395b14;
+
+.tv-login .signup-class-note {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 5px;
+    background: var(--tv-surface-muted);
+    color: var(--tv-text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
 }
-.tv-campus .login-art {
-    background: #12345a;
-    padding: 39px 44px;
+
+.tv-login .tv-error {
+    margin: -7px 0 15px;
+    padding: 10px 12px;
+    border: 1px solid #edc9c5;
+    border-radius: 5px;
+    background: #fff7f6;
+    color: #a13d32;
+    font-size: 12px;
+    line-height: 1.45;
 }
-.tv-campus .brand-symbol {
-    border-color: #f3c65f;
+
+.tv-login .login-footer {
+    display: flex;
+    margin-top: 28px;
+    color: var(--tv-brand-muted);
+    font-size: 9px;
 }
-.tv-campus .brand-symbol > span,
-.tv-campus .art-copy h2 em {
-    color: #f3c65f;
+
+.tv-login .signup-stage .form-wrap {
+    max-width: 440px;
 }
-.tv-campus .eyebrow {
-    color: #f3c65f;
+
+.tv-login .signup-stage .tv-field {
+    margin-bottom: 14px;
 }
-.tv-campus .art-visual {
-    right: 8%;
-    top: 20%;
-    transform: scale(0.9);
+
+.tv-login .signup-stage .tv-field input {
+    height: 44px;
 }
-.tv-campus .visual-card {
-    background: #f2f6f8;
-    color: #204369;
-    transform: rotate(-4deg);
+
+:root[data-theme="dark"] .tv-login {
+    --auth-art: #263d4c;
+    --auth-input: #192833;
+    --auth-button-text: #10202a;
 }
-.tv-campus .visual-chart i {
-    background: #668bb0;
-}
-.tv-campus .visual-chart i:nth-child(7) {
-    background: #efbd55;
-}
-.tv-campus .visual-caption {
-    color: #617d99;
-}
-.tv-campus .login-form-side {
-    padding-left: clamp(36px, 5vw, 68px);
-    padding-right: clamp(36px, 5vw, 68px);
-}
-.tv-campus .status-dot {
-    background: #efbd55;
-    box-shadow: 0 0 0 3px #efbd5522;
-}
-.tv-campus .title-period {
-    color: #dcaa42;
-}
-.tv-campus .tv-field input {
-    border-color: #dbe4ed;
-    border-radius: 4px;
-}
-.tv-campus .tv-field input:focus {
-    border-color: #4777a5;
-    box-shadow: 0 0 0 3px #4777a520;
-}
-.tv-campus .submit-login {
-    background: #12345a;
-    border-radius: 4px;
-}
-.tv-campus .submit-login:hover {
-    background: #1d4b7d;
+
+:root[data-theme="dark"] .tv-login .tv-error {
+    border-color: #864d4d;
+    background: #432c30;
+    color: #ffccca;
 }
 
 @media (max-width: 760px) {
     .tv-login {
         padding: 16px;
     }
-    .design-picker {
-        justify-content: center;
-        flex-direction: column;
-        gap: 8px;
-        margin-bottom: 14px;
+
+    .tv-login .design-picker {
+        min-height: 120px;
+        margin-bottom: 12px;
     }
-    .picker-options {
-        max-width: 100%;
-        overflow-x: auto;
+    .tv-login.login-main > .design-picker {
+        display: grid;
     }
-    .design-option {
-        padding: 8px 10px;
-        white-space: nowrap;
+
+    .tv-login .login-logo {
+        width: 100px;
     }
-    .login-stage {
-        min-height: calc(100vh - 106px);
+
+    .tv-login .login-stage {
+        min-height: calc(100vh - 160px);
         grid-template-columns: 1fr;
     }
-    .login-art {
+
+    .tv-login .login-art {
         display: none;
     }
-    .login-form-side {
+
+    .tv-login .login-form-side {
+        min-height: calc(100vh - 160px);
         padding: 28px 26px 20px;
-        min-height: 570px;
-    }
-    .mobile-brand {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        font:
-            700 14px Manrope,
-            sans-serif;
-        margin-bottom: auto;
-    }
-    .mobile-brand .brand-symbol {
-        width: 28px;
-        height: 28px;
-    }
-    .form-wrap {
-        margin: auto;
-    }
-    .login-footer {
-        margin-top: 35px;
-    }
-    .tv-minimal .login-stage {
-        min-height: calc(100vh - 106px);
-    }
-    .tv-minimal .login-art {
-        display: none;
-    }
-    .tv-minimal .login-form-side {
-        margin: 0;
-        height: auto;
-        min-height: calc(100vh - 106px);
-        padding: 28px 26px 20px;
-    }
-    .tv-aurora .login-stage {
-        display: block;
-    }
-    .tv-aurora .login-form-side {
-        min-height: calc(100vh - 106px);
     }
 }
+
 @media (max-width: 390px) {
     .tv-login {
         padding: 12px;
     }
-    .picker-label {
-        font-size: 8px;
+
+    .tv-login .login-logo {
+        width: 86px;
     }
-    .design-option {
-        font-size: 10px;
-        padding: 7px 8px;
-    }
-    .design-option > span {
-        display: none;
-    }
-    .login-form-side {
-        padding-left: 20px;
+
+    .tv-login .login-form-side {
         padding-right: 20px;
+        padding-left: 20px;
     }
 }
+
 @media (prefers-reduced-motion: reduce) {
     .tv-login,
     .tv-login * {
         scroll-behavior: auto !important;
         transition: none !important;
-    }
-}
-
-/* TechniView identity from TechniView_Logo.png: ink black, clear blue, white. */
-.tv-brand {
-    display: inline-flex;
-    width: 92px;
-    height: 92px;
-    overflow: hidden;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 8px 26px #051d2926;
-}
-.tv-brand img,
-.mobile-brand img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    display: block;
-}
-.tv-login .brand-symbol {
-    display: none;
-}
-.tv-login .mobile-brand {
-    width: 70px;
-    height: 70px;
-    overflow: hidden;
-    background: #fff;
-    border-radius: 6px;
-    box-shadow: 0 3px 14px #07131b16;
-}
-
-/* Each preview keeps its own art direction while sharing the supplied logo. */
-.tv-studio {
-    --ink: #111820;
-    --muted: #687783;
-    --paper: #f2f7fa;
-    --panel: #fff;
-    --accent: #087bb9;
-}
-.tv-studio .login-art {
-    background: #102f49;
-}
-.tv-studio .eyebrow,
-.tv-studio .art-copy h2 em {
-    color: #75c9f1;
-}
-.tv-studio .title-period {
-    color: #087bb9;
-}
-.tv-studio .status-dot,
-.tv-studio .visual-dot {
-    background: #087bb9;
-}
-.tv-studio .status-dot {
-    box-shadow: 0 0 0 3px #087bb922;
-}
-.tv-studio .submit-login {
-    background: #075f91;
-}
-.tv-studio .submit-login:hover {
-    background: #087bb9;
-}
-.tv-studio .tv-field input:focus {
-    border-color: #087bb9;
-    box-shadow: 0 0 0 3px #087bb922;
-}
-.tv-studio .visual-chart i:nth-child(7) {
-    background: #087bb9;
-}
-.tv-studio .visual-caption {
-    color: #3f718b;
-}
-.tv-minimal {
-    --paper: #fbfcfd;
-    --panel: #fbfcfd;
-    --accent: #087bb9;
-}
-.tv-minimal .login-art {
-    background: #e9f3f8;
-    color: #142735;
-}
-.tv-minimal .art-copy h2 em,
-.tv-minimal .eyebrow {
-    color: #087bb9;
-}
-.tv-minimal .art-copy p {
-    color: #5e707b;
-}
-.tv-minimal .submit-login {
-    background: #087bb9;
-}
-.tv-minimal .status-dot {
-    background: #087bb9;
-    box-shadow: 0 0 0 3px #087bb922;
-}
-
-.auth-switch {
-    margin: 18px 0 0;
-    color: var(--muted);
-    font-size: 12px;
-    text-align: center;
-}
-.auth-switch a,
-.auth-primary-link {
-    color: #075f91;
-    font-weight: 700;
-    text-decoration: none;
-}
-.auth-switch a:hover,
-.auth-primary-link:hover {
-    color: #087bb9;
-    text-decoration: underline;
-}
-.auth-primary-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 46px;
-    padding: 0 16px;
-    border-radius: 2px;
-    background: #087bb9;
-    color: #fff;
-}
-.auth-primary-link:hover {
-    background: #075f91;
-    color: #fff;
-    text-decoration: none;
-}
-.signup-class-note {
-    margin: 0 0 14px;
-    padding: 10px 12px;
-    border: 1px solid #cfe3ee;
-    border-radius: 4px;
-    background: #f1f9fc;
-    color: #40515c;
-    font-size: 12px;
-}
-.tv-minimal .signup-stage {
-    min-height: 0;
-}
-.tv-minimal .signup-stage .login-form-side {
-    height: auto;
-    min-height: 710px;
-}
-.signup-stage .form-wrap {
-    max-width: 440px;
-}
-.signup-stage .tv-field {
-    margin-bottom: 14px;
-}
-.signup-stage .tv-field input {
-    height: 44px;
-}
-@media (max-width: 760px) {
-    .tv-minimal .signup-stage {
-        min-height: 0;
-    }
-    .tv-minimal .signup-stage .login-form-side {
-        min-height: 0;
-        padding: 28px 26px 20px;
-    }
-    .signup-stage .login-footer {
-        margin-top: 30px;
-    }
-}
-
-/* Shared controls for the minimal authentication screens. */
-.tv-login .tv-field input {
-    height: 48px;
-    padding: 0 14px;
-    border: 1px solid #cbd7de;
-    border-radius: 5px;
-    background: #fff;
-    color: #17242c;
-    transition:
-        border-color 0.15s,
-        box-shadow 0.15s;
-}
-.tv-login .tv-field input::placeholder {
-    color: #8b9aa3;
-}
-.tv-login .tv-field input:focus {
-    border-color: #087bb9;
-    box-shadow: 0 0 0 3px #087bb922;
-}
-.tv-login .field-label-row a,
-.tv-login .auth-switch a,
-.tv-login .login-footer a {
-    color: #075f91;
-    font-weight: 700;
-    text-decoration: underline;
-    text-decoration-color: #9bc9e0;
-    text-underline-offset: 3px;
-}
-.tv-login .field-label-row a:hover,
-.tv-login .auth-switch a:hover,
-.tv-login .login-footer a:hover {
-    color: #087bb9;
-    text-decoration-color: currentColor;
-}
-.tv-login .submit-login {
-    min-height: 48px;
-    border: 1px solid #087bb9;
-    border-radius: 5px;
-    background: #087bb9;
-    box-shadow: 0 2px 5px #075f911c;
-    transition:
-        background 0.15s,
-        border-color 0.15s,
-        box-shadow 0.15s,
-        transform 0.15s;
-}
-.tv-login .submit-login:hover:not(:disabled) {
-    border-color: #075f91;
-    background: #075f91;
-    box-shadow: 0 4px 10px #075f912b;
-    transform: translateY(-1px);
-}
-.tv-login .submit-login:focus-visible,
-.tv-login .auth-primary-link:focus-visible {
-    outline: 3px solid #087bb94d;
-    outline-offset: 3px;
-}
-.tv-login .auth-primary-link {
-    border-radius: 5px;
-    box-shadow: 0 2px 5px #075f911c;
-}
-.tv-login .auth-primary-link:hover {
-    box-shadow: 0 4px 10px #075f912b;
-}
-.tv-login .tv-error {
-    padding: 10px 12px;
-    border: 1px solid #edc9c5;
-    border-radius: 5px;
-    background: #fff7f6;
-    line-height: 1.45;
-}
-.tv-login .signup-class-note {
-    border-radius: 5px;
-}
-.tv-terminal {
-    --paper: #09110f;
-    --panel: #111b17;
-    --ink: #e6eee7;
-    --muted: #92a198;
-    --accent: #55b7e5;
-}
-.tv-terminal .login-art {
-    background: #09110f;
-}
-.tv-terminal .art-copy h2 em,
-.tv-terminal .eyebrow {
-    color: #55b7e5;
-}
-.tv-terminal .submit-login {
-    background: #087bb9;
-    color: #fff;
-}
-.tv-terminal .submit-login:hover {
-    background: #1598d7;
-}
-.tv-terminal .tv-field input:focus {
-    border-color: #55b7e5;
-    box-shadow: 0 0 0 3px #55b7e522;
-}
-.tv-aurora {
-    --paper: #e6eefb;
-    --panel: #fff;
-    --ink: #18283b;
-    --muted: #738399;
-    --accent: #2787c0;
-}
-.tv-aurora .login-art {
-    background:
-        radial-gradient(ellipse at 78% 22%, #63b4db 0, transparent 40%),
-        linear-gradient(145deg, #163e67, #327ca7 58%, #7caec2);
-}
-.tv-aurora .eyebrow,
-.tv-aurora .art-copy h2 em {
-    color: #d8f2ff;
-}
-.tv-aurora .title-period,
-.tv-aurora .status-dot {
-    color: #087bb9;
-}
-.tv-aurora .submit-login {
-    background: #087bb9;
-}
-.tv-aurora .submit-login:hover {
-    background: #075f91;
-}
-.tv-aurora .tv-field input:focus {
-    border-color: #2787c0;
-    box-shadow: 0 0 0 3px #2787c022;
-}
-.tv-campus {
-    --paper: #eaf1f7;
-    --panel: #fff;
-    --ink: #142b48;
-    --muted: #74849a;
-    --accent: #087bb9;
-}
-.tv-campus .login-art {
-    background: #12345a;
-}
-.tv-campus .brand-symbol {
-    display: none;
-}
-.tv-campus .art-copy h2 em,
-.tv-campus .eyebrow {
-    color: #76c9f1;
-}
-.tv-campus .submit-login {
-    background: #075f91;
-}
-.tv-campus .submit-login:hover {
-    background: #087bb9;
-}
-.tv-campus .tv-field input:focus {
-    border-color: #087bb9;
-    box-shadow: 0 0 0 3px #087bb922;
-}
-@media (max-width: 760px) {
-    .tv-brand {
-        display: none;
-    }
-    .tv-login .mobile-brand {
-        display: block;
-        margin-bottom: auto;
-    }
-}
-
-/* Keep the real wordmark visible in every login preview, independent of theme. */
-.tv-login .design-picker {
-    justify-content: space-between;
-    align-items: center;
-    min-height: 100px;
-    margin-bottom: 15px;
-}
-.login-logo {
-    display: block;
-    flex: 0 0 96px;
-    width: 96px;
-    height: 96px;
-    overflow: hidden;
-    border: 1px solid #e3eaf0;
-    border-radius: 8px;
-    background: #fff;
-    box-shadow: 0 5px 18px #122c3c12;
-    line-height: 0;
-}
-.login-logo img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-}
-.design-picker-controls {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-}
-@media (max-width: 760px) {
-    .tv-login .design-picker {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        min-height: 82px;
-        margin-bottom: 12px;
-    }
-    .login-logo {
-        flex-basis: 76px;
-        width: 76px;
-        height: 76px;
-    }
-    .design-picker-controls {
-        align-items: flex-end;
-        flex-direction: column;
-        gap: 6px;
-    }
-    .tv-login .login-stage {
-        min-height: calc(100vh - 135px);
-    }
-}
-@media (max-width: 440px) {
-    .tv-login .design-picker {
-        align-items: flex-start;
-    }
-    .login-logo {
-        flex-basis: 62px;
-        width: 62px;
-        height: 62px;
-    }
-    .design-picker-controls {
-        max-width: calc(100% - 72px);
-    }
-    .picker-options {
-        gap: 2px;
-        padding: 3px;
-    }
-    .design-option {
-        padding: 7px 8px;
     }
 }

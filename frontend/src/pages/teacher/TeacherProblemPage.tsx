@@ -184,7 +184,6 @@ export default function TeacherProblemPage() {
     return (
         <div className="teacher-problem-page">
             <header className="page-header">
-                <p className="eyebrow">Teacher dashboard</p>
                 <h1>Student Problem Progress</h1>
                 <p>
                     Review one student&apos;s progress across every problem in{" "}

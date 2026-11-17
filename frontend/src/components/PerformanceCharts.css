@@ -1,0 +1,103 @@
+.performance-charts {
+    margin-top: 28px;
+}
+.performance-charts-heading h2 {
+    margin: 0 0 14px;
+    font-size: 20px;
+}
+.performance-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid var(--tv-brand-line);
+    border-radius: 10px;
+    background: var(--tv-brand-white);
+}
+.performance-chart-section {
+    min-width: 0;
+    padding: 24px;
+}
+.performance-chart-section + .performance-chart-section {
+    border-left: 1px solid var(--tv-brand-line);
+}
+.performance-chart-section h3 {
+    margin: 0 0 20px;
+    font-size: 15px;
+}
+.completion-chart-row {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+.completion-ring {
+    width: 132px;
+    height: 132px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: conic-gradient(
+        var(--tv-brand-blue) var(--completion-percent),
+        var(--tv-chart-track) 0
+    );
+}
+.completion-ring span {
+    width: 100px;
+    height: 100px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--tv-brand-white);
+    color: var(--tv-brand-ink);
+    font-size: 26px;
+    font-weight: 700;
+}
+.completion-chart-labels p {
+    margin: 8px 0;
+    color: var(--tv-brand-muted);
+    font-size: 13px;
+}
+.completion-chart-labels strong {
+    color: var(--tv-brand-ink);
+    font-size: 17px;
+}
+.error-chart {
+    display: grid;
+    gap: 13px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.error-chart li {
+    display: grid;
+    grid-template-columns: 100px minmax(50px, 1fr) 26px;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+}
+.error-chart-track {
+    height: 9px;
+    overflow: hidden;
+    border-radius: 20px;
+    background: var(--tv-chart-track);
+}
+.error-chart-track div {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--tv-brand-blue);
+}
+.error-chart strong {
+    text-align: right;
+}
+.chart-empty {
+    color: var(--tv-brand-muted);
+    font-size: 13px;
+}
+@media (max-width: 760px) {
+    .performance-chart-grid {
+        grid-template-columns: 1fr;
+    }
+    .performance-chart-section + .performance-chart-section {
+        border-left: 0;
+        border-top: 1px solid var(--tv-brand-line);
+    }
+}

@@ -134,6 +134,10 @@ def test_new_catalog_archives_previous_catalog_generations(db_session, tmp_path)
     assert new_problem is not None
     assert db_session.get(CurriculumNode, new_problem.id).priority == 101
 
+    catalog["problems"][0]["title"] = "Clear, short problem title"
+    catalog["problems"][0]["prompt"] = "Updated problem statement."
+    catalog["problems"][0]["test_cases"][0]["expected_output"] = "2"
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
     repeated_result = import_catalog(db_session, catalog_path)
     assert repeated_result == {
         "imported": 0,
@@ -142,6 +146,9 @@ def test_new_catalog_archives_previous_catalog_generations(db_session, tmp_path)
         "curriculum_total": 1,
     }
     assert new_problem.state == ProblemState.PUBLISHED
+    assert new_problem.title == "Clear, short problem title"
+    assert new_problem.prompt == "Updated problem statement."
+    assert new_problem.test_cases[0].expected_output == "2"
 
 
 def test_demo_seed_does_not_add_published_problems_after_catalog_load():

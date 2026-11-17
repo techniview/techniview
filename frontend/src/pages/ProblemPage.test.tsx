@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProblemPage from "./ProblemPage";
 import { createSubmission, getSubmissionComplexity } from "../api/submissions";
 import { getProblem, startProblem } from "../api/problems";
+import { ApiRequestError } from "../api/client";
 
 vi.mock("@monaco-editor/react", () => ({
     default: ({
@@ -89,6 +90,11 @@ function renderProblemPage() {
 }
 
 describe("ProblemPage complexity estimate", () => {
+    afterEach(() => {
+        cleanup();
+        vi.unstubAllGlobals();
+    });
+
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(getProblem).mockResolvedValue(problem);
@@ -153,5 +159,62 @@ describe("ProblemPage complexity estimate", () => {
             await screen.findByText("Complexity estimate unavailable."),
         ).toBeTruthy();
         expect(createSubmission).toHaveBeenCalledOnce();
+    });
+
+    it("submits when randomUUID is unavailable in a nonsecure browser context", async () => {
+        vi.stubGlobal("crypto", {
+            getRandomValues: (bytes: Uint8Array) => bytes.fill(7),
+        });
+        vi.mocked(getSubmissionComplexity).mockResolvedValue({
+            status: "disabled",
+            time_complexity: null,
+            space_complexity: null,
+            model: "",
+            prompt_version: "",
+            error_code: null,
+            analyzed_at: null,
+        });
+        renderProblemPage();
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Submit for grading" }),
+        );
+
+        expect(await screen.findByText(/Accepted/)).toBeTruthy();
+        expect(vi.mocked(createSubmission).mock.calls[0]?.[2]).toMatch(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+    });
+
+    it("shows the API reason when a submission is rejected", async () => {
+        vi.mocked(createSubmission).mockRejectedValueOnce(
+            new ApiRequestError(
+                "The submission limit has been reached.",
+                409,
+                "submission_limit_reached",
+            ),
+        );
+        renderProblemPage();
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Submit for grading" }),
+        );
+
+        expect(
+            await screen.findByText("The submission limit has been reached."),
+        ).toBeTruthy();
+    });
+
+    it("lets keyboard users resize the solution pane", async () => {
+        renderProblemPage();
+        const divider = await screen.findByRole("separator", {
+            name: "Resize problem and solution panels",
+        });
+
+        expect(divider.getAttribute("aria-valuenow")).toBe("32");
+        fireEvent.keyDown(divider, { key: "ArrowLeft" });
+        expect(divider.getAttribute("aria-valuenow")).toBe("30");
+        fireEvent.keyDown(divider, { key: "Home" });
+        expect(divider.getAttribute("aria-valuenow")).toBe("28");
     });
 });

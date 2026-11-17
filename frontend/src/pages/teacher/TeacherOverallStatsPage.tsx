@@ -9,6 +9,7 @@ import {
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
 import StatCard from "../../components/StatCard";
+import PerformanceCharts from "../../components/PerformanceCharts";
 import type { AnalyticsMetrics } from "../../types/analytics";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -155,7 +156,6 @@ export default function TeacherOverallStatsPage() {
     return (
         <div className="teacher-overall-stats-page">
             <header className="page-header">
-                <p className="eyebrow">Teacher dashboard</p>
                 <h1>Overall Class Statistics</h1>
                 <p>
                     View class performance for {selectedCourse?.name ?? "your class"}.
@@ -224,7 +224,12 @@ export default function TeacherOverallStatsPage() {
 
             {error && <ErrorState message={error} />}
             {isLoading && <LoadingState message="Loading class statistics..." />}
-            {!isLoading && !error && metrics && <SummaryMetrics metrics={metrics} />}
+            {!isLoading && !error && metrics && (
+                <>
+                    <SummaryMetrics metrics={metrics} />
+                    <PerformanceCharts metrics={metrics} />
+                </>
+            )}
         </div>
     );
 }

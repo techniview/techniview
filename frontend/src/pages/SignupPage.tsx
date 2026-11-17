@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { getJoinPreview, type JoinPreview } from "../api/auth";
 import { joinSignup } from "../api/courses";
-import logo from "../assets/TechniView_Logo_No_Title.png";
+import BrandLogo from "../components/BrandLogo";
 import "./LoginPage.css";
 
 function inviteToken(value: string): string {
@@ -94,13 +94,12 @@ export default function SignupPage() {
         <main className="tv-login tv-minimal">
             <header className="design-picker">
                 <Link className="login-logo" to="/login" aria-label="TechniView home">
-                    <img src={logo} alt="TechniView" />
+                    <BrandLogo />
                 </Link>
             </header>
             <div className="login-stage signup-stage">
                 <section className="login-art" aria-label="TechniView introduction">
                     <div className="art-copy">
-                        <span className="eyebrow">YOUR NEXT CHAPTER</span>
                         <h2>
                             Learn by
                             <br />
@@ -108,15 +107,9 @@ export default function SignupPage() {
                         </h2>
                         <p>Create your student account with a class invitation.</p>
                     </div>
-                    <div className="art-footer">
-                        <span>YOUR WORKSPACE FOR WHAT&apos;S NEXT</span>
-                    </div>
                 </section>
                 <section className="login-form-side" aria-labelledby="signup-heading">
                     <div className="form-wrap">
-                        <div className="form-kicker">
-                            <span className="status-dot" /> STUDENT ACCOUNT
-                        </div>
                         <h1 id="signup-heading">
                             Create your account<span className="title-period">.</span>
                         </h1>
@@ -213,12 +206,9 @@ export default function SignupPage() {
                                 disabled={isSubmitting}
                                 type="submit"
                             >
-                                <span>
-                                    {isSubmitting
-                                        ? "Creating account..."
-                                        : "Create account"}
-                                </span>
-                                <span aria-hidden="true">↗</span>
+                                {isSubmitting
+                                    ? "Creating account..."
+                                    : "Create account"}
                             </button>
                         </form>
                         <p className="auth-switch">
@@ -227,7 +217,6 @@ export default function SignupPage() {
                     </div>
                     <footer className="login-footer">
                         <span>© 2026 TechniView</span>
-                        <span>Built for curious minds.</span>
                     </footer>
                 </section>
             </div>
