@@ -38,8 +38,8 @@ Slides 11–13 are backup only and have no planned speaking time. The planned 30
 
 ## Rehearsal log
 
-| Date | Attendees | Total time | Derek's section(s) | Ryan's section(s) | Jason's section(s) | Changes agreed |
-| --- | --- | --- | --- | --- | --- | --- |
-| To schedule | Full group | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Record after a timed run. |
+| Date | Attendees | Session length | Approx. presentation run | Derek | Ryan | Jason | Changes agreed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| November 16, 2026 | Derek, Ryan, Jason | 30 minutes | 5:35 | ~2:00 | ~1:45 | ~1:50 | No changes. |
 
-Before presenting, add the full-group rehearsal date and approximate times here, then check the speaking split against the plan.
+The session took 30 minutes. The approximate speaking times add up to a 5:35 presentation run, which is longer than the 5:00 target in the slide plan above.
