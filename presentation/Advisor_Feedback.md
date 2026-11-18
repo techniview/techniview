@@ -27,10 +27,3 @@ Overall, we got good feedback on the introduction, the order of the slides, and 
 ## Summary of changes
 
 We changed the abstract so it describes a pilot with voluntary enrollment. We also spelled out "Continuous Integration (CI)," made the privacy wording on slide 5 clearer, and explained the runner and other technical terms during the talk. We used the progress, design, and demo slides to show what we've built and why we made those choices. We checked that the color was consistent and spread the content more evenly, especially on slides 4 and 9. F-05 was the one we discussed with our advisor and left as-is; we didn't add screenshots or test visuals to the deck.
-
-## Open items
-
-| What we still need to do | Expected close date |
-| --- | --- |
-| Add the duration of the advisor feedback session. | 2026-11-18 |
-| Double-check our pilot, consent, and IRB wording before we present it as fact. | 2026-11-18 |
