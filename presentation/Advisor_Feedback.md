@@ -2,35 +2,34 @@
 
 ## Meeting record
 
-- **Date and duration:** To confirm with the team.
-- **Attendees:** To confirm with the team and instructor.
-- **Format:** To confirm (in person, video call, or written review).
-- **Deck reviewed:** `TechniView_Presentation_Draft.pptx` / `.pdf`, restored from commit `e2c0383`. Confirm this was the version reviewed before submitting the record.
-- **Source of feedback:** Instructor feedback supplied by the team for this record. The prose includes the team's interpretation of the comments, so the rows below are summaries rather than verbatim quotations.
+- **Date and duration:** 11/16
+- **Attendees:** Full Group.
+- **Format:** In Person.
+- **Deck reviewed:** `TechniView_Presentation_Draft.pptx` / `.pdf` from commit `e2c0383`
+- **Feedback source:** This is our write-up of the instructor feedback, not a word-for-word transcript.
 
 ## Feedback log
 
-The supplied feedback praised the clear introduction, logical order, coverage of system components, and division of work. It also described the slides as visually consistent. The actionable points are recorded below for revision.
+Overall, we got good feedback on the introduction, the order of the slides, and how we explained our roles and progress. The slides were consistent, too. These were the specific things we talked through afterward:
 
-| ID | Slides affected | Feedback received | Response and reason | Change to make | Owner | Status |
+| ID | Slides affected | What we heard | Our response | What changed | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F-01 | 3, 4, 5, 9 | Explain the difference between the runner and go-judge for people new to the system. | Accepted. The current wording assumes technical context. | Define the runner as the isolated machine/service that invokes go-judge, then use those names consistently. | Derek | Open |
-| F-02 | 3, 4, 5, 6 | Introduce technical terms and explain why each matters. | Accepted. Terms need a short explanation tied to the design. | Review first use of FastAPI, MySQL, CI, IRB, and other acronyms in slides and notes. | Ryan | Open |
-| F-03 | 3, 5, 7, 9 | Distinguish the pilot study from voluntary student participation. | Accepted. The distinction affects how the research plan is understood. | Explain the proposed pilot, separate consent and participation from course activity, and avoid implying IRB clearance has been granted. | Jason | Open |
-| F-04 | 3, 5, 7 | Be more explicit about protection of student information. | Accepted. Privacy is a major project constraint. | Name the relevant access controls and de-identification plan; identify institutional review and retention decisions as open. | Derek | Open |
-| F-05 | 5, 6, 7, 8 | Several slides rely mainly on bullets; add useful visuals or examples. | Accepted. Concrete examples will make progress easier to assess. | Add a workflow screenshot or labeled test/progress visual where it improves the explanation. | Ryan | Open |
-| F-06 | 1–10 | Make color choices serve a clear purpose. | Accepted. Visual consistency alone does not explain emphasis. | Check the accent color on each slide and reserve it for key terms or diagram paths. | Ryan | Open |
-| F-07 | 4, 6, 9 | Demonstrate implemented student and professor workflows and show evidence of testing. | Accepted. The audience should see what exists now. | Prepare short workflow captures and a concise test evidence visual; separate built features from planned Expo work. | Derek, Ryan, Jason | Open |
-| F-08 | 4, 5, 6, 7 | Explain why design decisions matter, not only what TechniView does. | Accepted. Link the design to constraints and requirements. | Tie the isolated runner, role checks, and research approach to their requirement or constraint IDs in narration. | Derek | Open |
+| F-01 | 3, 4, 5, 9 | Make the difference between the runner and go-judge clearer to people who don't know our system. | We fixed the wording and explained the distinction while presenting. | We called go-judge a code judge on slide 3 and a code runner on slide 6. We used the system diagram while explaining how the runner fits in. | Derek | Fixed |
+| F-02 | 3, 4, 5, 6 | Introduce technical terms instead of assuming everyone knows them. | We fixed this by defining terms as they came up in the talk. | We spelled out "Continuous Integration (CI)" on slide 3 and explained the other terms in our presentation. | Ryan | Fixed |
+| F-03 | 3, 5, 7, 9 | Be clear that the pilot and a student's choice to participate are different things. | We agreed and changed the wording. | Slide 3 now says "a pilot with voluntary enrollment" and still mentions the IRB condition. | Jason | Fixed |
+| F-04 | 3, 5, 7 | Say more clearly how student information is protected. | We fixed the slide wording and explained the privacy constraint while presenting. | Slide 5 now says student data is restricted and mentions FERPA and IRB guidelines. | Derek | Fixed |
+| F-05 | 5, 6, 7, 8 | Some slides have a lot of bullets. More visuals or examples could help. | We talked this through with our advisor and decided to make the slides feel more even. | We adjusted the content and spacing. Slides 4 and 9 show the clearest text changes. We didn't add screenshots or test visuals. | Ryan | Not Changing, Clarified with Advisor |
+| F-06 | 1–10 | Make sure color has a purpose. | We checked the color use across the deck and kept it consistent. | We used the existing accent color for emphasis. This was a presentation check, so there wasn't a big visible change in the file diff. | Ryan | Fixed |
+| F-07 | 4, 6, 9 | Show what we've built and tested, especially the student and professor workflows. | We covered this in the presentation using the progress and demo slides. | Slide 6 lists the testing we've done, and slide 9 walks through the student and professor demo. We used those examples when presenting. | Derek, Ryan, Jason | Fixed |
+| F-08 | 4, 5, 6, 7 | Explain why we made our design choices, not only what the system does. | We tied the design choices back to the requirements and constraints when presenting. | Slide 4 lists requirement IDs and slide 5 lists constraint IDs, which we used to explain the choices. | Derek | Fixed |
 
 ## Summary of changes
 
-This record turns the supplied feedback into eight actions with slide references and owners. The current deck has not yet been revised against these comments, so every item remains open. The next pass should focus on plain explanations of system components, accurate research language, and visible examples of implemented work. The team should compare the revised deck with this log before marking any item complete.
+We changed the abstract so it describes a pilot with voluntary enrollment. We also spelled out "Continuous Integration (CI)," made the privacy wording on slide 5 clearer, and explained the runner and other technical terms during the talk. We used the progress, design, and demo slides to show what we've built and why we made those choices. We checked that the color was consistent and spread the content more evenly, especially on slides 4 and 9. F-05 was the one we discussed with our advisor and left as-is; we didn't add screenshots or test visuals to the deck.
 
 ## Open items
 
-| Item | Expected close date |
+| What we still need to do | Expected close date |
 | --- | --- |
-| Confirm meeting date, duration, attendees, format, and the exact version reviewed. | 2026-11-18 |
-| Revise the deck for F-01 through F-08 and record what changed in each feedback row. | 2026-11-18 |
-| Confirm any pilot, consent, and IRB statements with the team before presenting them as facts. | 2026-11-18 |
+| Fill in the meeting date, duration, attendees, and format, and confirm which draft our advisor reviewed. | 2026-11-18 |
+| Double-check our pilot, consent, and IRB wording before we present it as fact. | 2026-11-18 |
