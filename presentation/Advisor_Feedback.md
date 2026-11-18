@@ -2,7 +2,8 @@
 
 ## Meeting record
 
-- **Date and duration:** 11/16
+- **Date:** November 16, 2026.
+- **Duration:** 60 min.
 - **Attendees:** Full Group.
 - **Format:** In Person.
 - **Deck reviewed:** `TechniView_Presentation_Draft.pptx` / `.pdf` from commit `e2c0383`
@@ -31,5 +32,5 @@ We changed the abstract so it describes a pilot with voluntary enrollment. We al
 
 | What we still need to do | Expected close date |
 | --- | --- |
-| Fill in the meeting date, duration, attendees, and format, and confirm which draft our advisor reviewed. | 2026-11-18 |
+| Add the duration of the advisor feedback session. | 2026-11-18 |
 | Double-check our pilot, consent, and IRB wording before we present it as fact. | 2026-11-18 |
