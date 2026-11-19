@@ -91,7 +91,7 @@ export default function SignupPage() {
     }
 
     return (
-        <main className="tv-login tv-minimal">
+        <main className="tv-login tv-minimal login-main">
             <header className="design-picker">
                 <Link className="login-logo" to="/login" aria-label="TechniView home">
                     <BrandLogo />
@@ -99,6 +99,15 @@ export default function SignupPage() {
             </header>
             <div className="login-stage signup-stage">
                 <section className="login-art" aria-label="TechniView introduction">
+                    <div className="login-art-top">
+                        <Link
+                            className="login-logo"
+                            to="/login"
+                            aria-label="TechniView home"
+                        >
+                            <BrandLogo />
+                        </Link>
+                    </div>
                     <div className="art-copy">
                         <h2>
                             Learn by

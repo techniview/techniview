@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
     }
 
     return (
-        <main className="tv-login tv-minimal">
+        <main className="tv-login tv-minimal login-main">
             <header className="design-picker">
                 <Link className="login-logo" to="/login" aria-label="TechniView home">
                     <BrandLogo />
@@ -34,6 +34,15 @@ export default function ForgotPasswordPage() {
             </header>
             <div className="login-stage">
                 <section className="login-art" aria-label="TechniView introduction">
+                    <div className="login-art-top">
+                        <Link
+                            className="login-logo"
+                            to="/login"
+                            aria-label="TechniView home"
+                        >
+                            <BrandLogo />
+                        </Link>
+                    </div>
                     <div className="art-copy">
                         <h2>
                             Get back
