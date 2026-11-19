@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { requestPasswordRecovery } from "../api/auth";
+import BrandLogo from "../components/BrandLogo";
+import "./LoginPage.css";
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("");
@@ -24,40 +26,82 @@ export default function ForgotPasswordPage() {
     }
 
     return (
-        <main className="login-page">
-            <section className="login-card" aria-labelledby="recovery-heading">
-                <h1 id="recovery-heading">Reset your password</h1>
-                <p>
-                    Enter your account email. We will send a reset link if it is
-                    eligible.
-                </p>
-                <form onSubmit={(event) => void handleSubmit(event)}>
-                    <div className="form-field">
-                        <label htmlFor="recovery-email">Email</label>
-                        <input
-                            autoComplete="email"
-                            disabled={isSubmitting}
-                            id="recovery-email"
-                            onChange={(event) => setEmail(event.target.value)}
-                            required
-                            type="email"
-                            value={email}
-                        />
+        <main className="tv-login tv-minimal login-main">
+            <header className="design-picker">
+                <Link className="login-logo" to="/login" aria-label="TechniView home">
+                    <BrandLogo />
+                </Link>
+            </header>
+            <div className="login-stage">
+                <section className="login-art" aria-label="TechniView introduction">
+                    <div className="login-art-top">
+                        <Link
+                            className="login-logo"
+                            to="/login"
+                            aria-label="TechniView home"
+                        >
+                            <BrandLogo />
+                        </Link>
                     </div>
-                    {error && (
-                        <p className="form-error" role="alert">
-                            {error}
+                    <div className="art-copy">
+                        <h2>
+                            Get back
+                            <br />
+                            to your <em>work.</em>
+                        </h2>
+                        <p>We&apos;ll help you get back into your learning space.</p>
+                    </div>
+                </section>
+                <section className="login-form-side" aria-labelledby="recovery-heading">
+                    <div className="form-wrap">
+                        <h1 id="recovery-heading">
+                            Reset your password<span className="title-period">.</span>
+                        </h1>
+                        <p className="form-intro">
+                            Enter your account email. We&apos;ll send a reset link if
+                            the account is eligible.
                         </p>
-                    )}
-                    {message && <p role="status">{message}</p>}
-                    <button disabled={isSubmitting} type="submit">
-                        {isSubmitting ? "Sending..." : "Send reset link"}
-                    </button>
-                </form>
-                <p>
-                    <Link to="/login">Back to sign in</Link>
-                </p>
-            </section>
+                        <form onSubmit={(event) => void handleSubmit(event)}>
+                            <div className="tv-field">
+                                <label htmlFor="recovery-email">Email address</label>
+                                <input
+                                    autoComplete="email"
+                                    disabled={isSubmitting}
+                                    id="recovery-email"
+                                    onChange={(event) => setEmail(event.target.value)}
+                                    placeholder="you@example.edu"
+                                    required
+                                    type="email"
+                                    value={email}
+                                />
+                            </div>
+                            {error && (
+                                <p className="tv-error" role="alert">
+                                    {error}
+                                </p>
+                            )}
+                            {message && (
+                                <p className="signup-class-note" role="status">
+                                    {message}
+                                </p>
+                            )}
+                            <button
+                                className="submit-login"
+                                disabled={isSubmitting}
+                                type="submit"
+                            >
+                                {isSubmitting ? "Sending..." : "Send reset link"}
+                            </button>
+                        </form>
+                        <p className="auth-switch">
+                            <Link to="/login">Back to sign in</Link>
+                        </p>
+                    </div>
+                    <footer className="login-footer">
+                        <span>© 2026 TechniView</span>
+                    </footer>
+                </section>
+            </div>
         </main>
     );
 }

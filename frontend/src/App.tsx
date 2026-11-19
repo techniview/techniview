@@ -4,6 +4,7 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import LoadingState from "./components/LoadingState";
 import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import JoinPage from "./pages/JoinPage";
 import ProblemPage from "./pages/ProblemPage";
@@ -17,6 +18,7 @@ import StudentCurriculumPage from "./pages/student/StudentCurriculumPage";
 import TeacherClassPage from "./pages/teacher/TeacherClassPage";
 import TeacherProblemPage from "./pages/teacher/TeacherProblemPage";
 import TeacherOverallStatsPage from "./pages/teacher/TeacherOverallStatsPage";
+import TeacherClassesPage from "./pages/teacher/TeacherClassesPage";
 import { useAuth } from "./auth/useAuth";
 
 function RoleHomeRedirect() {
@@ -33,7 +35,7 @@ function RoleHomeRedirect() {
     return (
         <Navigate
             replace
-            to={user.role === "professor" ? "/teacher/class" : "/student/statistics"}
+            to={user.role === "professor" ? "/teacher/classes" : "/student/courses"}
         />
     );
 }
@@ -44,6 +46,7 @@ export default function App() {
             <AuthProvider>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/signup" element={<SignupPage />} />
                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                     <Route path="/reset-password" element={<ResetPasswordPage />} />
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -77,6 +80,14 @@ export default function App() {
                                 element={<ProblemPage />}
                             />
 
+                            <Route
+                                path="/teacher/classes"
+                                element={<TeacherClassesPage />}
+                            />
+                            <Route
+                                path="/teacher/classes/:courseId"
+                                element={<TeacherClassPage />}
+                            />
                             <Route
                                 path="/teacher/class"
                                 element={<TeacherClassPage />}

@@ -4,7 +4,7 @@ import {
     getAllClassAnalytics,
     getAllClassMembers,
     getStudentProblemAnalytics,
-    getActiveStaffCourse,
+    getStaffCourses,
     type ClassMember,
     type Course,
 } from "../../api/analytics";
@@ -39,6 +39,8 @@ function statusFor(metrics: AnalyticsMetrics | null): string {
 }
 
 export default function TeacherProblemPage() {
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [selectedCourseId, setSelectedCourseId] = useState("");
     const [course, setCourse] = useState<Course | null>(null);
     const [students, setStudents] = useState<ClassMember[]>([]);
     const [problems, setProblems] = useState<ProblemAnalytics[]>([]);
@@ -51,46 +53,74 @@ export default function TeacherProblemPage() {
     useEffect(() => {
         let isCurrent = true;
 
-        async function loadPage() {
+        void getStaffCourses()
+            .then((staffCourses) => {
+                if (!isCurrent) return;
+                if (staffCourses.length === 0) {
+                    throw new Error("No active classes found.");
+                }
+                const firstCourse = staffCourses[0];
+                if (!firstCourse) {
+                    throw new Error("No active classes found.");
+                }
+                setCourses(staffCourses);
+                setSelectedCourseId(String(firstCourse.id));
+            })
+            .catch(() => {
+                if (isCurrent) {
+                    setError("We could not load your classes.");
+                }
+            })
+            .finally(() => {
+                if (isCurrent) setIsLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!selectedCourseId) return;
+        let isCurrent = true;
+        setIsLoading(true);
+        setError(null);
+        setSelectedStudentId("");
+
+        async function loadCourseProgress() {
             try {
-                const teacherCourse = await getActiveStaffCourse();
-                if (!teacherCourse) {
-                    throw new Error("No course found.");
-                }
-
-                const [members, problems] = await Promise.all([
-                    getAllClassMembers(teacherCourse.id),
-                    getAllClassAnalytics(teacherCourse.id),
+                const selectedCourse = courses.find(
+                    (item) => String(item.id) === selectedCourseId,
+                );
+                if (!selectedCourse) throw new Error("Class unavailable.");
+                const [members, courseProblems] = await Promise.all([
+                    getAllClassMembers(selectedCourse.id),
+                    getAllClassAnalytics(selectedCourse.id),
                 ]);
-                if (!isCurrent) {
-                    return;
-                }
-
+                if (!isCurrent) return;
                 const classStudents = members.filter(
                     (member) => member.role === "student",
                 );
-                setCourse(teacherCourse);
+                setCourse(selectedCourse);
                 setStudents(classStudents);
-                setProblems(problems);
-                if (classStudents[0]) {
-                    setSelectedStudentId(String(classStudents[0].user_id));
-                }
+                setProblems(courseProblems);
+                setSelectedStudentId(
+                    classStudents[0] ? String(classStudents[0].user_id) : "",
+                );
             } catch {
                 if (isCurrent) {
                     setError("We could not load the class problem progress.");
                 }
             } finally {
-                if (isCurrent) {
-                    setIsLoading(false);
-                }
+                if (isCurrent) setIsLoading(false);
             }
         }
 
-        void loadPage();
+        void loadCourseProgress();
         return () => {
             isCurrent = false;
         };
-    }, []);
+    }, [courses, selectedCourseId]);
 
     useEffect(() => {
         if (!course || !selectedStudentId) {
@@ -154,7 +184,6 @@ export default function TeacherProblemPage() {
     return (
         <div className="teacher-problem-page">
             <header className="page-header">
-                <p className="eyebrow">Teacher dashboard</p>
                 <h1>Student Problem Progress</h1>
                 <p>
                     Review one student&apos;s progress across every problem in{" "}
@@ -164,26 +193,46 @@ export default function TeacherProblemPage() {
 
             <section aria-labelledby="student-heading" className="filter-panel">
                 <div>
-                    <h2 id="student-heading">Select a student</h2>
-                    <p>Choose a student to view their problem history.</p>
+                    <h2 id="student-heading">Choose a class and student</h2>
+                    <p>Review a student&apos;s progress across this class.</p>
                 </div>
-                <label>
-                    Student
-                    <select
-                        aria-label="Student"
-                        onChange={(event) => setSelectedStudentId(event.target.value)}
-                        value={selectedStudentId}
-                    >
-                        {students.length === 0 && (
-                            <option value="">No students found</option>
-                        )}
-                        {students.map((student) => (
-                            <option key={student.user_id} value={student.user_id}>
-                                {student.name}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <div className="filter-controls">
+                    <label>
+                        Class
+                        <select
+                            aria-label="Class"
+                            onChange={(event) =>
+                                setSelectedCourseId(event.target.value)
+                            }
+                            value={selectedCourseId}
+                        >
+                            {courses.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                    {item.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label>
+                        Student
+                        <select
+                            aria-label="Student"
+                            onChange={(event) =>
+                                setSelectedStudentId(event.target.value)
+                            }
+                            value={selectedStudentId}
+                        >
+                            {students.length === 0 && (
+                                <option value="">No students found</option>
+                            )}
+                            {students.map((student) => (
+                                <option key={student.user_id} value={student.user_id}>
+                                    {student.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
             </section>
 
             {selectedStudent && (

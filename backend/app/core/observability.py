@@ -1,15 +1,48 @@
 """Small Prometheus text registry for app-level operational signals."""
 
-import fcntl
 import json
 import logging
 import os
 import queue
 import sqlite3
 import sys
+import tempfile
 import threading
+import time
 from collections import defaultdict
 from contextlib import contextmanager
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
+
+@contextmanager
+def _exclusive_file_lock(file) -> None:
+    if os.name == "nt":
+        file.seek(0, os.SEEK_END)
+        if file.tell() == 0:
+            file.write(b"\0")
+            file.flush()
+        file.seek(0)
+        while True:
+            try:
+                msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            file.seek(0)
+            msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(file, fcntl.LOCK_UN)
 
 
 def configure_logging() -> None:
@@ -46,24 +79,24 @@ class HttpMetrics:
     def _initialize_storage(self) -> None:
         # SQLite cannot switch journal modes while another process initializes it.
         with open(f"{self.path}.init.lock", "a+b") as startup_lock:
-            fcntl.flock(startup_lock, fcntl.LOCK_EX)
-            with self._connect() as connection:
-                connection.execute("PRAGMA journal_mode = WAL")
-                bucket_columns = ", ".join(
-                    f"bucket_{index} INTEGER NOT NULL DEFAULT 0"
-                    for index in range(len(self.duration_buckets))
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS http_metrics ("
-                    "method TEXT NOT NULL, route TEXT NOT NULL, "
-                    "status INTEGER NOT NULL, "
-                    "request_count INTEGER NOT NULL, duration_sum REAL NOT NULL, "
-                    f"{bucket_columns}, PRIMARY KEY (method, route, status))"
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS http_metrics_state ("
-                    "name TEXT PRIMARY KEY, value INTEGER NOT NULL)"
-                )
+            with _exclusive_file_lock(startup_lock):
+                with self._connect() as connection:
+                    connection.execute("PRAGMA journal_mode = WAL")
+                    bucket_columns = ", ".join(
+                        f"bucket_{index} INTEGER NOT NULL DEFAULT 0"
+                        for index in range(len(self.duration_buckets))
+                    )
+                    connection.execute(
+                        "CREATE TABLE IF NOT EXISTS http_metrics ("
+                        "method TEXT NOT NULL, route TEXT NOT NULL, "
+                        "status INTEGER NOT NULL, "
+                        "request_count INTEGER NOT NULL, duration_sum REAL NOT NULL, "
+                        f"{bucket_columns}, PRIMARY KEY (method, route, status))"
+                    )
+                    connection.execute(
+                        "CREATE TABLE IF NOT EXISTS http_metrics_state ("
+                        "name TEXT PRIMARY KEY, value INTEGER NOT NULL)"
+                    )
 
     @contextmanager
     def _connect(self):
@@ -265,7 +298,8 @@ def _labels(**values: str) -> str:
 
 http_metrics = HttpMetrics(
     os.environ.get(
-        "TECHNIVIEW_HTTP_METRICS_PATH", "/tmp/techniview-http-metrics.sqlite3"
+        "TECHNIVIEW_HTTP_METRICS_PATH",
+        os.path.join(tempfile.gettempdir(), "techniview-http-metrics.sqlite3"),
     )
 )
 

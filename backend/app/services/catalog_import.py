@@ -189,11 +189,28 @@ def import_catalog(db: Session, path: Path) -> dict[str, int]:
             problem = existing
             existing_count += 1
             problem.state = ProblemState.PUBLISHED
+            problem.title = item["title"]
+            problem.prompt = item["prompt"]
             problem.difficulty = Difficulty(item["difficulty"])
+            problem.execution_mode = ExecutionMode(item["execution_mode"])
+            problem.function_name = item["function_name"]
+            problem.starter_code = item["starter_code"]
+            problem.canonical_solution = item["canonical_solution"]
             problem.source_category = item["source_category"]
             problem.attribution = catalog["attribution"]
             problem.license = catalog["license"]
             problem.tags = [_tag_for(db, tag) for tag in item["tags"]]
+            existing_cases = {case.case_order: case for case in problem.test_cases}
+            for case_order, test_case in enumerate(item["test_cases"], start=1):
+                case = existing_cases.pop(case_order, None)
+                if case is None:
+                    case = ProblemTestCase(case_order=case_order)
+                    problem.test_cases.append(case)
+                case.visibility = TestVisibility(test_case["visibility"])
+                case.input = test_case["input"]
+                case.expected_output = test_case["expected_output"]
+            for case in existing_cases.values():
+                problem.test_cases.remove(case)
         else:
             tags = [_tag_for(db, tag) for tag in item["tags"]]
             problem = Problem(

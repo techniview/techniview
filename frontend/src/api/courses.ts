@@ -83,7 +83,7 @@ export function joinSignup(
     token: string,
     body: { name: string; email: string; password: string; password_confirm: string },
 ) {
-    return apiRequest<Message>(`/api/join/${encodeURIComponent(token)}/signup`, {
+    return apiRequest<User>(`/api/join/${encodeURIComponent(token)}/signup`, {
         method: "POST",
         body: JSON.stringify(body),
     });

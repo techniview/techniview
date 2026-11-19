@@ -116,9 +116,12 @@ class ProblemSummaryResponse(BaseModel):
 
 class ProblemAssignmentContextResponse(BaseModel):
     assignment_item_id: int
+    assignment_id: int
+    item_order: int
     assignment_title: str
     course_id: int
     course_name: str
+    due_at: datetime | None
 
 
 class ProblemDetailResponse(ProblemSummaryResponse):

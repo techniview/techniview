@@ -7,9 +7,11 @@ from pathlib import Path
 def workload_overlay(
     application_backend: Path, test_backend: Path, source_commit: str
 ) -> str:
-    dockerfile = json.dumps(str(test_backend / "integration/Dockerfile"))
+    application_path = application_backend.as_posix()
+    test_path = test_backend.as_posix()
+    dockerfile = json.dumps(f"{test_path}/integration/Dockerfile")
     application_build = (
-        f"build:\n      context: {json.dumps(str(application_backend))}\n"
+        f"build:\n      context: {json.dumps(application_path)}\n"
         f"      dockerfile: {dockerfile}\n"
         "      args:\n"
         f"        SOURCE_COMMIT: {json.dumps(source_commit)}\n"
@@ -21,7 +23,7 @@ def workload_overlay(
         "  app_worker:\n"
         f"    {application_build}"
         "  tests:\n"
-        f"    build:\n      context: {json.dumps(str(test_backend))}\n"
+        f"    build:\n      context: {json.dumps(test_path)}\n"
     )
 
 

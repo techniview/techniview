@@ -70,6 +70,21 @@ async def test_problem_catalog_redacts_hidden_tests_and_start_is_idempotent(
     assert count == 1
 
 
+async def test_problem_list_pages_keep_the_total_and_order(student_client):
+    first = await student_client.get("/api/problems?limit=1&offset=0")
+    second = await student_client.get("/api/problems?limit=1&offset=1")
+    assert first.status_code == second.status_code == 200
+    assert first.json()["total"] == second.json()["total"] == 2
+    assert [first.json()["items"][0]["title"], second.json()["items"][0]["title"]] == [
+        "Sum a List",
+        "Count Evens",
+    ]
+    searched = await student_client.get("/api/problems?search=count&difficulty=medium")
+    assert [item["title"] for item in searched.json()["items"]] == ["Count Evens"]
+    alphabetical = await student_client.get("/api/problems?sort=title&limit=1")
+    assert alphabetical.json()["items"][0]["title"] == "Count Evens"
+
+
 async def test_curriculum_groups_by_technique_and_recommends_within_pools(
     student_client,
 ):

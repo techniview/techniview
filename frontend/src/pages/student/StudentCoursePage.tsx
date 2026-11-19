@@ -19,6 +19,14 @@ async function availableAssignments(courseId: number): Promise<Assignment[]> {
     }
 }
 
+function formatAssignmentDate(value: string) {
+    const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}Z`;
+    return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(new Date(timestamp));
+}
+
 export default function StudentCoursePage() {
     const { courseId } = useParams();
     const [course, setCourse] = useState<Course | null>(null);
@@ -78,7 +86,6 @@ export default function StudentCoursePage() {
     return (
         <div className="student-course-page">
             <header className="page-header">
-                <p className="eyebrow">Your class</p>
                 <h1>{course.name}</h1>
                 {course.description && <p>{course.description}</p>}
             </header>
@@ -92,14 +99,28 @@ export default function StudentCoursePage() {
                         <p>No assignments are available yet.</p>
                     ) : (
                         assignments.map((assignment) => (
-                            <section key={assignment.id}>
+                            <section className="student-assignment" key={assignment.id}>
+                                <p className="assignment-number">
+                                    Assignment #{assignment.id}
+                                </p>
                                 <h3>{assignment.title}</h3>
                                 {assignment.description && (
                                     <p>{assignment.description}</p>
                                 )}
+                                <p className="assignment-meta">
+                                    <span>{assignment.items.length} problems</span>
+                                    <span>
+                                        {assignment.due_at
+                                            ? `Due ${formatAssignmentDate(assignment.due_at)} (your time)`
+                                            : "No due date"}
+                                    </span>
+                                </p>
                                 <ul>
                                     {assignment.items.map((item) => (
                                         <li key={item.id}>
+                                            <span className="assignment-item-number">
+                                                {item.item_order}.
+                                            </span>
                                             <Link
                                                 to={`/student/problems/${item.problem.id}?assignment_item_id=${item.id}`}
                                             >
@@ -113,10 +134,6 @@ export default function StudentCoursePage() {
                     )}
                 </section>
             )}
-
-            <p>
-                <Link to="/student/problems">Browse available problems</Link>
-            </p>
         </div>
     );
 }

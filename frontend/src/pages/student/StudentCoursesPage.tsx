@@ -4,6 +4,7 @@ import type { Course } from "../../api/analytics";
 import { listCourses } from "../../api/courses";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
+import RecommendationsSection from "./RecommendationsSection";
 
 async function studentCourses(): Promise<Course[]> {
     const courses: Course[] = [];
@@ -58,7 +59,6 @@ export default function StudentCoursesPage() {
     return (
         <div className="student-courses-page">
             <header className="page-header">
-                <p className="eyebrow">Student dashboard</p>
                 <h1>My Classes</h1>
             </header>
             {courses.length === 0 ? (
@@ -79,6 +79,7 @@ export default function StudentCoursesPage() {
                     ))}
                 </ul>
             )}
+            <RecommendationsSection />
         </div>
     );
 }

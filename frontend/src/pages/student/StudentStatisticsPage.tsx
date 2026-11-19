@@ -6,7 +6,7 @@ import {
 } from "../../api/analytics";
 import ErrorState from "../../components/ErrorState";
 import LoadingState from "../../components/LoadingState";
-import StatCard from "../../components/StatCard";
+import PerformanceCharts from "../../components/PerformanceCharts";
 import type { AnalyticsMetrics } from "../../types/analytics";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -28,20 +28,33 @@ function formatAverage(value: number | null): string {
 }
 
 function StudentMetrics({ metrics }: { metrics: AnalyticsMetrics }) {
+    const completion =
+        metrics.completion_rate === null
+            ? "--"
+            : `${Math.round(metrics.completion_rate * 100)}%`;
     return (
-        <section aria-labelledby="metrics-heading">
-            <h2 id="metrics-heading">Your performance</h2>
-            <div className="stat-card-grid">
-                <StatCard
-                    label="Average time to complete"
-                    value={formatMinutes(metrics.avg_completion_seconds)}
-                />
-                <StatCard
-                    label="Average retries used"
-                    value={formatAverage(metrics.avg_retries_per_student)}
-                />
+        <dl className="statistics-summary" aria-label="Your performance">
+            <div>
+                <dt>Completed</dt>
+                <dd>{metrics.completed_count}</dd>
+                <span>of {metrics.assigned_count} assigned</span>
             </div>
-        </section>
+            <div>
+                <dt>Completion rate</dt>
+                <dd>{completion}</dd>
+                <span>across this view</span>
+            </div>
+            <div>
+                <dt>Average time</dt>
+                <dd>{formatMinutes(metrics.avg_completion_seconds)}</dd>
+                <span>to complete a problem</span>
+            </div>
+            <div>
+                <dt>Average retries</dt>
+                <dd>{formatAverage(metrics.avg_retries_per_student)}</dd>
+                <span>per problem</span>
+            </div>
+        </dl>
     );
 }
 
@@ -109,16 +122,11 @@ export default function StudentStatisticsPage() {
     return (
         <div className="student-statistics-page">
             <header className="page-header">
-                <p className="eyebrow">Student dashboard</p>
                 <h1>My Statistics</h1>
                 <p>Track how you are progressing across your assigned problems.</p>
             </header>
 
-            <section aria-labelledby="filters-heading" className="filter-panel">
-                <div>
-                    <h2 id="filters-heading">Filter your results</h2>
-                    <p>Choose either filter or combine both.</p>
-                </div>
+            <section aria-label="Filter statistics" className="filter-panel">
                 <div className="filter-controls">
                     <label>
                         Difficulty
@@ -160,7 +168,12 @@ export default function StudentStatisticsPage() {
 
             {error && <ErrorState message={error} />}
             {isLoading && <LoadingState message="Loading your statistics..." />}
-            {!isLoading && !error && metrics && <StudentMetrics metrics={metrics} />}
+            {!isLoading && !error && metrics && (
+                <>
+                    <StudentMetrics metrics={metrics} />
+                    <PerformanceCharts metrics={metrics} />
+                </>
+            )}
         </div>
     );
 }
