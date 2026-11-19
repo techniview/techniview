@@ -129,8 +129,11 @@ down:
 	docker compose down
 
 clean:
-	find backend -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
-	find backend -name "*.pyc" -delete 2>/dev/null; \
-	echo "cleaned"
+	@set -e; \
+	find backend scripts -type d -name "__pycache__" -prune -writable -exec rm -rf {} +; \
+	find backend scripts -type f -name "*.pyc" -writable -delete; \
+	rm -rf __pycache__ .pytest_cache .ruff_cache; \
+	rm -f .coverage; \
+	echo "cleaned writable generated files"
 
 .DEFAULT_GOAL := install

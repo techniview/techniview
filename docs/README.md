@@ -8,6 +8,8 @@
   [runner decisions](runner-decision.md) cover operations.
 - [Backend reporting](backend-reporting.md) describes analytics calculations.
 - [Pilot consent form](TECHNIVIEW_CONSENT_FORM.md) has a printable PDF copy.
+- [IRB exempt determination request](TECHNIVIEW_EXEMPT_DETERMINATION_REQUEST.pdf)
+  documents the pilot protocol.
 - The edited [presentation](../presentation/TechniView_Presentation.pptx) has a
   matching [PDF](../presentation/TechniView_Presentation.pdf).
 
