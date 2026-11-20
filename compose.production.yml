@@ -48,6 +48,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment: &application_environment
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
@@ -159,6 +161,8 @@ services:
   complexity_worker:
     logging: *default-logging
     image: techniview-backend:gpu
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306

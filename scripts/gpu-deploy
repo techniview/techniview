@@ -33,9 +33,6 @@ init_env() {
     grafana_password=$(openssl rand -hex 32)
     sed -i "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=$grafana_password|" "$env_file"
   fi
-  if grep -q '^PUBLIC_HOST=techniview.example.edu$' "$env_file"; then
-    sed -i 's/^PUBLIC_HOST=.*/PUBLIC_HOST=cs-gpu-00.digitfut.uc.edu/' "$env_file"
-  fi
 }
 
 prepare() {
@@ -69,6 +66,17 @@ check_local_route() {
   fi
 }
 
+check_ollama() {
+  local ollama_url
+  ollama_url=$("${compose[@]}" exec -T complexity_worker printenv BIG_O_OLLAMA_URL)
+  if [[ -n $ollama_url ]]; then
+    "${compose[@]}" exec -T complexity_worker python -c \
+      'import os, urllib.request; url = os.environ["BIG_O_OLLAMA_URL"].rstrip("/") + "/api/tags"; print("Ollama HTTP:", urllib.request.urlopen(url, timeout=3).status)'
+  else
+    echo 'AI complexity estimates disabled (BIG_O_OLLAMA_URL is empty).'
+  fi
+}
+
 case $command in
   init)
     init_env
@@ -80,6 +88,7 @@ case $command in
     "${compose[@]}" config -q
     "${compose[@]}" up -d --build --wait
     check_local_route
+    check_ollama
     "${compose[@]}" exec -T backend python -m app.seed
     echo 'GPU deployment is ready. Demo accounts: teacher@techniview.local / teacher-demo; student@techniview.local / student-demo.'
     ;;
@@ -88,6 +97,7 @@ case $command in
     docker info >/dev/null
     "${compose[@]}" config -q
     check_local_route
+    check_ollama
     ;;
   deploy)
     [[ -f $env_file ]] || { echo "Missing $env_file; run init." >&2; exit 1; }
@@ -95,6 +105,7 @@ case $command in
     "${compose[@]}" config -q
     "${compose[@]}" up -d --build --wait
     check_local_route
+    check_ollama
     ;;
   status) "${compose[@]}" ps ;;
   logs) shift; "${compose[@]}" logs -f "$@" ;;

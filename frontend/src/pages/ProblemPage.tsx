@@ -615,8 +615,26 @@ export default function ProblemPage() {
                                                 <dd>{complexity.space_complexity}</dd>
                                             </div>
                                         </dl>
+                                    ) : complexity.status === "disabled" ? (
+                                        <p>
+                                            AI complexity estimates are not enabled for
+                                            this deployment.
+                                        </p>
+                                    ) : complexity.status === "failed" ? (
+                                        <p>
+                                            The complexity estimate failed. Your grading
+                                            result is unaffected.
+                                        </p>
+                                    ) : complexity.error_code === "request_failed" ? (
+                                        <p>
+                                            Could not load the complexity estimate. Try
+                                            refreshing the page.
+                                        </p>
                                     ) : (
-                                        <p>Complexity estimate unavailable.</p>
+                                        <p>
+                                            No complexity estimate was recorded for this
+                                            submission.
+                                        </p>
                                     )}
                                     <p>
                                         This is an AI estimate of growth, not a runtime
@@ -625,23 +643,38 @@ export default function ProblemPage() {
                                 </section>
                             )}
                             {submission.public_results.length > 0 && (
-                                <ul>
-                                    {submission.public_results.map((result) => (
-                                        <li key={result.case_order}>
-                                            Test {result.case_order}:{" "}
-                                            {result.friendly_message}
-                                            {result.stdout && (
-                                                <pre>{result.stdout}</pre>
-                                            )}
-                                            {result.stderr && (
-                                                <pre>{result.stderr}</pre>
-                                            )}
-                                            {result.compile_output && (
-                                                <pre>{result.compile_output}</pre>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
+                                <>
+                                    {!submission.is_practice_run && (
+                                        <p>
+                                            Showing details for{" "}
+                                            {submission.public_results.length} public
+                                            {submission.public_results.length === 1
+                                                ? " test"
+                                                : " tests"}
+                                            .
+                                            {submission.test_count >
+                                                submission.public_results.length &&
+                                                " Private tests count toward the result above, but their details are hidden."}
+                                        </p>
+                                    )}
+                                    <ul>
+                                        {submission.public_results.map((result) => (
+                                            <li key={result.case_order}>
+                                                Test {result.case_order}:{" "}
+                                                {result.friendly_message}
+                                                {result.stdout && (
+                                                    <pre>{result.stdout}</pre>
+                                                )}
+                                                {result.stderr && (
+                                                    <pre>{result.stderr}</pre>
+                                                )}
+                                                {result.compile_output && (
+                                                    <pre>{result.compile_output}</pre>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </>
                             )}
                         </section>
                     )}

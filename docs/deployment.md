@@ -13,10 +13,10 @@ From the repository checkout on the GPU host:
 ./scripts/gpu-deploy init
 ```
 
-On its first run, this creates `.env.production` with mode `0600`, sets the GPU
-hostname, and generates a Grafana password. Review `PUBLIC_HOST` and change it
-if needed. The default email mode is `capture`, so Resend is not required for
-pilot testing. It creates missing secrets under
+On its first run, this creates `.env.production` with mode `0600` and generates
+a Grafana password. Set `PUBLIC_HOST` to the GPU's public hostname, then run
+`init` again. The default email mode is `capture`, so Resend is not required
+for pilot testing. It creates missing secrets under
 `$HOME/.local/share/techniview/secrets`, prepares Docker-managed copies for the
 NFS-backed home directory, builds the app images from this checkout, starts the
 services, waits for health checks, and seeds the demo accounts once. It does
@@ -90,7 +90,24 @@ volume rotation procedure before restarting workers.
 
 The optional complexity worker stays idle unless `BIG_O_OLLAMA_URL` points to
 an Ollama service reachable from the stack. Configure its model and timeout in
-`.env.production` if needed.
+`.env.production` if needed. The default model is `qwen3.8:27b`. Pulling the
+model alone does not enable analysis. For host Ollama, set
+`BIG_O_OLLAMA_URL=http://host.docker.internal:11434` and ensure Ollama listens
+on the Docker host gateway address, not only `127.0.0.1`. Both the API and
+complexity worker have a `host.docker.internal` mapping. Check reachability
+from the running worker before relying on estimates:
+
+```sh
+docker compose --env-file .env.production -f compose.production.yml \
+  exec -T complexity_worker python -c \
+  "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/tags', timeout=3).status)"
+```
+
+A `200` confirms network access. If the command fails while a host-local
+`curl http://127.0.0.1:11434/api/tags` works, Ollama is bound only to host
+loopback. Configure the Ollama process to listen on the Docker bridge address
+or ask its operator to do so. Restart the TechniView stack with
+`./scripts/gpu-deploy deploy` after changing `.env.production`.
 
 ## Troubleshooting
 

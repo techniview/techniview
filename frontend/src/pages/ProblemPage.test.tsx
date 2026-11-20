@@ -139,6 +139,26 @@ describe("ProblemPage complexity estimate", () => {
     });
 
     it("keeps grading feedback visible when complexity analysis is disabled", async () => {
+        vi.mocked(createSubmission).mockResolvedValue({
+            ...submission,
+            passed_count: 39,
+            test_count: 39,
+            public_results: [
+                {
+                    case_order: 1,
+                    status_id: 3,
+                    phase: "complete",
+                    friendly_message: "Accepted. Nice work!",
+                    input: "",
+                    expected_output: "",
+                    stdout: "true",
+                    stderr: null,
+                    compile_output: null,
+                    execution_time_ms: null,
+                    memory_kb: null,
+                },
+            ],
+        });
         vi.mocked(getSubmissionComplexity).mockResolvedValue({
             status: "disabled",
             time_complexity: null,
@@ -154,9 +174,15 @@ describe("ProblemPage complexity estimate", () => {
             await screen.findByRole("button", { name: "Submit for grading" }),
         );
 
-        expect(await screen.findByText(/Accepted/)).toBeTruthy();
+        expect(await screen.findByText("Accepted — 39/39 tests passed.")).toBeTruthy();
         expect(
-            await screen.findByText("Complexity estimate unavailable."),
+            await screen.findByText(
+                "AI complexity estimates are not enabled for this deployment.",
+            ),
+        ).toBeTruthy();
+        expect(screen.getByText(/Showing details for 1 public test/)).toBeTruthy();
+        expect(
+            screen.getByText(/Private tests count toward the result above/),
         ).toBeTruthy();
         expect(createSubmission).toHaveBeenCalledOnce();
     });
