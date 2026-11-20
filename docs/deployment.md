@@ -62,6 +62,12 @@ the campus proxy route or make an unreachable public port available. If port
 8080 is occupied, change `FRONTEND_PORT` in `.env.production` and have the
 proxy operator target that port.
 
+For an HTTP SSH tunnel before the HTTPS proxy is available, start the app with
+`COOKIE_SECURE=false ./scripts/gpu-deploy deploy`. Some browsers otherwise
+drop the production `Secure` session cookie and redirect back to login. Keep
+the tunnel bound to localhost. Once the public HTTPS route is ready, run
+`./scripts/gpu-deploy deploy` without the override to restore secure cookies.
+
 Grafana is available on `127.0.0.1:3000`; use an SSH tunnel to view it. MySQL,
 Prometheus, and go-judge have no published host ports. The runner is privileged
 and shares a host with application data in this pilot layout. Restrict Docker
