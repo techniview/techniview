@@ -2,6 +2,28 @@
 
 ## Single GPU host
 
+On the UC GPU host, home directories are on NFS and the system Docker daemon
+cannot bind-mount their files. Keep the checkout and original secrets in your
+home directory. Prepare Docker-managed copies by running:
+
+```sh
+bash scripts/prepare-docker-volumes.sh "$HOME/.local/share/techniview/secrets"
+```
+
+This reads files as your user and streams them into Docker volumes through
+standard input. It does not mount your home directory or print secret values.
+It refuses to replace an existing secret with a different value. Rerun it after
+updating monitoring configuration. These external volumes survive Compose
+`down`, including `down --volumes`.
+
+Add `-f compose.nfs.yml` after the other two Compose files in every command on
+this host:
+
+```sh
+docker compose --env-file .env.production \
+  -f compose.production.yml -f compose.gpu.yml -f compose.nfs.yml up -d
+```
+
 If the application and runner both run on the GPU machine, use
 `compose.production.yml` with `compose.gpu.yml`. This setup uses the Docker
 service name `go-judge`, so there is no runner private IP to find or runner

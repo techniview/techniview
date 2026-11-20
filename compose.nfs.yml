@@ -1,0 +1,43 @@
+# Use after compose.production.yml and compose.gpu.yml on NFS home directories.
+services:
+  backend:
+    secrets: !reset []
+    volumes:
+      - app_secrets:/run/secrets:ro
+  app_worker:
+    secrets: !reset []
+    volumes:
+      - app_secrets:/run/secrets:ro
+  complexity_worker:
+    volumes:
+      - app_secrets:/run/secrets:ro
+  mysql:
+    secrets: !reset []
+    volumes:
+      - database_secrets:/run/secrets:ro
+  prometheus:
+    volumes: !override
+      - prometheus_config:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+  grafana:
+    volumes: !override
+      - grafana_data:/var/lib/grafana
+      - grafana_provisioning:/etc/grafana/provisioning:ro
+      - grafana_dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  app_secrets:
+    external: true
+    name: techniview_app_secrets
+  database_secrets:
+    external: true
+    name: techniview_database_secrets
+  prometheus_config:
+    external: true
+    name: techniview_prometheus_config
+  grafana_provisioning:
+    external: true
+    name: techniview_grafana_provisioning
+  grafana_dashboards:
+    external: true
+    name: techniview_grafana_dashboards
