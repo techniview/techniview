@@ -11,13 +11,7 @@ services:
     logging: *default-logging
     image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/frontend:${IMAGE_TAG:?Set IMAGE_TAG}
     ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST}
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
+      - "${FRONTEND_BIND_IP:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
     networks:
       - web
     read_only: true
@@ -27,6 +21,8 @@ services:
         hard: 65536
     tmpfs:
       - /tmp
+      - /data
+      - /config
     cap_drop:
       - ALL
     cap_add:
@@ -58,8 +54,10 @@ services:
       BIG_O_OLLAMA_TIMEOUT_SECONDS: ${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
       BIG_O_ANALYSIS_MAX_ATTEMPTS: ${BIG_O_ANALYSIS_MAX_ATTEMPTS:-3}
       COOKIE_SECURE: "true"
-      CORS_ORIGINS: https://${PUBLIC_HOST}
-      PUBLIC_APP_URL: https://${PUBLIC_HOST}
+      SESSION_COOKIE_PATH: /techniview
+      API_ROOT_PATH: /techniview
+      CORS_ORIGINS: https://${PUBLIC_HOST:?Set PUBLIC_HOST}
+      PUBLIC_APP_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}/techniview
       EMAIL_DELIVERY_MODE: resend
       EMAIL_SIGNING_KEY_FILE: /run/secrets/email_signing_key
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
@@ -272,8 +270,6 @@ services:
           memory: 1G
 
 volumes:
-  caddy_data:
-  caddy_config:
   mysql_data:
   prometheus_data:
   grafana_data:

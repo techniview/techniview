@@ -1,0 +1,51 @@
+[[AdvancedFormat]]
+[[Block:Post-session survey]]
+[[Question:TE:SingleLine]]
+Full name
+[[Question:TE:SingleLine]]
+Email address
+[[Question:MC:SingleAnswer:Vertical]]
+Right now, how confident are you in your ability to solve technical interview coding problems?
+[[AdvancedChoices]]
+[[Choice:1]]
+Not at all confident
+[[Choice:2]]
+Slightly confident
+[[Choice:3]]
+Moderately confident
+[[Choice:4]]
+Very confident
+[[Choice:5]]
+Extremely confident
+[[Question:MC:SingleAnswer:Vertical]]
+Right now, how prepared do you feel for a technical interview that includes coding problems?
+[[AdvancedChoices]]
+[[Choice:1]]
+Not at all prepared
+[[Choice:2]]
+Slightly prepared
+[[Choice:3]]
+Moderately prepared
+[[Choice:4]]
+Very prepared
+[[Choice:5]]
+Extremely prepared
+[[Question:MC:SingleAnswer:Vertical]]
+Overall, how easy or difficult was it to use TechniView during today's session?
+[[AdvancedChoices]]
+[[Choice:1]]
+Very difficult
+[[Choice:2]]
+Somewhat difficult
+[[Choice:3]]
+Neither easy nor difficult
+[[Choice:4]]
+Somewhat easy
+[[Choice:5]]
+Very easy
+[[Question:TE:Essay]]
+What, if anything, made it difficult to complete what you wanted to do in TechniView today?
+[[Question:TE:Essay]]
+What, if anything, in TechniView helped you practice today?
+[[Question:TE:Essay]]
+Is there anything else you would like us to know about today's session?

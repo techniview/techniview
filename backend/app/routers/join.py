@@ -53,7 +53,7 @@ def _set_session_cookie(response: Response, db, user: User) -> None:
         secure=settings.COOKIE_SECURE,
         samesite="lax",
         expires=session.expires_at.replace(tzinfo=UTC),
-        path="/",
+        path=settings.SESSION_COOKIE_PATH,
     )
 
 

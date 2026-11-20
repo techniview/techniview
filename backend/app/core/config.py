@@ -38,6 +38,7 @@ class Settings:
     RESEND_API_KEY = _setting("RESEND_API_KEY")
     EMAIL_FROM = os.getenv("EMAIL_FROM", "")
     PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:5173")
+    API_ROOT_PATH = os.getenv("API_ROOT_PATH", "")
     PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
     EMAIL_VERIFICATION_MINUTES = int(os.getenv("EMAIL_VERIFICATION_MINUTES", "1440"))
     EMAIL_TOKEN_COOLDOWN_SECONDS = int(os.getenv("EMAIL_TOKEN_COOLDOWN_SECONDS", "60"))
@@ -73,6 +74,7 @@ class Settings:
     )
 
     SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "techniview_session")
+    SESSION_COOKIE_PATH = os.getenv("SESSION_COOKIE_PATH", "/")
     SESSION_DAYS = int(os.getenv("SESSION_DAYS", "7"))
     COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     CORS_ORIGINS = tuple(

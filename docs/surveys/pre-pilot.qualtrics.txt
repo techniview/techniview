@@ -1,0 +1,41 @@
+[[AdvancedFormat]]
+[[Block:Pre-pilot survey]]
+[[Question:TE:SingleLine]]
+Full name
+[[Question:TE:SingleLine]]
+Email address
+[[Question:MC:SingleAnswer:Vertical]]
+Right now, how confident are you in your ability to solve technical interview coding problems?
+[[AdvancedChoices]]
+[[Choice:1]]
+Not at all confident
+[[Choice:2]]
+Slightly confident
+[[Choice:3]]
+Moderately confident
+[[Choice:4]]
+Very confident
+[[Choice:5]]
+Extremely confident
+[[Question:MC:SingleAnswer:Vertical]]
+Right now, how prepared do you feel for a technical interview that includes coding problems?
+[[AdvancedChoices]]
+[[Choice:1]]
+Not at all prepared
+[[Choice:2]]
+Slightly prepared
+[[Choice:3]]
+Moderately prepared
+[[Choice:4]]
+Very prepared
+[[Choice:5]]
+Extremely prepared
+[[Question:MC:SingleAnswer:Vertical]]
+In the past four weeks, about how many technical interview coding problems have you attempted?
+[[Choices]]
+0
+1-5
+6-10
+11-20
+More than 20
+Not sure

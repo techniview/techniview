@@ -53,7 +53,7 @@ def login(body: LoginRequest, response: Response, db: DbSession):
         secure=settings.COOKIE_SECURE,
         samesite="lax",
         expires=session.expires_at.replace(tzinfo=UTC),
-        path="/",
+        path=settings.SESSION_COOKIE_PATH,
     )
     return user
 
@@ -76,7 +76,9 @@ def logout(
         if session is not None:
             session.revoked_at = datetime.now(UTC).replace(tzinfo=None)
             db.commit()
-    response.delete_cookie(settings.SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(
+        settings.SESSION_COOKIE_NAME, path=settings.SESSION_COOKIE_PATH
+    )
 
 
 @router.get("/me", response_model=UserResponse)
@@ -100,7 +102,9 @@ def change_password(body: PasswordResetRequest, db: DbSession, response: Respons
     if body.password != body.password_confirm:
         raise ApiError(422, "password_mismatch", "Passwords do not match.")
     reset_password(db, body.token, body.password)
-    response.delete_cookie(settings.SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(
+        settings.SESSION_COOKIE_NAME, path=settings.SESSION_COOKIE_PATH
+    )
 
 
 @router.post("/verify-email", response_model=UserResponse)

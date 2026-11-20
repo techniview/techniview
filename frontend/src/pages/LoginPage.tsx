@@ -40,21 +40,21 @@ export default function LoginPage() {
     return (
         <main className="tv-login tv-minimal login-main">
             <header className="design-picker">
-                <a className="login-logo" href="/login" aria-label="TechniView home">
+                <Link className="login-logo" to="/login" aria-label="TechniView home">
                     <BrandLogo />
-                </a>
+                </Link>
             </header>
 
             <div className="login-stage">
                 <section className="login-art" aria-label="TechniView introduction">
                     <div className="login-art-top">
-                        <a
+                        <Link
                             className="login-logo"
-                            href="/login"
+                            to="/login"
                             aria-label="TechniView home"
                         >
                             <BrandLogo />
-                        </a>
+                        </Link>
                     </div>
                     <div className="art-copy">
                         <h2>

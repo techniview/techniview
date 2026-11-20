@@ -42,7 +42,7 @@ function RoleHomeRedirect() {
 
 export default function App() {
     return (
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
             <AuthProvider>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />

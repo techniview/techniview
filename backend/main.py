@@ -29,6 +29,7 @@ logger = logging.getLogger("techniview.http")
 app = FastAPI(
     title="TechniView",
     version="0.1.0",
+    root_path=settings.API_ROOT_PATH,
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
     redoc_url="/api/redoc",

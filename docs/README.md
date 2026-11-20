@@ -10,6 +10,7 @@
 - [Pilot consent form](TECHNIVIEW_CONSENT_FORM.md) has a printable PDF copy.
 - [IRB exempt determination request](TECHNIVIEW_EXEMPT_DETERMINATION_REQUEST.pdf)
   documents the pilot protocol.
+- [Qualtrics survey imports](surveys/) contain the four pilot questionnaires.
 - The edited [presentation](../presentation/TechniView_Presentation.pptx) has a
   matching [PDF](../presentation/TechniView_Presentation.pdf).
 

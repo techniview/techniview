@@ -1,22 +1,31 @@
 # Campus deployment
 
 TechniView runs as two independent Docker Compose projects on separate campus
-Linux VMs. The application VM runs Caddy, FastAPI, the application workers,
-MySQL, Prometheus, and Grafana. The runner VM runs standalone go-judge. The runner
-VM executes untrusted student code and must not share a host with student data.
+hosts. The application host can be the GPU machine. It runs an internal
+Caddy server, FastAPI, the application workers, MySQL, Prometheus, and Grafana.
+The runner host runs standalone go-judge. It executes untrusted student code and
+must not share a host with student data.
 
-## Campus network requirements
+## Public URL and campus network requirements
 
-- Publish ports 80 and 443 on the application VM for the website and HTTPS.
+- Route `https://<gpu-host>/techniview` and
+  `https://<gpu-host>/techniview/*` through the host's HTTPS proxy to the
+  application frontend. Preserve the `/techniview` prefix when forwarding.
+  The frontend serves static files and proxies `/techniview/api/*` to FastAPI.
+- The frontend binds to `127.0.0.1:8080` by default. Set `FRONTEND_PORT` if
+  that port is occupied. If the host proxy runs on another machine, set
+  `FRONTEND_BIND_IP` to a private interface it can reach and restrict access
+  to that port with the campus firewall.
 - Grafana binds to the application VM's loopback address on port 3000. Reach it
   through an SSH tunnel from an administrator workstation. Prometheus has no
   published host port.
 - Bind go-judge to the runner VM's private address. Allow inbound port 5050
   only from the application VM's private address.
 - Do not publish MySQL or any other runner port.
-- Point the public DNS name at the application VM. Caddy obtains and renews the
-  HTTPS certificate, so ports 80 and 443 must be reachable for certificate
-  validation.
+- The host proxy owns the public DNS name and HTTPS certificate. Its operator
+  must add the `/techniview` route if you cannot edit its configuration. The
+  default frontend port does not require sudo, provided your account can run
+  Docker or rootless Docker.
 
 Request an initial 4 vCPU / 8 GiB application VM and an 8 vCPU / 16 GiB runner
 VM. Set `API_WORKERS`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and
@@ -56,12 +65,14 @@ files from the matching examples. Each file contains only that VM's credentials.
 Set their permissions to `0600`; do not copy either file into Git or a shared
 backup that lacks access controls.
 
-On the application VM, create `/etc/techniview/secrets` with mode `0700` and
-create these files with unique values: `mysql_root_password`, `mysql_password`,
-`email_signing_key` (at least 32 random bytes), and `resend_api_key`. Make the
-files readable inside the non-root API container, for example owner `root` and
-mode `0444`; the parent directory remains accessible only to root. The Compose
-stack mounts each secret only into the services that need it.
+On the application VM, create the directory named by `SECRET_DIR` with mode
+`0700`. A user-owned directory such as
+`$HOME/.local/share/techniview/secrets` works without sudo. Create these files
+with unique values: `mysql_root_password`, `mysql_password`,
+`email_signing_key` (at least 32 random bytes), and `resend_api_key`. Give the
+files mode `0444` so the non-root API container can read the bind-mounted
+secrets. The `0700` parent keeps other host users from reaching those files.
+The Compose stack mounts each secret only into the services that need it.
 
 Generate the database passwords and signing key with `openssl rand -hex 32`.
 Put the verified provider key in `resend_api_key`. Keep the complete secret
@@ -80,7 +91,8 @@ docker compose --env-file .env.runner.production \
 ```
 
 On the application VM, set `RUNNER_PRIVATE_HOST` to the runner's private address,
-`PUBLIC_HOST` to the DNS name, and unique MySQL and email secrets. Start the app:
+`PUBLIC_HOST` to the GPU URL's hostname without `https://` or `/techniview`,
+and unique MySQL and email secrets. Start the app:
 
 ```sh
 docker compose --env-file .env.production \
@@ -90,6 +102,13 @@ docker compose --env-file .env.production \
 docker compose --env-file .env.production \
   -f compose.production.yml ps
 ```
+
+If the host proxy runs on the same machine, route `/techniview` and
+`/techniview/*` to `http://127.0.0.1:8080` without stripping the path.
+Confirm `http://127.0.0.1:8080/techniview/` loads before testing the public
+URL. Then sign in, refresh a nested route, and follow a password reset or
+enrollment link. If the direct URL works but the public URL returns 404, check
+the host proxy route and whether it preserves the prefix.
 
 The application startup applies Alembic migrations and imports the reviewed
 problem catalog. It does not create demo users. Provision the first professor
@@ -147,11 +166,14 @@ Back up the MySQL application database hourly to encrypted campus storage outsid
 the application VM. Keep signing and export secrets in a separate protected
 backup. A lost runner response leaves the affected case with an unknown outcome.
 
-The repo includes an hourly `restic` backup script and systemd timer. Install
-`restic` with `backup --stdin-from-command` support on the application VM, configure an encrypted campus repository in
-`/etc/techniview/backup.env`, set up its SSH key if using the SFTP backend, then
-install the service files from `deploy/systemd/`. Initialize the repository once
-with `restic init` using that environment file. Enable the timers:
+The repo includes an hourly `restic` backup script and systemd timer. Installing
+the systemd units and writing under `/etc/techniview` require administrator
+access; arrange that separately if your account has no sudo access. Install
+`restic` with `backup --stdin-from-command` support on the application host.
+Configure an encrypted campus repository in `/etc/techniview/backup.env`, set up
+its SSH key if using the SFTP backend, then install the service files from
+`deploy/systemd/`. Initialize the repository once with `restic init` using
+that environment file. Enable the timers:
 
 ```sh
 sudo install -d -m 0700 /etc/techniview

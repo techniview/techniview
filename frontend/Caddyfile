@@ -1,4 +1,4 @@
-{$PUBLIC_HOST} {
+:80 {
 	encode zstd gzip
 	header {
 		X-Content-Type-Options nosniff
@@ -8,20 +8,26 @@
 		Strict-Transport-Security "max-age=31536000"
 		-Server
 	}
+	redir /techniview /techniview/ 308
 
-	@metrics path /api/metrics
+	@metrics path /techniview/api/metrics
 	handle @metrics {
 		respond 404
 	}
 
-	@api path /api /api/*
+	@api path /techniview/api /techniview/api/*
 	handle @api {
+		uri strip_prefix /techniview
 		reverse_proxy backend:8000
 	}
 
-	handle {
+	handle_path /techniview/* {
 		root * /srv
 		try_files {path} /index.html
 		file_server
+	}
+
+	handle {
+		respond 404
 	}
 }
