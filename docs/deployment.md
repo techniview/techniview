@@ -105,6 +105,8 @@ with unique values: `mysql_root_password`, `mysql_password`,
 files mode `0444` so the non-root API container can read the bind-mounted
 secrets. The `0700` parent keeps other host users from reaching those files.
 The Compose stack mounts each secret only into the services that need it.
+In `.env.production`, write `SECRET_DIR=${HOME}/.local/share/techniview/secrets`;
+Compose expands `${HOME}` to the current user's home directory.
 
 Generate the database passwords and signing key with `openssl rand -hex 32`.
 Put the verified provider key in `resend_api_key`. Keep the complete secret
