@@ -87,6 +87,30 @@ warm_ollama() {
   fi
 }
 
+ensure_ollama_proxy() {
+  if ! grep -q '^BIG_O_OLLAMA_URL=http://host.docker.internal:11435$' "$env_file"; then
+    return
+  fi
+  if docker inspect techniview-ollama-proxy >/dev/null 2>&1; then
+    if [[ $(docker inspect -f '{{.State.Running}}' techniview-ollama-proxy) == true ]]; then
+      return
+    fi
+    docker rm techniview-ollama-proxy >/dev/null
+  fi
+  docker run -d --name techniview-ollama-proxy \
+    --restart unless-stopped --network host \
+    --read-only --cap-drop ALL --security-opt no-new-privileges \
+    alpine/socat \
+    TCP-LISTEN:11435,bind=172.17.0.1,reuseaddr,fork \
+    TCP:127.0.0.1:11434 >/dev/null
+}
+
+remove_ollama_proxy() {
+  if docker inspect techniview-ollama-proxy >/dev/null 2>&1; then
+    docker rm -f techniview-ollama-proxy >/dev/null
+  fi
+}
+
 case $command in
   init)
     init_env
@@ -96,6 +120,7 @@ case $command in
     fi
     prepare
     "${compose[@]}" config -q
+    ensure_ollama_proxy
     "${compose[@]}" up -d --build --wait
     check_local_route
     warm_ollama
@@ -113,6 +138,7 @@ case $command in
     [[ -f $env_file ]] || { echo "Missing $env_file; run init." >&2; exit 1; }
     prepare
     "${compose[@]}" config -q
+    ensure_ollama_proxy
     "${compose[@]}" up -d --build --wait
     check_local_route
     check_ollama
@@ -123,7 +149,10 @@ case $command in
     ;;
   status) "${compose[@]}" ps ;;
   logs) shift; "${compose[@]}" logs -f "$@" ;;
-  down) "${compose[@]}" down ;;
+  down)
+    "${compose[@]}" down
+    remove_ollama_proxy
+    ;;
   mail) "${compose[@]}" exec -T app_worker sh -c 'for f in /tmp/techniview-mail/*.json; do [ -f "$f" ] && cat "$f"; done' ;;
   help|-h|--help) usage ;;
   *) usage >&2; exit 2 ;;
