@@ -110,6 +110,15 @@ Generate the database passwords and signing key with `openssl rand -hex 32`.
 Put the verified provider key in `resend_api_key`. Keep the complete secret
 directory backed up using campus-approved encrypted secret storage.
 
+For a private smoke test before Resend is configured, set
+`EMAIL_DELIVERY_MODE=capture` in `.env.production` and create an empty
+`resend_api_key` file so Compose can mount the declared secret. Email jobs then
+write JSON files under `/tmp/techniview-mail` in the application worker
+containers instead of contacting Resend. This is temporary container storage;
+inspect it before restarting workers. Set `EMAIL_DELIVERY_MODE=resend`, put a
+real provider key in `resend_api_key`, and verify the sender before inviting
+users or testing password recovery through real email.
+
 On the runner VM, set `RUNNER_PRIVATE_BIND_IP` to its private interface address.
 The runner needs no separate database or secret files. Start the runner:
 

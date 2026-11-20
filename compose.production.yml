@@ -58,7 +58,7 @@ services:
       API_ROOT_PATH: /techniview
       CORS_ORIGINS: https://${PUBLIC_HOST:?Set PUBLIC_HOST}
       PUBLIC_APP_URL: https://${PUBLIC_HOST:?Set PUBLIC_HOST}/techniview
-      EMAIL_DELIVERY_MODE: resend
+      EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-resend}
       EMAIL_SIGNING_KEY_FILE: /run/secrets/email_signing_key
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
       RESEND_API_KEY_FILE: /run/secrets/resend_api_key
