@@ -52,7 +52,7 @@ class Settings:
     BIG_O_OLLAMA_URL = os.getenv("BIG_O_OLLAMA_URL", "").rstrip("/")
     BIG_O_OLLAMA_MODEL = os.getenv("BIG_O_OLLAMA_MODEL", "qwen3.8:27b")
     BIG_O_OLLAMA_TIMEOUT_SECONDS = float(
-        os.getenv("BIG_O_OLLAMA_TIMEOUT_SECONDS", "90")
+        os.getenv("BIG_O_OLLAMA_TIMEOUT_SECONDS", "300")
     )
     BIG_O_ANALYSIS_MAX_ATTEMPTS = int(os.getenv("BIG_O_ANALYSIS_MAX_ATTEMPTS", "3"))
     # MySQL (platform DB)

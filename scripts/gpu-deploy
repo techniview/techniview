@@ -11,10 +11,11 @@ command=${1:-help}
 
 usage() {
   cat <<'EOF'
-Usage: scripts/gpu-deploy {init|doctor|deploy|status|logs|down|mail}
+Usage: scripts/gpu-deploy {init|doctor|deploy|warm-ollama|status|logs|down|mail}
   init     Create the environment and secrets if missing; start and seed demo accounts.
   doctor   Check Docker access, Compose configuration, and local app route.
   deploy   Build app images from this checkout and start the GPU stack.
+  warm-ollama Load the configured model and keep it resident for ten minutes.
   status   Show service health.
   logs     Follow service logs (optionally pass service names).
   down     Stop services without deleting persistent data.
@@ -70,8 +71,17 @@ check_ollama() {
   local ollama_url
   ollama_url=$("${compose[@]}" exec -T complexity_worker printenv BIG_O_OLLAMA_URL)
   if [[ -n $ollama_url ]]; then
-    "${compose[@]}" exec -T complexity_worker python -c \
-      'import os, urllib.request; url = os.environ["BIG_O_OLLAMA_URL"].rstrip("/") + "/api/tags"; print("Ollama HTTP:", urllib.request.urlopen(url, timeout=3).status)'
+    "${compose[@]}" exec -T complexity_worker python -m scripts.ollama_check
+  else
+    echo 'AI complexity estimates disabled (BIG_O_OLLAMA_URL is empty).'
+  fi
+}
+
+warm_ollama() {
+  local ollama_url
+  ollama_url=$("${compose[@]}" exec -T complexity_worker printenv BIG_O_OLLAMA_URL)
+  if [[ -n $ollama_url ]]; then
+    "${compose[@]}" exec -T complexity_worker python -m scripts.ollama_check --warm
   else
     echo 'AI complexity estimates disabled (BIG_O_OLLAMA_URL is empty).'
   fi
@@ -88,7 +98,7 @@ case $command in
     "${compose[@]}" config -q
     "${compose[@]}" up -d --build --wait
     check_local_route
-    check_ollama
+    warm_ollama
     "${compose[@]}" exec -T backend python -m app.seed
     echo 'GPU deployment is ready. Demo accounts: teacher@techniview.local / teacher-demo; student@techniview.local / student-demo.'
     ;;
@@ -97,7 +107,7 @@ case $command in
     docker info >/dev/null
     "${compose[@]}" config -q
     check_local_route
-    check_ollama
+    warm_ollama
     ;;
   deploy)
     [[ -f $env_file ]] || { echo "Missing $env_file; run init." >&2; exit 1; }
@@ -106,6 +116,10 @@ case $command in
     "${compose[@]}" up -d --build --wait
     check_local_route
     check_ollama
+    ;;
+  warm-ollama)
+    [[ -f $env_file ]] || { echo "Missing $env_file; run init." >&2; exit 1; }
+    warm_ollama
     ;;
   status) "${compose[@]}" ps ;;
   logs) shift; "${compose[@]}" logs -f "$@" ;;

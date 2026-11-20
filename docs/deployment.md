@@ -35,6 +35,7 @@ VPN audience and remove or change the demo accounts before any broader access.
 ```sh
 ./scripts/gpu-deploy doctor
 ./scripts/gpu-deploy deploy
+./scripts/gpu-deploy warm-ollama
 ./scripts/gpu-deploy status
 ./scripts/gpu-deploy logs backend app_worker go-judge
 ./scripts/gpu-deploy mail
@@ -92,22 +93,21 @@ The optional complexity worker stays idle unless `BIG_O_OLLAMA_URL` points to
 an Ollama service reachable from the stack. Configure its model and timeout in
 `.env.production` if needed. The default model is `qwen3.8:27b`. Pulling the
 model alone does not enable analysis. For host Ollama, set
-`BIG_O_OLLAMA_URL=http://host.docker.internal:11434` and ensure Ollama listens
-on the Docker host gateway address, not only `127.0.0.1`. Both the API and
-complexity worker have a `host.docker.internal` mapping. Check reachability
-from the running worker before relying on estimates:
+`BIG_O_OLLAMA_URL=http://host.docker.internal:11435`. The GPU host's Ollama
+server listens on `127.0.0.1:11434`; the `techniview-ollama-proxy` container
+forwards only Docker bridge traffic from `172.17.0.1:11435` to it. Both the API
+and complexity worker have a `host.docker.internal` mapping. `deploy` checks
+that this URL responds and that the configured model appears in `/api/tags`.
+Then run `warm-ollama` before testing to load the model and keep it resident for
+ten minutes:
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yml \
-  exec -T complexity_worker python -c \
-  "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/tags', timeout=3).status)"
+./scripts/gpu-deploy warm-ollama
 ```
 
-A `200` confirms network access. If the command fails while a host-local
-`curl http://127.0.0.1:11434/api/tags` works, Ollama is bound only to host
-loopback. Configure the Ollama process to listen on the Docker bridge address
-or ask its operator to do so. Restart the TechniView stack with
-`./scripts/gpu-deploy deploy` after changing `.env.production`.
+The example sets a 300-second analysis timeout because this model previously
+timed out at 90 seconds while cold. A new graded submission queues a new
+estimate; older submissions do not get requeued just by warming the model.
 
 ## Troubleshooting
 
