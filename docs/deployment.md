@@ -27,11 +27,14 @@ must not share a host with student data.
   default frontend port does not require sudo, provided your account can run
   Docker or rootless Docker.
 
-Request an initial 4 vCPU / 8 GiB application VM and an 8 vCPU / 16 GiB runner
-VM. Set `API_WORKERS`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and
-`APP_WORKER_REPLICAS` and `DIRECT_WORKER_PROCESSES` in `.env.production` after load testing. API workers handle
-concurrent HTTP requests; the database pool settings bound each process's
-connections and must fit under MySQL's connection limit; application worker
+Request an initial 4 vCPU / 8 GiB application VM and a runner host with at least
+24 CPUs available for the selected 24-CPU runner quota. The runner has 16
+concurrent execution slots by default; the CPU quota is a ceiling, not a core
+reservation. Set `API_WORKERS`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`,
+`APP_WORKER_REPLICAS`, and `DIRECT_WORKER_PROCESSES` in `.env.production` after
+load testing. API workers handle concurrent HTTP requests. Database pool
+settings bound each process's connections and must fit under MySQL's connection
+limit. Application worker
 replicas claim and process queued submissions concurrently. Allocate enough CPU
 and memory for the selected counts. The Compose files cap service CPU and memory
 use within those budgets. Treat these as starting sizes

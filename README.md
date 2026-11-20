@@ -248,7 +248,8 @@ recommendations appear on My Classes and at the top of the TechniView Trail.
 The [go-judge image](go-judge/Dockerfile) pins go-judge 1.13.3 and Python 3.14.8.
 The application owns the submission queue, attempt records, grading, and recovery.
 The runner VM owns sandbox execution only. The default is 16 go-judge execution
-slots and four application worker processes per application worker container.
+slots under a 24-CPU quota. Four application worker containers with four
+processes each provide 16 application worker processes.
 `GO_JUDGE_PARALLELISM` and `DIRECT_WORKER_PROCESSES` set those limits. CPU quota is
 a ceiling, not an exclusive core reservation.
 

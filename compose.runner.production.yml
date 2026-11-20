@@ -25,5 +25,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${RUNNER_CPU_LIMIT:-8}"
+          cpus: "${RUNNER_CPU_LIMIT:-24}"
           memory: ${JUDGE_WORKER_MEMORY_LIMIT:-8G}
