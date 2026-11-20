@@ -1,5 +1,34 @@
 # Campus deployment
 
+## Single GPU host
+
+If the application and runner both run on the GPU machine, use
+`compose.production.yml` with `compose.gpu.yml`. This setup uses the Docker
+service name `go-judge`, so there is no runner private IP to find or runner
+port to publish. In `.env.production`, set `RUNNER_PRIVATE_HOST=go-judge` and
+`GO_JUDGE_IMAGE` to the pinned image in `go-judge/runner-image.ref`. The example
+also lists the selected 16 execution slots and 24-CPU runner quota.
+
+```sh
+docker compose --env-file .env.production \
+  -f compose.production.yml -f compose.gpu.yml config -q
+docker compose --env-file .env.production \
+  -f compose.production.yml -f compose.gpu.yml up -d
+docker compose --env-file .env.production \
+  -f compose.production.yml -f compose.gpu.yml ps
+```
+
+The runner shares a host with MySQL in this layout. The sandbox checks passed
+on the GPU host, but the separate-host design gives a stronger boundary for
+untrusted student code. Keep the Docker host limited to trusted operators and
+run the sandbox checks again after changing the runner image or host kernel.
+
+The public frontend still needs the GPU host's HTTPS proxy to forward
+`/techniview` and `/techniview/*` to `http://127.0.0.1:8080` without stripping
+the prefix. The host proxy may require its operator to add that route.
+
+## Separate application and runner hosts
+
 TechniView runs as two independent Docker Compose projects on separate campus
 hosts. The application host can be the GPU machine. It runs an internal
 Caddy server, FastAPI, the application workers, MySQL, Prometheus, and Grafana.

@@ -1,0 +1,45 @@
+# Add go-judge to the application project when all services run on the GPU host.
+# Set RUNNER_PRIVATE_HOST=go-judge in .env.production and include this file
+# after compose.production.yml in every Compose command.
+services:
+  backend:
+    networks:
+      - runner_link
+
+  app_worker:
+    networks:
+      - runner_link
+    depends_on:
+      go-judge:
+        condition: service_healthy
+
+  go-judge:
+    image: ${GO_JUDGE_IMAGE:?Set GO_JUDGE_IMAGE to the pinned runner image ref}
+    environment:
+      GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-16}
+    privileged: true
+    cgroup: private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5050/version', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${RUNNER_CPU_LIMIT:-24}"
+          memory: ${JUDGE_WORKER_MEMORY_LIMIT:-8G}
+    networks:
+      - runner_link
+
+networks:
+  runner_link:
+    internal: true
