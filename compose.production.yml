@@ -9,7 +9,10 @@ x-logging: &default-logging
 services:
   frontend:
     logging: *default-logging
-    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/frontend:${IMAGE_TAG:?Set IMAGE_TAG}
+    image: techniview-frontend:gpu
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
     ports:
       - "${FRONTEND_BIND_IP:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
     networks:
@@ -41,14 +44,17 @@ services:
 
   backend:
     logging: *default-logging
-    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    image: techniview-backend:gpu
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
     environment: &application_environment
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
       MYSQL_DB: ${MYSQL_DB:?Set MYSQL_DB}
-      GO_JUDGE_URL: http://${RUNNER_PRIVATE_HOST:?Set RUNNER_PRIVATE_HOST}:5050
+      GO_JUDGE_URL: http://go-judge:5050
       BIG_O_OLLAMA_URL: ${BIG_O_OLLAMA_URL:-}
       BIG_O_OLLAMA_MODEL: ${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
       BIG_O_OLLAMA_TIMEOUT_SECONDS: ${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
@@ -61,20 +67,19 @@ services:
       EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-resend}
       EMAIL_SIGNING_KEY_FILE: /run/secrets/email_signing_key
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
-      RESEND_API_KEY_FILE: /run/secrets/resend_api_key
+      RESEND_API_KEY_FILE: ${RESEND_API_KEY_FILE:-/run/secrets/resend_api_key}
       DIRECT_WORKER_PROCESSES: ${DIRECT_WORKER_PROCESSES:-4}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
-    secrets:
-      - mysql_password
-      - email_signing_key
-      - resend_api_key
+    volumes:
+      - app_secrets:/run/secrets:ro
     networks:
       - web
       - data
       - outbound
       - monitoring
+      - runner_link
     read_only: true
     ulimits:
       nofile:
@@ -88,6 +93,8 @@ services:
       - no-new-privileges:true
     depends_on:
       mysql:
+        condition: service_healthy
+      go-judge:
         condition: service_healthy
     command: >-
       sh -c "alembic upgrade head &&
@@ -114,18 +121,18 @@ services:
 
   app_worker:
     logging: *default-logging
-    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    image: techniview-backend:gpu
     environment:
       <<: *application_environment
       DB_POOL_SIZE: "1"
       DB_MAX_OVERFLOW: "0"
-    secrets:
-      - mysql_password
-      - email_signing_key
-      - resend_api_key
+    volumes:
+      - app_secrets:/run/secrets:ro
+      - captured_mail:/tmp/techniview-mail
     networks:
       - data
       - outbound
+      - runner_link
     read_only: true
     tmpfs:
       - /tmp
@@ -135,6 +142,8 @@ services:
       - no-new-privileges:true
     depends_on:
       backend:
+        condition: service_healthy
+      go-judge:
         condition: service_healthy
     command: python -m app.worker.direct_supervisor
     restart: unless-stopped
@@ -149,8 +158,21 @@ services:
 
   complexity_worker:
     logging: *default-logging
-    image: ${IMAGE_NAMESPACE:?Set IMAGE_NAMESPACE}/backend:${IMAGE_TAG:?Set IMAGE_TAG}
-    environment: *application_environment
+    image: techniview-backend:gpu
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+      MYSQL_DB: ${MYSQL_DB:?Set MYSQL_DB}
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
+      BIG_O_OLLAMA_URL: ${BIG_O_OLLAMA_URL:-}
+      BIG_O_OLLAMA_MODEL: ${BIG_O_OLLAMA_MODEL:-qwen3.8:27b}
+      BIG_O_OLLAMA_TIMEOUT_SECONDS: ${BIG_O_OLLAMA_TIMEOUT_SECONDS:-90}
+      BIG_O_ANALYSIS_MAX_ATTEMPTS: ${BIG_O_ANALYSIS_MAX_ATTEMPTS:-3}
+    volumes:
+      - app_secrets:/run/secrets:ro
     networks:
       - data
       - outbound
@@ -183,13 +205,11 @@ services:
       MYSQL_DATABASE: ${MYSQL_DB:?Set MYSQL_DB}
       MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER}
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
-    secrets:
-      - mysql_root_password
-      - mysql_password
+    volumes:
+      - database_secrets:/run/secrets:ro
+      - mysql_data:/var/lib/mysql
     networks:
       - data
-    volumes:
-      - mysql_data:/var/lib/mysql
     healthcheck:
       test:
         - CMD-SHELL
@@ -207,6 +227,34 @@ services:
           cpus: "2.0"
           memory: 3G
 
+  go-judge:
+    logging: *default-logging
+    image: ${GO_JUDGE_IMAGE:-ghcr.io/techniview/techniview/go-judge@sha256:d688e5ae23c443fc4da5b52fc39ffdc4b31d8dd0c0f9ce33e22afa39aff05c47}
+    environment:
+      GO_JUDGE_PARALLELISM: ${GO_JUDGE_PARALLELISM:-16}
+    privileged: true
+    cgroup: private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    healthcheck:
+      test: [CMD, /opt/python/bin/python3.14, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5050/version', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${RUNNER_CPU_LIMIT:-24}"
+          memory: ${JUDGE_WORKER_MEMORY_LIMIT:-8G}
+    networks:
+      - runner_link
+
   prometheus:
     logging: *default-logging
     image: prom/prometheus:v3.3.1
@@ -216,7 +264,7 @@ services:
       - --storage.tsdb.retention.time=15d
       - --storage.tsdb.retention.size=5GB
     volumes:
-      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_config:/etc/prometheus:ro
       - prometheus_data:/prometheus
     networks:
       - monitoring
@@ -248,8 +296,8 @@ services:
       - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./ops/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./ops/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_provisioning:/etc/grafana/provisioning:ro
+      - grafana_dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - monitoring
       - grafana_access
@@ -273,16 +321,22 @@ volumes:
   mysql_data:
   prometheus_data:
   grafana_data:
-
-secrets:
-  mysql_root_password:
-    file: ${SECRET_DIR:?Set SECRET_DIR}/mysql_root_password
-  mysql_password:
-    file: ${SECRET_DIR:?Set SECRET_DIR}/mysql_password
-  email_signing_key:
-    file: ${SECRET_DIR:?Set SECRET_DIR}/email_signing_key
-  resend_api_key:
-    file: ${SECRET_DIR:?Set SECRET_DIR}/resend_api_key
+  app_secrets:
+    external: true
+    name: techniview_app_secrets
+  database_secrets:
+    external: true
+    name: techniview_database_secrets
+  prometheus_config:
+    external: true
+    name: techniview_prometheus_config
+  grafana_provisioning:
+    external: true
+    name: techniview_grafana_provisioning
+  grafana_dashboards:
+    external: true
+    name: techniview_grafana_dashboards
+  captured_mail:
 
 networks:
   web:
@@ -292,3 +346,6 @@ networks:
   monitoring:
     internal: true
   grafana_access:
+  runner_link:
+    name: techniview_runner_link
+    internal: true

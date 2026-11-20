@@ -46,4 +46,8 @@ copy_kind=config
 copy_files techniview_prometheus_config "$repository_root/ops/monitoring" prometheus.yml
 copy_files techniview_grafana_provisioning "$repository_root/ops/monitoring/grafana/provisioning" .
 copy_files techniview_grafana_dashboards "$repository_root/ops/monitoring/grafana/dashboards" .
-echo 'Docker volumes prepared. Include -f compose.nfs.yml in deployment commands.'
+docker volume create techniview_captured_mail >/dev/null
+docker run --rm --network none \
+    --mount type=volume,src=techniview_captured_mail,dst=/target \
+    "$helper_image" chown 10001:10001 /target
+echo 'Docker volumes prepared.'

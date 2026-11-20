@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$root"
+env_file=${TECHNIVIEW_ENV_FILE:-.env.production}
+runner_image=$(<go-judge/runner-image.ref)
+export GO_JUDGE_IMAGE=$runner_image
+compose=(docker compose --env-file "$env_file" -f compose.production.yml)
+command=${1:-help}
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/gpu-deploy {init|doctor|deploy|status|logs|down|mail}
+  init     Create the environment and secrets if missing; start and seed demo accounts.
+  doctor   Check Docker access, Compose configuration, and local app route.
+  deploy   Build app images from this checkout and start the GPU stack.
+  status   Show service health.
+  logs     Follow service logs (optionally pass service names).
+  down     Stop services without deleting persistent data.
+  mail     List captured email messages from the latest worker container.
+EOF
+}
+
+init_env() {
+  if [[ ! -e $env_file ]]; then
+    cp .env.production.example "$env_file"
+    chmod 600 "$env_file"
+  fi
+  chmod 600 "$env_file"
+  if grep -q '^GRAFANA_ADMIN_PASSWORD=replace-' "$env_file"; then
+    local grafana_password
+    grafana_password=$(openssl rand -hex 32)
+    sed -i "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=$grafana_password|" "$env_file"
+  fi
+  if grep -q '^PUBLIC_HOST=techniview.example.edu$' "$env_file"; then
+    sed -i 's/^PUBLIC_HOST=.*/PUBLIC_HOST=cs-gpu-00.digitfut.uc.edu/' "$env_file"
+  fi
+}
+
+prepare() {
+  local secrets="$HOME/.local/share/techniview/secrets"
+  mkdir -p -m 700 "$secrets"
+  for name in mysql_root_password mysql_password email_signing_key resend_api_key; do
+    if [[ ! -e "$secrets/$name" ]]; then
+      case $name in
+        mysql_root_password|mysql_password|email_signing_key) openssl rand -hex 32 > "$secrets/$name" ;;
+        resend_api_key) : > "$secrets/$name" ;;
+      esac
+      chmod 400 "$secrets/$name"
+    fi
+  done
+  if grep -q '^EMAIL_DELIVERY_MODE=resend$' "$env_file" && [[ ! -s "$secrets/resend_api_key" ]]; then
+    echo 'Resend mode requires a nonempty resend_api_key secret.' >&2
+    exit 1
+  fi
+  chmod 700 "$secrets"
+  bash scripts/prepare-docker-volumes.sh "$secrets"
+}
+
+check_local_route() {
+  local frontend_address
+  frontend_address=$("${compose[@]}" port frontend 80 2>/dev/null || true)
+  if [[ -n $frontend_address ]] && curl --fail --silent "http://$frontend_address/techniview/" >/dev/null; then
+    echo 'Local app route responds.'
+  else
+    echo 'Local app route is not responding; check frontend status and logs.' >&2
+    exit 1
+  fi
+}
+
+case $command in
+  init)
+    init_env
+    if grep -q '^PUBLIC_HOST=techniview.example.edu$' "$env_file"; then
+      echo "Set PUBLIC_HOST in $env_file before initializing." >&2
+      exit 1
+    fi
+    prepare
+    "${compose[@]}" config -q
+    "${compose[@]}" up -d --build --wait
+    check_local_route
+    "${compose[@]}" exec -T backend python -m app.seed
+    echo 'GPU deployment is ready. Demo accounts: teacher@techniview.local / teacher-demo; student@techniview.local / student-demo.'
+    ;;
+  doctor)
+    [[ -f $env_file ]] || { echo "Missing $env_file; run init." >&2; exit 1; }
+    docker info >/dev/null
+    "${compose[@]}" config -q
+    check_local_route
+    ;;
+  deploy)
+    [[ -f $env_file ]] || { echo "Missing $env_file; run init." >&2; exit 1; }
+    prepare
+    "${compose[@]}" config -q
+    "${compose[@]}" up -d --build --wait
+    check_local_route
+    ;;
+  status) "${compose[@]}" ps ;;
+  logs) shift; "${compose[@]}" logs -f "$@" ;;
+  down) "${compose[@]}" down ;;
+  mail) "${compose[@]}" exec -T app_worker sh -c 'for f in /tmp/techniview-mail/*.json; do [ -f "$f" ] && cat "$f"; done' ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

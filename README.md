@@ -164,11 +164,10 @@ real Python cases through go-judge. The stack has no host ports or persistent
 database storage, does not read `.env`, and removes its containers on exit.
 
 For a hosted installation, use [the campus deployment guide](docs/deployment.md).
-The separate-host production setup keeps MySQL off host ports and binds go-judge
-to the runner host's private interface. On a single GPU host, add
-`compose.gpu.yml` to place the runner on an internal Docker network without a
-published runner port. The host's HTTPS proxy serves the application at
-`/techniview`.
+The GPU pilot uses `./scripts/gpu-deploy init` for first setup and
+`./scripts/gpu-deploy deploy` for later updates. It serves the app at
+`/techniview` behind the host's HTTPS proxy. Legacy separate-host Compose
+templates remain available, but are not the supported GPU pilot workflow.
 
 Add a new endpoint by creating a file in backend/app/routers and including it in backend/main.py:
 

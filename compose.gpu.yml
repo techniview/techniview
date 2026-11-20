@@ -1,6 +1,5 @@
-# Add go-judge to the application project when all services run on the GPU host.
-# Set RUNNER_PRIVATE_HOST=go-judge in .env.production and include this file
-# after compose.production.yml in every Compose command.
+# Historical overlay. Do not combine with the current GPU compose.production.yml;
+# the runner is already included there.
 services:
   backend:
     networks:

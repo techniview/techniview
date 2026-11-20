@@ -1,354 +1,105 @@
-# Campus deployment
+# GPU deployment
 
-## Single GPU host
+The supported pilot setup runs the frontend, API, workers, MySQL, monitoring,
+and go-judge on the GPU host. It needs Docker Compose access, `openssl`, and
+`curl`; it does not need sudo. Docker itself must be able to run privileged
+containers with cgroup v2 for go-judge.
 
-On the UC GPU host, home directories are on NFS and the system Docker daemon
-cannot bind-mount their files. Keep the checkout and original secrets in your
-home directory. Prepare Docker-managed copies by running:
+## First setup
 
-```sh
-bash scripts/prepare-docker-volumes.sh "$HOME/.local/share/techniview/secrets"
-```
-
-This reads files as your user and streams them into Docker volumes through
-standard input. It does not mount your home directory or print secret values.
-It refuses to replace an existing secret with a different value. Rerun it after
-updating monitoring configuration. These external volumes survive Compose
-`down`, including `down --volumes`.
-
-Add `-f compose.nfs.yml` after the other two Compose files in every command on
-this host:
+From the repository checkout on the GPU host:
 
 ```sh
-docker compose --env-file .env.production \
-  -f compose.production.yml -f compose.gpu.yml -f compose.nfs.yml up -d
+./scripts/gpu-deploy init
 ```
 
-If the application and runner both run on the GPU machine, use
-`compose.production.yml` with `compose.gpu.yml`. This setup uses the Docker
-service name `go-judge`, so there is no runner private IP to find or runner
-port to publish. In `.env.production`, set `RUNNER_PRIVATE_HOST=go-judge` and
-`GO_JUDGE_IMAGE` to the pinned image in `go-judge/runner-image.ref`. The example
-also lists the selected 16 execution slots and 24-CPU runner quota.
+On its first run, this creates `.env.production` with mode `0600`, sets the GPU
+hostname, and generates a Grafana password. Review `PUBLIC_HOST` and change it
+if needed. The default email mode is `capture`, so Resend is not required for
+pilot testing. It creates missing secrets under
+`$HOME/.local/share/techniview/secrets`, prepares Docker-managed copies for the
+NFS-backed home directory, builds the app images from this checkout, starts the
+services, waits for health checks, and seeds the demo accounts once. It does
+not replace existing secrets or remove database data.
+
+Demo sign-ins:
+
+- Teacher: `teacher@techniview.local` / `teacher-demo`
+- Student: `student@techniview.local` / `student-demo`
+
+These are fixed test credentials. Keep the deployment limited to the intended
+VPN audience and remove or change the demo accounts before any broader access.
+
+## Everyday commands
 
 ```sh
-docker compose --env-file .env.production \
-  -f compose.production.yml -f compose.gpu.yml config -q
-docker compose --env-file .env.production \
-  -f compose.production.yml -f compose.gpu.yml up -d
-docker compose --env-file .env.production \
-  -f compose.production.yml -f compose.gpu.yml ps
+./scripts/gpu-deploy doctor
+./scripts/gpu-deploy deploy
+./scripts/gpu-deploy status
+./scripts/gpu-deploy logs backend app_worker go-judge
+./scripts/gpu-deploy mail
+./scripts/gpu-deploy down
 ```
 
-The runner shares a host with MySQL in this layout. The sandbox checks passed
-on the GPU host, but the separate-host design gives a stronger boundary for
-untrusted student code. Keep the Docker host limited to trusted operators and
-run the sandbox checks again after changing the runner image or host kernel.
+`deploy` rebuilds the backend and frontend from the current checkout. `down`
+stops containers but preserves named volumes. Do not use `docker compose down
+--volumes` unless you intend to erase persistent data. To use a different env
+file, set `TECHNIVIEW_ENV_FILE=/path/to/file` before invoking the script.
 
-The public frontend still needs the GPU host's HTTPS proxy to forward
-`/techniview` and `/techniview/*` to `http://127.0.0.1:8080` without stripping
-the prefix. The host proxy may require its operator to add that route.
+The script copies source secrets and monitoring configuration into Docker
+volumes because the system Docker daemon cannot bind-mount the GPU host's NFS
+home. These volumes survive container recreation. The preparation script refuses
+to overwrite a changed secret already copied into a Docker volume; secret
+rotation needs an explicit volume update procedure. Keep the source files in
+your private home directory and do not print their contents into shared logs.
 
-## Separate application and runner hosts
+## Public URL
 
-TechniView runs as two independent Docker Compose projects on separate campus
-hosts. The application host can be the GPU machine. It runs an internal
-Caddy server, FastAPI, the application workers, MySQL, Prometheus, and Grafana.
-The runner host runs standalone go-judge. It executes untrusted student code and
-must not share a host with student data.
+The app listens on `127.0.0.1:8080` by default. The GPU host's HTTPS proxy must
+route both `/techniview` and `/techniview/*` to `http://127.0.0.1:8080` while
+preserving the path prefix. `doctor` checks the local app route; it cannot add
+the campus proxy route or make an unreachable public port available. If port
+8080 is occupied, change `FRONTEND_PORT` in `.env.production` and have the
+proxy operator target that port.
 
-## Public URL and campus network requirements
+Grafana is available on `127.0.0.1:3000`; use an SSH tunnel to view it. MySQL,
+Prometheus, and go-judge have no published host ports. The runner is privileged
+and shares a host with application data in this pilot layout. Restrict Docker
+access to trusted operators and keep the deployment behind the campus VPN.
 
-- Route `https://<gpu-host>/techniview` and
-  `https://<gpu-host>/techniview/*` through the host's HTTPS proxy to the
-  application frontend. Preserve the `/techniview` prefix when forwarding.
-  The frontend serves static files and proxies `/techniview/api/*` to FastAPI.
-- The frontend binds to `127.0.0.1:8080` by default. Set `FRONTEND_PORT` if
-  that port is occupied. If the host proxy runs on another machine, set
-  `FRONTEND_BIND_IP` to a private interface it can reach and restrict access
-  to that port with the campus firewall.
-- Grafana binds to the application VM's loopback address on port 3000. Reach it
-  through an SSH tunnel from an administrator workstation. Prometheus has no
-  published host port.
-- Bind go-judge to the runner VM's private address. Allow inbound port 5050
-  only from the application VM's private address.
-- Do not publish MySQL or any other runner port.
-- The host proxy owns the public DNS name and HTTPS certificate. Its operator
-  must add the `/techniview` route if you cannot edit its configuration. The
-  default frontend port does not require sudo, provided your account can run
-  Docker or rootless Docker.
+## Configuration
 
-Request an initial 4 vCPU / 8 GiB application VM and a runner host with at least
-24 CPUs available for the selected 24-CPU runner quota. The runner has 16
-concurrent execution slots by default; the CPU quota is a ceiling, not a core
-reservation. Set `API_WORKERS`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`,
-`APP_WORKER_REPLICAS`, and `DIRECT_WORKER_PROCESSES` in `.env.production` after
-load testing. API workers handle concurrent HTTP requests. Database pool
-settings bound each process's connections and must fit under MySQL's connection
-limit. Application worker
-replicas claim and process queued submissions concurrently. Allocate enough CPU
-and memory for the selected counts. The Compose files cap service CPU and memory
-use within those budgets. Treat these as starting sizes
-and adjust them from the assignment load test.
+The checked-in `.env.production.example` contains the supported settings and
+chosen starting capacity: 16 go-judge execution slots, a 24-CPU runner quota,
+four app-worker replicas with four processes each, and two API workers. The
+runner quota is a ceiling, not a reservation. Change `PUBLIC_HOST` before
+initial setup. Change `FRONTEND_PORT` only if needed. The script generates
+database passwords and an email signing key; do not copy them into the env file.
 
-The application commits each case attempt before calling go-judge. After a worker
-crash or ambiguous response, recovery marks that case unknown without rerunning
-it. Remaining unstarted cases continue after the worker lease expires.
+Email capture writes messages to a persistent Docker volume. `./scripts/gpu-deploy
+mail` prints captured messages, including sign-in and recovery links. Treat that
+output as sensitive. To enable Resend later, create the `resend_api_key` secret
+file, configure the sender and email mode, then follow the documented secret
+volume rotation procedure before restarting workers.
 
-Use encrypted campus storage for both VMs. TechniView stores submission code and
-results in MySQL. The execution service does not keep a second submission database.
+The optional complexity worker stays idle unless `BIG_O_OLLAMA_URL` points to
+an Ollama service reachable from the stack. Configure its model and timeout in
+`.env.production` if needed.
 
-The runner needs Linux kernel 6.1 or newer and cgroup v2. Its worker requires
-privileged mode for go-judge, with a private cgroup namespace and no host cgroup
-bind mount. Compose gives the runner a read-only root filesystem, a tmpfs at
-`/tmp`, and `no-new-privileges:true`. Student processes run with UID and GID
-1536, no effective capabilities, and go-judge's built-in seccomp filter. Their
-network namespace cannot reach the application API, MySQL, the runner API, or a
-peer on a separate Docker bridge. The runner container itself remains
-privileged and can make outbound connections. Keep the VM dedicated to code
-execution, patch it promptly, restrict SSH to campus administrators, and never
-give application users access to the Docker daemon. Expose port 5050 only on the
-runner's private interface. The campus firewall must allow that port only from
-the application VM.
+## Troubleshooting
 
-## Configure each VM
+- `init` or `deploy` reports secret mismatch: the source file differs from the
+  Docker-managed copy. Do not delete the volume blindly; confirm the existing
+  database's credentials, then update the secret volume deliberately.
+- Services fail health checks: inspect `./scripts/gpu-deploy logs` and
+  `./scripts/gpu-deploy status`. The host must support cgroup v2 and the
+  privileged runner configuration.
+- The local URL works but the public URL does not: ask the GPU host operator to
+  configure the HTTPS route and preserve `/techniview`.
+- Login or nested page refresh fails: verify the path prefix is preserved by
+  the proxy and `PUBLIC_HOST` matches the public hostname.
 
-Check out the same reviewed release on both VMs. Keep the Compose files and
-application code read-only to the service accounts. Create private environment
-files from the matching examples. Each file contains only that VM's credentials.
-Set their permissions to `0600`; do not copy either file into Git or a shared
-backup that lacks access controls.
-
-On the application VM, create the directory named by `SECRET_DIR` with mode
-`0700`. A user-owned directory such as
-`$HOME/.local/share/techniview/secrets` works without sudo. Create these files
-with unique values: `mysql_root_password`, `mysql_password`,
-`email_signing_key` (at least 32 random bytes), and `resend_api_key`. Give the
-files mode `0444` so the non-root API container can read the bind-mounted
-secrets. The `0700` parent keeps other host users from reaching those files.
-The Compose stack mounts each secret only into the services that need it.
-In `.env.production`, write `SECRET_DIR=${HOME}/.local/share/techniview/secrets`;
-Compose expands `${HOME}` to the current user's home directory.
-
-Generate the database passwords and signing key with `openssl rand -hex 32`.
-Put the verified provider key in `resend_api_key`. Keep the complete secret
-directory backed up using campus-approved encrypted secret storage.
-
-For a private smoke test before Resend is configured, set
-`EMAIL_DELIVERY_MODE=capture` in `.env.production` and create an empty
-`resend_api_key` file so Compose can mount the declared secret. Email jobs then
-write JSON files under `/tmp/techniview-mail` in the application worker
-containers instead of contacting Resend. This is temporary container storage;
-inspect it before restarting workers. Set `EMAIL_DELIVERY_MODE=resend`, put a
-real provider key in `resend_api_key`, and verify the sender before inviting
-users or testing password recovery through real email.
-
-On the runner VM, set `RUNNER_PRIVATE_BIND_IP` to its private interface address.
-The runner needs no separate database or secret files. Start the runner:
-
-```sh
-docker compose --env-file .env.runner.production \
-  -f compose.runner.production.yml pull
-docker compose --env-file .env.runner.production \
-  -f compose.runner.production.yml up -d
-docker compose --env-file .env.runner.production \
-  -f compose.runner.production.yml ps
-```
-
-On the application VM, set `RUNNER_PRIVATE_HOST` to the runner's private address,
-`PUBLIC_HOST` to the GPU URL's hostname without `https://` or `/techniview`,
-and unique MySQL and email secrets. Start the app:
-
-```sh
-docker compose --env-file .env.production \
-  -f compose.production.yml pull
-docker compose --env-file .env.production \
-  -f compose.production.yml up -d
-docker compose --env-file .env.production \
-  -f compose.production.yml ps
-```
-
-If the host proxy runs on the same machine, route `/techniview` and
-`/techniview/*` to `http://127.0.0.1:8080` without stripping the path.
-Confirm `http://127.0.0.1:8080/techniview/` loads before testing the public
-URL. Then sign in, refresh a nested route, and follow a password reset or
-enrollment link. If the direct URL works but the public URL returns 404, check
-the host proxy route and whether it preserves the prefix.
-
-The application startup applies Alembic migrations and imports the reviewed
-problem catalog. It does not create demo users. Provision the first professor
-interactively:
-
-```sh
-docker compose --env-file .env.production -f compose.production.yml \
-  exec backend python -m scripts.provision_instructor \
-  "Professor Name" professor@example.edu
-```
-
-Keep `EMAIL_SIGNING_KEY` stable across restarts. Email delivery requires a sender
-verified with Resend. `RESEARCH_EXPORT_SECRET` is not needed for normal operation.
-
-## Optional Big O estimates
-
-Complexity estimates are disabled unless `BIG_O_OLLAMA_URL` is set. Point it at
-an Ollama service reachable from the application and complexity-worker
-containers. Set `BIG_O_OLLAMA_MODEL` to a model pulled on that Ollama host. The
-default is `qwen3.8:27b`. `BIG_O_OLLAMA_TIMEOUT_SECONDS` sets the per-request
-timeout, and `BIG_O_ANALYSIS_MAX_ATTEMPTS` sets the retry limit. Keep Ollama and
-its model storage on the GPU host; the TechniView Compose stack does not start or
-manage Ollama. On a private network, restrict access to the service to TechniView
-and use TLS when traffic crosses a network boundary.
-
-The separate `complexity_worker` processes queued estimates. A model timeout or
-failure does not change grading. Students can read an estimate's queued,
-complete, or failed status from the submission complexity endpoint. The worker
-does not log submitted code or model responses.
-
-## Image releases, updates, and rollback
-
-Push a reviewed `v*` tag to run CI and publish the backend and frontend
-images to GitHub Container Registry. Each image is tagged with the source commit
-SHA. Set that same SHA as `IMAGE_TAG` in the application VM environment file.
-
-The go-judge runner image is built and published by the bake workflow
-(`Bake runner image`, a manual dispatch). Put the verified digest reported by
-the bake run into `go-judge/runner-image.ref` through a PR. After it merges,
-set that ref as
-`GO_JUDGE_IMAGE` in the runner VM environment file. Give each VM read-only
-access to the packages, then pull and start the runner first. Confirm `/version`
-on the runner private port works from the application VM, then pull and start
-the app. The hosts do not build images.
-
-Back up MySQL and the application secrets before each update. The API applies
-database migrations at startup, so run one backend replica during updates. If
-an app release fails, return to the previous image tag only when its code
-supports the current database revision. Alembic downgrade is not an automatic
-rollback strategy.
-
-## Backups and recovery
-
-Back up the MySQL application database hourly to encrypted campus storage outside
-the application VM. Keep signing and export secrets in a separate protected
-backup. A lost runner response leaves the affected case with an unknown outcome.
-
-The repo includes an hourly `restic` backup script and systemd timer. Installing
-the systemd units and writing under `/etc/techniview` require administrator
-access; arrange that separately if your account has no sudo access. Install
-`restic` with `backup --stdin-from-command` support on the application host.
-Configure an encrypted campus repository in `/etc/techniview/backup.env`, set up
-its SSH key if using the SFTP backend, then install the service files from
-`deploy/systemd/`. Initialize the repository once with `restic init` using
-that environment file. Enable the timers:
-
-```sh
-sudo install -d -m 0700 /etc/techniview
-sudo install -m 0600 .env.backup.example /etc/techniview/backup.env
-sudo install -m 0644 deploy/systemd/*.service /etc/systemd/system/
-sudo install -m 0644 deploy/systemd/*.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now techniview-backup.timer
-sudo systemctl enable --now techniview-backup-prune.timer
-sudo systemctl start techniview-backup.service
-```
-
-Before enabling the service, edit `backup.env`, create the file named by
-`RESTIC_PASSWORD_FILE` with mode `0600`, and point
-`TECHNIVIEW_APP_ENV_FILE` at the app environment file. Keep the checkout at
-`/opt/techniview/current` or set `TECHNIVIEW_COMPOSE_FILE` to the Compose file
-path. Initialize the repository once with:
-
-```sh
-sudo bash -c 'set -a; . /etc/techniview/backup.env; set +a; restic init'
-```
-
-The dump reads the mounted MySQL password inside the container. Restic runs the
-dump command directly and saves no snapshot if it fails. Snapshots use the stable
-path `/techniview.sql` so retention groups all database backups together. The
-systemd services use a writable cache at `/var/cache/techniview-restic`.
-
-Run `python3 scripts/tests/test_backup_mysql.py` with Docker and restic installed
-to check backup, restore, authentication failure, and partial dump rejection
-against a disposable database.
-
-The service stores hourly snapshots for a day, daily snapshots for a month,
-weekly snapshots for three months, and monthly snapshots for a year. Confirm the
-first snapshot appears in the off-host repository and test a restore before the
-pilot. The timer does not encrypt environment or signing key files; back those up
-separately using campus-approved secret storage.
-
-Use [the database recovery guide](database-recovery.md) for consistent dumps and
-restore steps. Test a restore on an isolated VM before the pilot and on a regular
-schedule. Alert the project team if the latest off-host backup is more than 90
-minutes old.
-
-## Operations signals
-
-The backend exposes Prometheus text metrics at `/api/metrics`, including API
-request latency, submission status, queue depth, and queue age. Prometheus
-scrapes this endpoint over the private monitoring network. The direct execution path
-does not expose go-judge through container health, CPU, memory, and restart
-counts.
-
-Prometheus keeps at most 15 days or 5 GB of samples. Its data and Grafana's
-provisioned dashboard use separate Docker volumes. The dashboard shows API
-scrape health, HTTP p95 latency, queue depth and age, execution phases,
-completion rate, and runner failures and retries. Completion rate is a rolling
-five-minute average. There are no configured alerts.
-
-Set `GRAFANA_ADMIN_PASSWORD` in `.env.production` to a long, unique password
-before starting the monitoring services. Keep the file mode at `0600`. Grafana
-binds only to `127.0.0.1:3000`; Prometheus has no published host port. From an
-administrator workstation, open the dashboard through an SSH tunnel:
-
-```sh
-ssh -N -L 3000:127.0.0.1:3000 administrator@app-vm.example.edu
-```
-
-Then visit `http://localhost:3000` and sign in with the configured Grafana
-admin credentials. Confirm the services start and load their configuration:
-
-```sh
-docker compose --env-file .env.production -f compose.production.yml ps
-docker compose --env-file .env.production -f compose.production.yml logs --tail=100 prometheus grafana
-```
-
-HTTP request observations enter a bounded queue in each API worker and a
-background thread writes them to a temporary SQLite database in the API
-container. All Uvicorn workers contribute to the same counters. The dropped
-observation counter is stored in SQLite and aggregated across API workers. It
-reports queue saturation or storage errors. Replacing the API container resets
-HTTP counters. Queue and runner metrics come from MySQL.
-Metric labels use only route templates, methods, status codes, submission
-states, and execution phases. They do not include user, submission, case, or
-runner identifiers.
-
-Student and authorized course staff submission views include `submitted_at`,
-`started_at`, `completed_at`, `wait_seconds`, and `execution_seconds`. Wait time
-ends when a worker first sends a case to go-judge. Execution time ends when
-grading completes. A running submission reports elapsed time so far.
-
-The Compose projects use Docker's rotating `local` log driver and retain the
-latest three 10 MiB files per service. The API and app worker write JSON events
-to stdout. API request records include
-the request ID, route template, status, and duration. Worker records cover
-claim, sandbox execution failure, and completion. They intentionally omit source
-code, callback credentials, and student identifiers. Forward these logs to the
-campus log collector before a pilot if longer retention or centralized alerts
-are required.
-
-## Launch gates
-
-The runner image pins go-judge 1.13.3 and Python 3.14.8. Run the full real
-execution suite on the target VM before accepting student code. From the
-reviewed checkout on that VM, run `make integration` and
-`./scripts/verify-direct-runner.sh`. The suite checks host files and secrets,
-Docker socket access, service and separate-bridge peer access from sandboxed
-code, UID and capabilities, cgroup limits, and worker restart recovery. From the
-application VM, confirm `/version` responds. Confirm the campus firewall blocks
-port 5050 from other sources. The runner requires privileged mode for its
-private cgroup namespace.
-
-Before enrolling participants, confirm DNS and firewall rules, email delivery,
-research data handling, a successful backup restore, and a load test on the
-allocated VMs. The A100 comparison favored direct execution on the tested
-Ransom Note workload; its small bursts do not establish production p99.
+Database backup and restore remain a separate follow-up. Until then, treat the
+MySQL volume as persistent but not backed up. Before enrolling participants,
+set up encrypted off-host backups and verify a restore. See
+[database recovery](database-recovery.md) for the current manual procedures.

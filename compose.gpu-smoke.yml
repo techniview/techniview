@@ -1,0 +1,42 @@
+# Temporary VPN-only test mode for hosts whose Docker daemon cannot bind-mount
+# files from the user's home directory. Load existing secrets into the shell
+# environment before running Compose. Do not use this for the public pilot.
+services:
+  backend:
+    secrets: !reset []
+    environment:
+      MYSQL_PASSWORD_FILE: ""
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      EMAIL_SIGNING_KEY_FILE: ""
+      EMAIL_SIGNING_KEY: ${EMAIL_SIGNING_KEY:?Set EMAIL_SIGNING_KEY}
+      RESEND_API_KEY_FILE: ""
+      EMAIL_DELIVERY_MODE: capture
+
+  app_worker:
+    secrets: !reset []
+    environment:
+      MYSQL_PASSWORD_FILE: ""
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      EMAIL_SIGNING_KEY_FILE: ""
+      EMAIL_SIGNING_KEY: ${EMAIL_SIGNING_KEY:?Set EMAIL_SIGNING_KEY}
+      RESEND_API_KEY_FILE: ""
+      EMAIL_DELIVERY_MODE: capture
+
+  complexity_worker:
+    environment:
+      MYSQL_PASSWORD_FILE: ""
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      EMAIL_SIGNING_KEY_FILE: ""
+      EMAIL_SIGNING_KEY: ${EMAIL_SIGNING_KEY:?Set EMAIL_SIGNING_KEY}
+      RESEND_API_KEY_FILE: ""
+      EMAIL_DELIVERY_MODE: capture
+
+  mysql:
+    secrets: !reset []
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: ""
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      MYSQL_PASSWORD_FILE: ""
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+
+secrets: !reset {}

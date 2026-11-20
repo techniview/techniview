@@ -1,4 +1,5 @@
-# Use after compose.production.yml and compose.gpu.yml on NFS home directories.
+# Historical overlay. Do not combine with the current GPU compose.production.yml;
+# Docker-managed volumes are already included there.
 services:
   backend:
     secrets: !reset []
