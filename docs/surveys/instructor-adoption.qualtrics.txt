@@ -1,0 +1,129 @@
+[[AdvancedFormat]]
+[[Block:Study information and consent]]
+[[Question:DB]]
+You are invited to take part in a research survey about TechniView, a coding-practice platform being developed by a University of Cincinnati student team. The survey asks instructors about possible uses of the platform in their courses and expected effects on student practice. You will see a short description and screenshots, then answer questions. It should take up to 10 minutes.
+
+Taking part is voluntary. You may skip any question or stop at any time before submitting your responses. There is no payment or other compensation. Your decision will not affect your employment, teaching assignment, or relationship with the University of Cincinnati.
+
+The survey will not ask for your name, email, department, or course name. The study team will configure the UC Qualtrics survey not to record IP address, geolocation, contact-list, or authenticator information. Please do not include names or other identifying details in your written response. The research team will limit access to authorized study personnel and retain study records according to UC requirements. Although the survey is designed not to collect direct identifiers, no online survey can guarantee that responses or technical records are impossible to identify.
+
+Possible risks include discomfort answering questions about a teaching tool and a risk of loss of confidentiality. There may be no direct benefit to you. Your responses will be used to study instructors' views of TechniView, and the study team may use grouped findings in research presentations or publications. We do not plan to use or share the responses for a separate research study. For questions about the study or to request a summary of its results, contact Derek Corniello at corniedj@mail.uc.edu. Because the survey does not ask for contact information, we cannot send results to individual respondents automatically. For questions about your rights as a research participant, contact the UC Human Research Protection Program/IRB at (513) 558-5259 or irb@ucmail.uc.edu.
+
+Do you agree to take part in this survey?
+[[Question:MC:SingleAnswer:Vertical]]
+Select one response.
+[[Choices]]
+I agree to participate
+I do not agree to participate
+
+[[Block:Eligibility]]
+[[Question:MC:SingleAnswer:Vertical]]
+Are you at least 18 years old?
+[[Choices]]
+Yes
+No
+
+[[Question:MC:SingleAnswer:Vertical]]
+Are you currently teaching a course at the University of Cincinnati?
+[[Choices]]
+Yes
+No
+
+[[Block:TechniView description and screenshots]]
+[[Question:DB]]
+TechniView is a web-based coding practice platform. Students can work on programming problems and receive automated feedback on their submissions. Instructors can create courses and assignments and review student progress. The screenshots below show example screens. They use demonstration content and do not contain real student records.
+
+Add the IRB-approved, staged screenshots here after importing the survey. Do not use screenshots containing real participant information.
+
+[[Block:Instructor survey]]
+[[Question:MC:SingleAnswer:Vertical]]
+Which best describes programming or coding activities in the courses you teach?
+[[Choices]]
+Programming or coding is a primary focus
+Programming or coding is one part of the course
+My courses do not include programming or coding
+Prefer not to say
+
+[[Question:MC:SingleAnswer:Vertical]]
+How often do you currently use online tools for programming practice or assignments in your courses?
+[[Choices]]
+Never
+Rarely
+Sometimes
+Often
+Not applicable
+
+[[Question:MC:SingleAnswer:Vertical]]
+If UC provided access to TechniView, how likely would you be to recommend it to students for optional practice?
+[[Choices]]
+Very unlikely
+Unlikely
+Neither likely nor unlikely
+Likely
+Very likely
+Not sure
+
+[[Question:MC:SingleAnswer:Vertical]]
+If UC provided access and support, how likely would you be to use TechniView in a course you teach?
+[[Choices]]
+Very unlikely
+Unlikely
+Neither likely nor unlikely
+Likely
+Very likely
+Not sure
+
+[[Question:MC:MultipleAnswer:Vertical]]
+What, if anything, do you think TechniView could help students do?
+[[Choices]]
+Practice coding more regularly
+Get feedback on their code
+Track their progress
+Build coding skills
+Stay engaged with practice
+Other
+I do not think it would help with these things
+Not sure
+
+[[Question:MC:MultipleAnswer:Vertical]]
+Which parts seem most useful for teaching?
+[[Choices]]
+Coding practice problems
+Automated feedback on submissions
+Course assignments
+Class progress views
+Individual student progress views
+Other
+None of these
+Not sure
+
+[[Question:MC:MultipleAnswer:Vertical]]
+What might make you hesitant to use TechniView?
+[[Choices]]
+Time needed to set it up
+Fit with course content
+Accessibility
+Student privacy
+Integration with UC systems
+Reliability
+Lack of training or support
+Other
+No concerns
+Not sure
+
+[[Question:MC:MultipleAnswer:Vertical]]
+What would UC need to provide for you to consider using TechniView?
+[[Choices]]
+University-provided access
+Learning management system integration
+Setup help
+Training
+Technical support
+Control over assignments
+Information about student privacy
+Other
+Nothing in particular
+Not sure
+
+[[Question:TE:Essay]]
+Anything else you would like to share about whether or how you might use TechniView? Please do not include names or other identifying details.
